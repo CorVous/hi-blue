@@ -6,13 +6,13 @@ Three test surfaces. Each has a different role; pick the right one when you chan
 
 Cloudflare Worker logic — routing, CORS, the chat-completions proxy and its SSE usage scanning, KV, rate-guard, pricing. Runs under `@cloudflare/vitest-pool-workers` with Miniflare bindings (see `vitest.config.ts`). Use this when you change anything under `src/proxy/`.
 
-## Vitest jsdom (`src/**/*.test.ts` outside `src/proxy/`)
+## Vitest jsdom and node (`src/**/*.test.ts` outside `src/proxy/`)
 
-The `browser` project in `vitest.config.ts`. Unit-level coverage for SPA and content modules — pure logic, encoder/decoder round-trips, persistence, view selection (`current-view.ts`), streaming math. Fast, but jsdom is **not a real browser**: it does not catch real layout, real-DOM event timing, real-browser API gaps, or build-pipeline regressions.
+The `browser` and `logic` projects in `vitest.config.ts`. Unit-level coverage for SPA and content modules — pure logic, encoder/decoder round-trips, persistence, view selection (`current-view.ts`), streaming math. Fast, but jsdom is **not a real browser**: it does not catch real layout, real-DOM event timing, real-browser API gaps, or build-pipeline regressions.
 
-The same `browser` project also runs `scripts/__tests__/**` and `evals/__tests__/**` (unit tests for the eval scoring modules, next to the evals they cover). `src/spa/__tests__/build.test.ts` is the exception: it runs in its own node-environment `build` project.
+The directories whose tests need no DOM run in the node-environment `logic` project instead (`DOM_FREE_TESTS` in `vitest.config.ts`): `src/__tests__`, `src/content/__tests__`, `src/spa/game/__tests__`, `src/spa/persistence/__tests__`, `scripts/__tests__` and `evals/__tests__` (unit tests for the eval scoring modules, next to the evals they cover). Building a jsdom window per file was most of the suite's wall time, and these files never touch one. A file in those directories that does need `window` or `localStorage` opts back in with a `/** @vitest-environment jsdom */` first line (it gets the same `http://localhost:8787/` URL); a missing opt-in fails loudly with `localStorage is not defined`. Everything else under `src/` stays in `browser`. `src/spa/__tests__/build.test.ts` is the exception: it runs in its own node-environment `build` project.
 
-Shared fixtures: `src/spa/__tests__/fixtures/` (`local-storage.ts` with `makeLocalStorageStub` / `seedSessionInStub`, `await-ignoring-rejection.ts`, plus the static personas and content packs) and `src/spa/game/__tests__/fixtures/` (`make-test-pack.ts`, `make-game-state.ts`, and `prompt-sections.ts` for pulling the cardinal clause out of a prompt). Reuse them before writing a local builder.
+Shared fixtures: `src/spa/__tests__/fixtures/` (`local-storage.ts` with `makeLocalStorageStub` / `seedSessionInStub`, `await-ignoring-rejection.ts`, `wait-until-passes.ts` (`vi.waitFor` with a 1 ms poll), plus the static personas and content packs) and `src/spa/game/__tests__/fixtures/` (`make-test-pack.ts`, `make-game-state.ts`, and `prompt-sections.ts` for pulling the cardinal clause out of a prompt), plus `src/spa/game/__tests__/round-coordinator-harness.ts` (`toolCall`, `firstTurnActs` for a round where only the first Daemon acts, and `runComplicationRound`). Reuse them before writing a local builder.
 
 ### Round fuzz (`src/spa/game/__tests__/round-fuzz.test.ts`)
 

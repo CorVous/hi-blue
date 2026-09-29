@@ -6,22 +6,14 @@ import {
 	renderedPlayerLine,
 } from "./helpers";
 
-test("address dropdown is gone (#address count === 0)", async ({ page }) => {
+test("the address dropdown is gone and Send stays disabled without a mention", async ({
+	page,
+}) => {
 	await goToGame(page);
-	await expect(page.locator("#composer")).toBeVisible();
 	await expect(page.locator("#address")).toHaveCount(0);
-});
-
-test("on first load, prompt empty and Send disabled", async ({ page }) => {
-	await goToGame(page);
-	await expect(page.locator("#composer")).toBeVisible();
 	await expect(page.locator("#prompt")).toHaveValue("");
 	await expect(page.locator("#send")).toBeDisabled();
-});
 
-test("typing 'hi' leaves Send disabled", async ({ page }) => {
-	await goToGame(page);
-	await expect(page.locator("#composer")).toBeVisible();
 	await page.fill("#prompt", "hi");
 	await expect(page.locator("#send")).toBeDisabled();
 });
@@ -32,7 +24,6 @@ test("typing '*<ai1> hi' enables Send and submits to that transcript only", asyn
 	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page, { sse: ["greetings"] });
-	await expect(page.locator("#composer")).toBeVisible();
 
 	await page.fill("#prompt", `*${names[1]} hi`);
 	await expect(page.locator("#send")).toBeEnabled();

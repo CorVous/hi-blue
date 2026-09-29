@@ -67,6 +67,40 @@ function sorted(values: Set<string>): string[] {
 	return [...values].sort();
 }
 
+function worldMapEl(): HTMLElement {
+	return document.getElementById("dev-world-map") as HTMLElement;
+}
+
+function focusButtonFor(aiId: string): HTMLButtonElement {
+	const btn = document.querySelector<HTMLButtonElement>(
+		`.ai-panel[data-ai="${aiId}"] [data-field="focus-vista"]`,
+	);
+	expect(btn).toBeTruthy();
+	return btn as HTMLButtonElement;
+}
+
+function pressKey(key: string): void {
+	document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+}
+
+function expectNoCellTinted(containerEl: HTMLElement): void {
+	for (const cell of containerEl.querySelectorAll<HTMLElement>(
+		".dev-map-cell",
+	)) {
+		expect(cell.style.backgroundColor).toBe("");
+		expect(cell.getAttribute("data-vista-focus")).toBeNull();
+	}
+}
+
+function expectEveryFocusButtonInactive(): void {
+	expect(activeFocusButtons()).toEqual([]);
+	for (const btn of document.querySelectorAll<HTMLElement>(
+		'[data-field="focus-vista"]',
+	)) {
+		expect(btn.getAttribute("data-focus-active")).toBe("false");
+	}
+}
+
 describe("vista-focus", () => {
 	let session: GameSession;
 	let spatialSnapshot: Array<{
@@ -226,9 +260,7 @@ describe("vista-focus", () => {
 		});
 
 		it("switching focus targets: red → green removes red tint, applies green tint", () => {
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
+			const containerEl = worldMapEl();
 			renderWorldMap(containerEl, session);
 
 			setMapFocus("red");
@@ -243,9 +275,7 @@ describe("vista-focus", () => {
 
 	describe("visual tinting", () => {
 		it("setMapFocus tints exactly the in-bounds Vista cells with persona color", () => {
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
+			const containerEl = worldMapEl();
 			renderWorldMap(containerEl, session);
 
 			setMapFocus("red");
@@ -277,27 +307,8 @@ describe("vista-focus", () => {
 			);
 		});
 
-		it("setMapFocus(null) clears tint: all cells revert", () => {
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
-			renderWorldMap(containerEl, session);
-
-			setMapFocus("red");
-			setMapFocus(null);
-
-			for (const cell of containerEl.querySelectorAll<HTMLElement>(
-				".dev-map-cell",
-			)) {
-				expect(cell.style.backgroundColor).toBe("");
-				expect(cell.getAttribute("data-vista-focus")).toBeNull();
-			}
-		});
-
 		it("highlight preserves the identity marker", () => {
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
+			const containerEl = worldMapEl();
 			renderWorldMap(containerEl, session);
 
 			setMapFocus("red");
@@ -322,9 +333,7 @@ describe("vista-focus", () => {
 		});
 
 		it("a Daemon inside the focused Vista keeps its own marker, colour and tooltip", () => {
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
+			const containerEl = worldMapEl();
 			renderWorldMap(containerEl, session);
 
 			const state = session.getState();
@@ -363,10 +372,8 @@ describe("vista-focus", () => {
 			}
 		});
 
-		it("clearing focus restores clean cells while identity markers stay intact", () => {
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
+		it("clearing focus with setMapFocus(null) restores clean cells while identity markers stay intact", () => {
+			const containerEl = worldMapEl();
 			renderWorldMap(containerEl, session);
 
 			const state = session.getState();
@@ -377,12 +384,7 @@ describe("vista-focus", () => {
 			setMapFocus(null);
 
 			expect(focusedCellIds(containerEl)).toEqual([]);
-			for (const cell of containerEl.querySelectorAll<HTMLElement>(
-				".dev-map-cell",
-			)) {
-				expect(cell.style.backgroundColor).toBe("");
-				expect(cell.getAttribute("data-vista-focus")).toBeNull();
-			}
+			expectNoCellTinted(containerEl);
 
 			for (const aiId of ["red", "green", "cyan"]) {
 				const cell = containerEl.querySelector<HTMLElement>(
@@ -397,9 +399,7 @@ describe("vista-focus", () => {
 		});
 
 		it("updateWorldMap follows the focused Daemon as it moves", () => {
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
+			const containerEl = worldMapEl();
 
 			const state = session.getState();
 			const redSpatial = state.personaSpatial.red;
@@ -451,34 +451,11 @@ describe("vista-focus", () => {
 			}
 			expect(focusedCellIds(containerEl).length).toBe(13);
 		});
-
-		it("updateWorldMap re-applies active tint after mutation", () => {
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
-			renderWorldMap(containerEl, session);
-
-			setMapFocus("red");
-			const state1 = session.getState();
-			const mask1 = vistaMaskForDaemon(state1, "red");
-
-			const tintedBefore = highlightedCells(containerEl, "red").size;
-			expect(tintedBefore).toBeGreaterThan(0);
-
-			updateWorldMap(containerEl, session);
-
-			const state2 = session.getState();
-			const mask2 = vistaMaskForDaemon(state2, "red");
-
-			expect(mask1.size).toBe(mask2.size);
-			expect(highlightedCells(containerEl, "red").size).toBeGreaterThan(0);
-		});
 	});
 
 	describe("focus button", () => {
 		it("button rendered in footer", () => {
-			const root = document.body;
-			renderInspector(root, { session });
+			renderInspector(document.body, { session });
 
 			const focusBtn = document.querySelector(
 				'[data-field="focus-vista"]',
@@ -489,77 +466,23 @@ describe("vista-focus", () => {
 
 		it("re-rendering the inspector keeps the focused button active", () => {
 			renderInspector(document.body, { session });
-			const redBtn = (): HTMLButtonElement | null =>
-				document.querySelector<HTMLButtonElement>(
-					'.ai-panel[data-ai="red"] [data-field="focus-vista"]',
-				);
-			redBtn()?.click();
+			focusButtonFor("red").click();
 			expect(activeFocusButtons()).toEqual(["red"]);
 
 			renderInspector(document.body, { session });
 
 			expect(getMapFocus()).toBe("red");
 			expect(activeFocusButtons()).toEqual(["red"]);
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
-			expect(highlightedCells(containerEl, "red").size).toBeGreaterThan(0);
-		});
-
-		it("button click sets focus", () => {
-			const root = document.body;
-			renderInspector(root, { session });
-
-			const focusBtn = document.querySelector(
-				'[data-field="focus-vista"]',
-			) as HTMLButtonElement;
-			expect(focusBtn).toBeTruthy();
-
-			focusBtn.click();
-
-			const panel = focusBtn.closest(".ai-panel") as HTMLElement;
-			const aiId = panel?.getAttribute("data-ai");
-			expect(getMapFocus()).toBe(aiId);
-		});
-
-		it("repeat click on the focused control clears focus", () => {
-			const root = document.body;
-			renderInspector(root, { session });
-
-			const redPanel = document.querySelector(
-				'.ai-panel[data-ai="red"]',
-			) as HTMLElement;
-			expect(redPanel).toBeTruthy();
-			const focusBtn = redPanel.querySelector(
-				'[data-field="focus-vista"]',
-			) as HTMLButtonElement;
-			expect(focusBtn).toBeTruthy();
-
-			focusBtn.click();
-			expect(getMapFocus()).toBe("red");
-
-			focusBtn.click();
-			expect(getMapFocus()).toBeNull();
+			expect(highlightedCells(worldMapEl(), "red").size).toBeGreaterThan(0);
 		});
 
 		it("switching between two Daemons leaves exactly one button active and one tint owner", () => {
-			const root = document.body;
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
-			renderInspector(root, { session });
-			renderWorldMap(containerEl, session);
+			const containerEl = worldMapEl();
+			renderInspector(document.body, { session });
 
-			const btnFor = (aiId: string): HTMLButtonElement => {
-				const btn = document
-					.querySelector(`.ai-panel[data-ai="${aiId}"]`)
-					?.querySelector('[data-field="focus-vista"]');
-				expect(btn).toBeTruthy();
-				return btn as HTMLButtonElement;
-			};
+			focusButtonFor("red").click();
 
-			btnFor("red").click();
-
+			expect(getMapFocus()).toBe("red");
 			expect(activeFocusButtons()).toEqual(["red"]);
 			expect(focusedCellIds(containerEl).length).toBeGreaterThan(0);
 			for (const cell of containerEl.querySelectorAll<HTMLElement>(
@@ -568,8 +491,9 @@ describe("vista-focus", () => {
 				expect(cell.getAttribute("data-vista-focus")).toBe("red");
 			}
 
-			btnFor("green").click();
+			focusButtonFor("green").click();
 
+			expect(getMapFocus()).toBe("green");
 			expect(activeFocusButtons()).toEqual(["green"]);
 			for (const cell of containerEl.querySelectorAll<HTMLElement>(
 				".dev-map-cell",
@@ -585,217 +509,96 @@ describe("vista-focus", () => {
 				sorted(expectedVistaMask(greenSpatial.position)),
 			);
 
-			btnFor("red").click();
+			focusButtonFor("red").click();
 			expect(activeFocusButtons()).toEqual(["red"]);
 			expect(highlightedCells(containerEl, "green").size).toBe(0);
 		});
 
-		it("repeat click clears tint, focus attributes and every button", () => {
-			const root = document.body;
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
-			renderInspector(root, { session });
-			renderWorldMap(containerEl, session);
+		it("repeat click on the focused control clears focus, tint, focus attributes and every button", () => {
+			const containerEl = worldMapEl();
+			renderInspector(document.body, { session });
 
-			const redBtn = document
-				.querySelector('.ai-panel[data-ai="red"]')
-				?.querySelector('[data-field="focus-vista"]') as HTMLButtonElement;
-			expect(redBtn).toBeTruthy();
+			const redBtn = focusButtonFor("red");
 
 			redBtn.click();
+			expect(getMapFocus()).toBe("red");
 			expect(focusedCellIds(containerEl).length).toBeGreaterThan(0);
 			expect(activeFocusButtons()).toEqual(["red"]);
 
 			redBtn.click();
 
+			expect(getMapFocus()).toBeNull();
 			expect(focusedCellIds(containerEl)).toEqual([]);
-			expect(activeFocusButtons()).toEqual([]);
-			for (const btn of document.querySelectorAll<HTMLElement>(
-				'[data-field="focus-vista"]',
-			)) {
-				expect(btn.getAttribute("data-focus-active")).toBe("false");
-			}
-			for (const cell of containerEl.querySelectorAll<HTMLElement>(
-				".dev-map-cell",
-			)) {
-				expect(cell.style.backgroundColor).toBe("");
-			}
-		});
-
-		it("clicking another Daemon's control switches focus", () => {
-			const root = document.body;
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
-			renderInspector(root, { session });
-			renderWorldMap(containerEl, session);
-
-			const redBtn = document
-				.querySelector('.ai-panel[data-ai="red"]')
-				?.querySelector('[data-field="focus-vista"]') as HTMLButtonElement;
-			const greenBtn = document
-				.querySelector('.ai-panel[data-ai="green"]')
-				?.querySelector('[data-field="focus-vista"]') as HTMLButtonElement;
-			expect(redBtn).toBeTruthy();
-			expect(greenBtn).toBeTruthy();
-
-			redBtn.click();
-			expect(getMapFocus()).toBe("red");
-			expect(highlightedCells(containerEl, "red").size).toBeGreaterThan(0);
-
-			greenBtn.click();
-			expect(getMapFocus()).toBe("green");
-			expect(highlightedCells(containerEl, "red").size).toBe(0);
-			expect(highlightedCells(containerEl, "green").size).toBeGreaterThan(0);
+			expectEveryFocusButtonInactive();
+			expectNoCellTinted(containerEl);
 		});
 
 		it("data-focus-active reflects focus state", () => {
-			const root = document.body;
-			renderInspector(root, { session });
+			renderInspector(document.body, { session });
 
-			const allBtns = document.querySelectorAll(
-				'[data-field="focus-vista"]',
-			) as NodeListOf<HTMLElement>;
-			expect(allBtns.length).toBeGreaterThanOrEqual(3);
-
-			let redBtn: HTMLElement | null = null;
-			let greenBtn: HTMLElement | null = null;
-
-			for (const btn of allBtns) {
-				const panel = btn.closest(".ai-panel") as HTMLElement;
-				const aiId = panel?.getAttribute("data-ai");
-				if (aiId === "red") redBtn = btn;
-				if (aiId === "green") greenBtn = btn;
-			}
-
-			expect(redBtn).toBeTruthy();
-			expect(greenBtn).toBeTruthy();
+			expect(
+				document.querySelectorAll('[data-field="focus-vista"]').length,
+			).toBeGreaterThanOrEqual(3);
+			const redBtn = focusButtonFor("red");
+			const greenBtn = focusButtonFor("green");
 
 			setMapFocus("red");
-			expect(redBtn?.getAttribute("data-focus-active")).toBe("true");
-			expect(greenBtn?.getAttribute("data-focus-active")).toBe("false");
+			expect(redBtn.getAttribute("data-focus-active")).toBe("true");
+			expect(greenBtn.getAttribute("data-focus-active")).toBe("false");
 
 			setMapFocus("green");
-			expect(redBtn?.getAttribute("data-focus-active")).toBe("false");
-			expect(greenBtn?.getAttribute("data-focus-active")).toBe("true");
+			expect(redBtn.getAttribute("data-focus-active")).toBe("false");
+			expect(greenBtn.getAttribute("data-focus-active")).toBe("true");
 		});
 	});
 
 	describe("Escape key handling", () => {
-		it("Escape clears tint, focus attributes and every button", () => {
-			const root = document.body;
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
-			renderInspector(root, { session });
-			renderWorldMap(containerEl, session);
+		it("Escape clears focus, tint, focus attributes and every button", () => {
+			const containerEl = worldMapEl();
+			renderInspector(document.body, { session });
 
 			setMapFocus("red");
 			expect(focusedCellIds(containerEl).length).toBeGreaterThan(0);
 			expect(activeFocusButtons()).toEqual(["red"]);
 
-			document.dispatchEvent(
-				new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-			);
-
-			expect(containerEl.querySelectorAll("[data-vista-focus]").length).toBe(0);
-			expect(focusedCellIds(containerEl)).toEqual([]);
-			expect(activeFocusButtons()).toEqual([]);
-			for (const btn of document.querySelectorAll<HTMLElement>(
-				'[data-field="focus-vista"]',
-			)) {
-				expect(btn.getAttribute("data-focus-active")).toBe("false");
-			}
-			for (const cell of containerEl.querySelectorAll<HTMLElement>(
-				".dev-map-cell",
-			)) {
-				expect(cell.style.backgroundColor).toBe("");
-			}
-		});
-
-		it("Escape clears active focus", () => {
-			const root = document.body;
-			renderInspector(root, { session });
-
-			setMapFocus("red");
-			expect(getMapFocus()).toBe("red");
-
-			const escapeEvent = new KeyboardEvent("keydown", {
-				key: "Escape",
-				bubbles: true,
-			});
-			document.dispatchEvent(escapeEvent);
+			pressKey("Escape");
 
 			expect(getMapFocus()).toBeNull();
-		});
-
-		it("Escape clears tint when focus is active", () => {
-			const root = document.body;
-			const containerEl = document.getElementById(
-				"dev-world-map",
-			) as HTMLElement;
-			renderInspector(root, { session });
-			renderWorldMap(containerEl, session);
-
-			setMapFocus("red");
-
-			expect(highlightedCells(containerEl, "red").size).toBeGreaterThan(0);
-
-			const escapeEvent = new KeyboardEvent("keydown", {
-				key: "Escape",
-				bubbles: true,
-			});
-			document.dispatchEvent(escapeEvent);
-
 			expect(containerEl.querySelectorAll("[data-vista-focus]").length).toBe(0);
+			expect(focusedCellIds(containerEl)).toEqual([]);
+			expectEveryFocusButtonInactive();
+			expectNoCellTinted(containerEl);
 		});
 
 		it("Escape no-op when no focus is active", () => {
-			const root = document.body;
-			renderInspector(root, { session });
+			renderInspector(document.body, { session });
 
 			expect(getMapFocus()).toBeNull();
 
-			const escapeEvent = new KeyboardEvent("keydown", {
-				key: "Escape",
-				bubbles: true,
-			});
-			document.dispatchEvent(escapeEvent);
+			pressKey("Escape");
 
 			expect(getMapFocus()).toBeNull();
 		});
 
 		it("Escape listener attached only once", () => {
-			const root = document.body;
-
-			renderInspector(root, { session });
+			renderInspector(document.body, { session });
 
 			__resetInspectorForTests();
-			renderInspector(root, { session });
+			renderInspector(document.body, { session });
 
 			setMapFocus("red");
-			const escapeEvent = new KeyboardEvent("keydown", {
-				key: "Escape",
-				bubbles: true,
-			});
-			document.dispatchEvent(escapeEvent);
+			pressKey("Escape");
 
 			expect(getMapFocus()).toBeNull();
 		});
 
 		it("other keys do not clear focus", () => {
-			const root = document.body;
-			renderInspector(root, { session });
+			renderInspector(document.body, { session });
 
 			setMapFocus("red");
 			expect(getMapFocus()).toBe("red");
 
-			const enterEvent = new KeyboardEvent("keydown", {
-				key: "Enter",
-				bubbles: true,
-			});
-			document.dispatchEvent(enterEvent);
+			pressKey("Enter");
 
 			expect(getMapFocus()).toBe("red");
 		});

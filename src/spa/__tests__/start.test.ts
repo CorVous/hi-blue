@@ -83,21 +83,19 @@ function setSearch(query: string): void {
 	window.history.replaceState({}, "", `/?${query}`);
 }
 
+beforeEach(() => {
+	document.body.innerHTML = INDEX_BODY_HTML;
+	installLocalStorageStub();
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
+	vi.resetModules();
+	document.body.innerHTML = "";
+});
+
 describe("renderStart — screen visibility", () => {
-	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
-		document.body.innerHTML = INDEX_BODY_HTML;
-		installLocalStorageStub();
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("shows #start-screen and hides #panels and #composer on mount", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -131,20 +129,6 @@ describe("renderStart — screen visibility", () => {
 });
 
 describe("renderStart — BEGIN button state", () => {
-	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
-		document.body.innerHTML = INDEX_BODY_HTML;
-		installLocalStorageStub();
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("BEGIN is enabled as soon as the login form reveals — generation runs in the background", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -175,20 +159,6 @@ describe("renderStart — BEGIN button state", () => {
 });
 
 describe("renderStart — BEGIN click saves session and navigates", () => {
-	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
-		document.body.innerHTML = INDEX_BODY_HTML;
-		installLocalStorageStub();
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("BEGIN click transitions the view to game", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -253,20 +223,6 @@ describe("renderStart — BEGIN click saves session and navigates", () => {
 });
 
 describe("renderStart — CapHitError handling", () => {
-	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
-		document.body.innerHTML = INDEX_BODY_HTML;
-		installLocalStorageStub();
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("shows #cap-hit and hides #start-screen when generation throws CapHitError", async () => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 
@@ -304,19 +260,8 @@ describe("renderStart — CapHitError handling", () => {
 });
 
 describe("renderStart — generation failures that are not the spend cap", () => {
-	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
-		document.body.innerHTML = INDEX_BODY_HTML;
-		installLocalStorageStub();
-	});
-
 	afterEach(() => {
 		vi.doUnmock("../game/bootstrap.js");
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
 	});
 
 	async function importStartWithSplits(
@@ -488,52 +433,26 @@ describe("renderStart — generation failures that are not the spend cap", () =>
 });
 
 describe("renderStart — persistence warning banners", () => {
-	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
-		document.body.innerHTML = INDEX_BODY_HTML;
-		installLocalStorageStub();
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
-	it("shows 'broken' banner text when reason=broken", async () => {
+	it.each([
+		["broken", "Saved game data was unreadable and has been discarded"],
+		["stuck", "Game initialization took too long and was cancelled"],
+		[
+			"legacy-save-discarded",
+			"Saved game data from an older format has been discarded",
+		],
+	] as const)("shows the '%s' banner text", async (reason, copy) => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
-		await awaitIgnoringRejection(renderStart(getMain(), { reason: "broken" }));
+		await awaitIgnoringRejection(renderStart(getMain(), { reason }));
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
 		);
 		expect(warningEl?.hasAttribute("hidden")).toBe(false);
-		expect(warningEl?.textContent).toContain(
-			"Saved game data was unreadable and has been discarded",
-		);
-	});
-
-	it("shows 'stuck' banner text when reason=stuck", async () => {
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-		vi.resetModules();
-		const { renderStart } = await import("../views/start.js");
-
-		setSearch("skipDialup=1");
-		await awaitIgnoringRejection(renderStart(getMain(), { reason: "stuck" }));
-
-		const warningEl = document.querySelector<HTMLElement>(
-			"#persistence-warning",
-		);
-		expect(warningEl?.hasAttribute("hidden")).toBe(false);
-		expect(warningEl?.textContent).toContain(
-			"Game initialization took too long and was cancelled",
-		);
+		expect(warningEl?.textContent).toContain(copy);
 	});
 
 	it("shows 'version-mismatch' map-miss banner text when no archive entry exists", async () => {
@@ -591,46 +510,16 @@ describe("renderStart — persistence warning banners", () => {
 		}
 	});
 
-	it("shows 'legacy-save-discarded' banner text when reason=legacy-save-discarded", async () => {
+	it.each([
+		["the reason opt is absent", undefined],
+		["the reason has no copy", { reason: "empty" }],
+	] as const)("shows no banner when %s", async (_case, opts) => {
 		vi.spyOn(Math, "random").mockReturnValue(0.9);
 		vi.resetModules();
 		const { renderStart } = await import("../views/start.js");
 
 		setSearch("skipDialup=1");
-		await awaitIgnoringRejection(
-			renderStart(getMain(), { reason: "legacy-save-discarded" }),
-		);
-
-		const warningEl = document.querySelector<HTMLElement>(
-			"#persistence-warning",
-		);
-		expect(warningEl?.hasAttribute("hidden")).toBe(false);
-		expect(warningEl?.textContent).toContain(
-			"Saved game data from an older format has been discarded",
-		);
-	});
-
-	it("shows no banner when reason opt is absent", async () => {
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-		vi.resetModules();
-		const { renderStart } = await import("../views/start.js");
-
-		setSearch("skipDialup=1");
-		await awaitIgnoringRejection(renderStart(getMain()));
-
-		const warningEl = document.querySelector<HTMLElement>(
-			"#persistence-warning",
-		);
-		expect(warningEl?.hasAttribute("hidden")).toBe(true);
-	});
-
-	it("silently skips a reason that has no copy", async () => {
-		vi.spyOn(Math, "random").mockReturnValue(0.9);
-		vi.resetModules();
-		const { renderStart } = await import("../views/start.js");
-
-		setSearch("skipDialup=1");
-		await awaitIgnoringRejection(renderStart(getMain(), { reason: "empty" }));
+		await awaitIgnoringRejection(renderStart(getMain(), opts));
 
 		const warningEl = document.querySelector<HTMLElement>(
 			"#persistence-warning",
@@ -641,19 +530,11 @@ describe("renderStart — persistence warning banners", () => {
 
 describe("renderStart — repeated renders", () => {
 	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		vi.stubGlobal("__COMMIT_TIMESTAMP_MS__", 0);
-		document.body.innerHTML = INDEX_BODY_HTML;
-		installLocalStorageStub();
 	});
 
 	afterEach(() => {
 		vi.useRealTimers();
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
 	});
 
 	it("hides a reason banner left by an earlier render when the next render has no reason", async () => {

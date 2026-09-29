@@ -7,7 +7,6 @@ import {
 	NEW_ROOM_BROADCAST,
 } from "../engine";
 import { runRound } from "../round-coordinator";
-import { MockRoundLLMProvider } from "../round-llm-provider";
 import type { GameState } from "../types";
 import { makeSilentProvider, makeTestGame } from "./fixtures/make-game-state";
 
@@ -33,6 +32,12 @@ async function playEndedRoom(): Promise<GameState> {
 		makeSilentProvider(),
 	);
 	return afterSecond.nextState;
+}
+
+async function promptTextsInNewRoom(continued: GameState): Promise<string[][]> {
+	const provider = makeSilentProvider();
+	await runRound(continued, "red", "new hello", provider);
+	return provider.calls.map((call) => call.messages.map(messageText));
 }
 
 describe("Continue into a new room", () => {
@@ -62,13 +67,7 @@ describe("Continue into a new room", () => {
 		);
 		expect(Math.max(...redRounds.slice(0, -1))).toBe(ended.round - 1);
 
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-		]);
-		await runRound(continued, "red", "new hello", provider);
-		const redCall = provider.calls[0];
-		if (!redCall) throw new Error("expected a request for red");
-		const texts = redCall.messages.map(messageText);
+		const [texts = []] = await promptTextsInNewRoom(continued);
 		const currentState = texts[texts.length - 1] ?? "";
 		const logTail = texts.slice(0, -1);
 		const finalAnnouncement = logTail.findIndex((t) =>
@@ -85,15 +84,7 @@ describe("Continue into a new room", () => {
 	it("puts the new-room broadcast and the new player message last, after the old history", async () => {
 		const ended = await playEndedRoom();
 		const continued = continueLogsInNewRoom(makeTestGame(), ended);
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		await runRound(continued, "red", "new hello", provider);
-
-		const redCall = provider.calls[0];
-		if (!redCall) throw new Error("expected a request for red");
-		const texts = redCall.messages.map(messageText);
+		const [texts = []] = await promptTextsInNewRoom(continued);
 		const currentState = texts[texts.length - 1] ?? "";
 		const logTail = texts.slice(0, -1);
 
@@ -114,15 +105,9 @@ describe("Continue into a new room", () => {
 	it("gives a Daemon that did not hear from blue the silent-turn anchor", async () => {
 		const ended = await playEndedRoom();
 		const continued = continueLogsInNewRoom(makeTestGame(), ended);
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		await runRound(continued, "red", "new hello", provider);
-
-		const greenCall = provider.calls[1];
-		if (!greenCall) throw new Error("expected a request for green");
-		const texts = greenCall.messages.map(messageText);
-		expect(texts[texts.length - 2]).toBe("You have received no messages.");
+		const [, greenTexts = []] = await promptTextsInNewRoom(continued);
+		expect(greenTexts[greenTexts.length - 2]).toBe(
+			"You have received no messages.",
+		);
 	});
 });

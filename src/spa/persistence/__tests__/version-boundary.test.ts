@@ -23,10 +23,6 @@ describe("live boundary constants (#539)", () => {
 	it("is game-save 5 on the USB axis", () => {
 		expect(GAME_SAVE_VERSION).toBe(5);
 	});
-
-	it("activates both axes together", () => {
-		expect(liveVersionBoundary()).toEqual({ session: 12, gs: 5 });
-	});
 });
 
 describe("liveVersionBoundary", () => {
@@ -35,15 +31,6 @@ describe("liveVersionBoundary", () => {
 			session: SESSION_SCHEMA_VERSION,
 			gs: GAME_SAVE_VERSION,
 		});
-	});
-
-	it("treats the live format versions as current", () => {
-		expect(
-			checkVersionCompatibility("session", SESSION_SCHEMA_VERSION).kind,
-		).toBe("current");
-		expect(checkVersionCompatibility("gs", GAME_SAVE_VERSION).kind).toBe(
-			"current",
-		);
 	});
 });
 
@@ -100,30 +87,23 @@ describe("checkVersionCompatibility (live boundary)", () => {
 });
 
 describe("checkVersionCompatibility (explicit v12/v5 boundary)", () => {
-	it("at (12, 5): a v11 session is a mismatch linking to 0.0.2-beta.2", () => {
-		expect(checkVersionCompatibility("session", 11, V12_V5)).toEqual({
-			kind: "mismatch",
-			archivedBuild: "0.0.2-beta.2",
-		});
-	});
-
-	it("at (12, 5): a v12 session is current", () => {
-		expect(checkVersionCompatibility("session", 12, V12_V5)).toEqual({
-			kind: "current",
-		});
-	});
-
-	it("at (12, 5): a v4 game save is a mismatch linking to 0.0.2-beta.2", () => {
-		expect(checkVersionCompatibility("gs", 4, V12_V5)).toEqual({
-			kind: "mismatch",
-			archivedBuild: "0.0.2-beta.2",
-		});
-	});
-
-	it("at (12, 5): a v5 game save is current", () => {
-		expect(checkVersionCompatibility("gs", 5, V12_V5)).toEqual({
-			kind: "current",
-		});
+	it.each([
+		[
+			"a v11 session is a mismatch linking to 0.0.2-beta.2",
+			"session",
+			11,
+			{ kind: "mismatch", archivedBuild: "0.0.2-beta.2" },
+		],
+		["a v12 session is current", "session", 12, { kind: "current" }],
+		[
+			"a v4 game save is a mismatch linking to 0.0.2-beta.2",
+			"gs",
+			4,
+			{ kind: "mismatch", archivedBuild: "0.0.2-beta.2" },
+		],
+		["a v5 game save is current", "gs", 5, { kind: "current" }],
+	] as const)("at (12, 5): %s", (_label, axis, version, expected) => {
+		expect(checkVersionCompatibility(axis, version, V12_V5)).toEqual(expected);
 	});
 });
 

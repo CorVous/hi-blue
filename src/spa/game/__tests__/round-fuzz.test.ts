@@ -1,3 +1,4 @@
+/** @vitest-environment jsdom */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateDualContentPacks } from "../../../content/content-pack-generator";
 import { SINGLE_GAME_CONFIG } from "../../../content/phases";

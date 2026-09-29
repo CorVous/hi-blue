@@ -1,19 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { runRound } from "../round-coordinator";
-import { MockRoundLLMProvider } from "../round-llm-provider";
 import type {
 	ActiveComplication,
 	ConversationEntry,
 	GameState,
 } from "../types";
 import {
-	makeSilentProvider,
 	makeTestGame,
 	ROW_AI_STARTS,
-	seededRng,
 	TEST_PERSONAS,
-	withCountdownZero,
 } from "./fixtures/make-game-state";
+import {
+	firstTurnActs,
+	runComplicationRound,
+	toolCall,
+} from "./round-coordinator-harness";
 
 const DRAW_TOOL_DISABLE_KIND = 0.4;
 const DRAW_FIRST_PAIR = 0.0;
@@ -31,16 +32,9 @@ function broadcastContents(log: readonly ConversationEntry[]): string[] {
 }
 
 async function fireToolDisable() {
-	const game = withCountdownZero(
+	const { nextState } = await runComplicationRound(
 		makeTestGame({ pack: { aiStarts: ROW_AI_STARTS } }),
-	);
-	const rng = seededRng(TOOL_DISABLE_DRAWS, () => 0);
-	const { nextState } = await runRound(
-		game,
-		"red",
-		"hi",
-		makeSilentProvider(),
-		{ rng },
+		TOOL_DISABLE_DRAWS,
 	);
 	const disable = nextState.activeComplications.find(
 		(c): c is Extract<ActiveComplication, { kind: "tool_disable" }> =>
@@ -97,25 +91,13 @@ describe("runRound — a disabled tool called anyway", () => {
 		};
 	}
 
-	function redCalls(
-		toolCalls: Array<{ id: string; name: string; argumentsJson: string }>,
-	): MockRoundLLMProvider {
-		return new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-	}
-
 	it("rejects a go with a tool_failure and leaves the Daemon where it was", async () => {
 		const game = withRedToolDisabled("go");
 		const { nextState, result } = await runRound(
 			game,
 			"red",
 			"hi",
-			redCalls([
-				{ id: "c1", name: "go", argumentsJson: '{"direction":"south"}' },
-			]),
+			firstTurnActs([toolCall("c1", "go", { direction: "south" })]),
 			{ initiative: ["red", "green", "cyan"] },
 		);
 		expect(nextState.personaSpatial.red?.position).toEqual({
@@ -144,12 +126,8 @@ describe("runRound — a disabled tool called anyway", () => {
 			game,
 			"red",
 			"hi",
-			redCalls([
-				{
-					id: "m1",
-					name: "message",
-					argumentsJson: '{"to":"blue","content":"still here"}',
-				},
+			firstTurnActs([
+				toolCall("m1", "message", { to: "blue", content: "still here" }),
 			]),
 			{ initiative: ["red", "green", "cyan"] },
 		);

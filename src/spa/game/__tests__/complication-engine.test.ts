@@ -54,32 +54,25 @@ function makePhase(overrides: Partial<GameState> = {}): GameState {
 	};
 }
 
+function makeFiringPhase(overrides: Partial<GameState> = {}): GameState {
+	return makePhase({
+		complicationSchedule: { countdown: 0, settingShiftFired: false },
+		...overrides,
+	});
+}
+
 function makeObstacle(id: string, pos: GridPosition): WorldEntity {
 	return makeEntity(id, "obstacle", pos);
 }
 
 describe("tickComplication — countdown > 1: returns null", () => {
-	it("returns null when countdown is 3", () => {
+	it.each([
+		2, 3, 5,
+	])("returns null without drawing when countdown is %i", (countdown) => {
 		const game = makePhase({
-			complicationSchedule: { countdown: 3, settingShiftFired: false },
+			complicationSchedule: { countdown, settingShiftFired: false },
 		});
-		const result = tickComplication(game, seededRng([]));
-		expect(result).toBeNull();
-	});
-
-	it("returns null when countdown is 2", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 2, settingShiftFired: false },
-		});
-		const result = tickComplication(game, seededRng([]));
-		expect(result).toBeNull();
-	});
-
-	it("does not call rng when countdown is > 1 (seededRng with empty array would throw)", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 5, settingShiftFired: false },
-		});
-		expect(() => tickComplication(game, seededRng([]))).not.toThrow();
+		expect(tickComplication(game, seededRng([]))).toBeNull();
 	});
 });
 
@@ -89,8 +82,7 @@ describe("decrementComplicationCountdown", () => {
 			complicationSchedule: { countdown: 3, settingShiftFired: false },
 		});
 		const updated = decrementComplicationCountdown(game);
-		const updatedPhase = updated;
-		expect(updatedPhase.complicationSchedule.countdown).toBe(2);
+		expect(updated.complicationSchedule.countdown).toBe(2);
 	});
 
 	it("does not alter settingShiftFired", () => {
@@ -98,8 +90,7 @@ describe("decrementComplicationCountdown", () => {
 			complicationSchedule: { countdown: 3, settingShiftFired: true },
 		});
 		const updated = decrementComplicationCountdown(game);
-		const updatedPhase = updated;
-		expect(updatedPhase.complicationSchedule.settingShiftFired).toBe(true);
+		expect(updated.complicationSchedule.settingShiftFired).toBe(true);
 	});
 
 	it("does not alter activeComplications", () => {
@@ -111,24 +102,13 @@ describe("decrementComplicationCountdown", () => {
 			activeComplications: active,
 		});
 		const updated = decrementComplicationCountdown(game);
-		const updatedPhase = updated;
-		expect(updatedPhase.activeComplications).toEqual(active);
+		expect(updated.activeComplications).toEqual(active);
 	});
 });
 
 describe("tickComplication — fires when countdown is 0", () => {
-	it("returns a non-null ComplicationResult when countdown is 0", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
-		const result = tickComplication(game, seededRng([0.0, 0.5]));
-		expect(result).not.toBeNull();
-	});
-
 	it("draws weather_change when type-draw rng selects index 0 of the full pool", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
+		const game = makeFiringPhase();
 		const result = tickComplication(game, seededRng([0.0, 0.5]));
 		expect(result?.fired.kind).toBe("weather_change");
 		if (result?.fired.kind === "weather_change") {
@@ -137,32 +117,8 @@ describe("tickComplication — fires when countdown is 0", () => {
 		}
 	});
 
-	it("draws sysadmin_directive when type-draw selects index 1", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
-		const result = tickComplication(
-			game,
-			seededRng([POOL_PICK.sysadminDirective, 0.0, 0.5]),
-		);
-		expect(result?.fired.kind).toBe("sysadmin_directive");
-	});
-
-	it("draws chat_lockout when type-draw selects index 3 (5-item pool)", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
-		const result = tickComplication(
-			game,
-			seededRng([POOL_PICK.chatLockout, 0.0, 0.0, 0.5]),
-		);
-		expect(result?.fired.kind).toBe("chat_lockout");
-	});
-
 	it("draws setting_shift when type-draw selects the last index (5-item pool, index 4)", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
+		const game = makeFiringPhase();
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.settingShift, 0.5]),
@@ -173,9 +129,7 @@ describe("tickComplication — fires when countdown is 0", () => {
 
 describe("sysadmin_directive sub-draw", () => {
 	it("carries a target AiId drawn from personaSpatial", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
+		const game = makeFiringPhase();
 		const result = tickComplication(
 			game,
 			seededRng([POOL_PICK.sysadminDirective, 0.0, 0.5]),
@@ -188,45 +142,18 @@ describe("sysadmin_directive sub-draw", () => {
 });
 
 describe("chat_lockout sub-draw", () => {
-	it("carries a target AiId and duration in [3, 5]", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
+	it.each([
+		[0.0, 3],
+		[0.9999, 5],
+	])("with a duration draw of %f, carries a target AiId and duration %i", (durationDraw, duration) => {
 		const result = tickComplication(
-			game,
-			seededRng([POOL_PICK.chatLockout, 0.0, 0.0, 0.5]),
+			makeFiringPhase(),
+			seededRng([POOL_PICK.chatLockout, 0.0, durationDraw, 0.5]),
 		);
 		expect(result?.fired.kind).toBe("chat_lockout");
 		if (result?.fired.kind === "chat_lockout") {
 			expect(AI_IDS).toContain(result.fired.target);
-			expect(result.fired.duration).toBeGreaterThanOrEqual(3);
-			expect(result.fired.duration).toBeLessThanOrEqual(5);
-		}
-	});
-
-	it("duration is exactly 3 when rng for duration returns 0.0", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
-		const result = tickComplication(
-			game,
-			seededRng([POOL_PICK.chatLockout, 0.0, 0.0, 0.5]),
-		);
-		if (result?.fired.kind === "chat_lockout") {
-			expect(result.fired.duration).toBe(3);
-		}
-	});
-
-	it("duration is exactly 5 when rng for duration returns just below 1.0", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
-		const result = tickComplication(
-			game,
-			seededRng([POOL_PICK.chatLockout, 0.0, 0.9999, 0.5]),
-		);
-		if (result?.fired.kind === "chat_lockout") {
-			expect(result.fired.duration).toBe(5);
+			expect(result.fired.duration).toBe(duration);
 		}
 	});
 });
@@ -244,8 +171,7 @@ describe("Setting Shift exclusion", () => {
 	});
 
 	it("excludes setting_shift when the game has no B pack", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
+		const game = makeFiringPhase({
 			contentPacksB: [],
 		});
 		const result = tickComplication(
@@ -253,22 +179,6 @@ describe("Setting Shift exclusion", () => {
 			seededRng([POOL_PICK.lastKind, 0.0, 0.0, 0.5]),
 		);
 		expect(result?.fired.kind).toBe("chat_lockout");
-	});
-
-	it("sets settingShiftFired=true in returned game state when setting_shift fires", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
-		const result = tickComplication(
-			game,
-			seededRng([POOL_PICK.settingShift, 0.5]),
-		);
-		expect(result?.fired.kind).toBe("setting_shift");
-		if (result) {
-			const updated = applyComplicationResult(game, result, seededRng([0.5]));
-			const updatedPhase = updated;
-			expect(updatedPhase.complicationSchedule.settingShiftFired).toBe(true);
-		}
 	});
 });
 
@@ -278,8 +188,7 @@ describe("Obstacle Shift exclusion", () => {
 		for (let i = 0; i < 5; i++) {
 			const v = i / 5;
 			const r = tickComplication(
-				makePhase({
-					complicationSchedule: { countdown: 0, settingShiftFired: false },
+				makeFiringPhase({
 					world: { entities: [] },
 				}),
 				seededRng([v, 0.0, 0.0, 0.5]),
@@ -290,12 +199,6 @@ describe("Obstacle Shift exclusion", () => {
 	});
 
 	it("excludes obstacle_shift when every obstacle has all adjacent cells blocked by other obstacles or out-of-bounds", () => {
-		const entities: WorldEntity[] = [];
-		for (let r = 0; r <= 2; r++) {
-			for (let c = 0; c <= 2; c++) {
-				entities.push(makeObstacle(`obs_${r}_${c}`, { row: r, col: c }));
-			}
-		}
 		const fullBlockEntities: WorldEntity[] = [];
 		for (let r = 0; r < 5; r++) {
 			for (let c = 0; c < 5; c++) {
@@ -308,8 +211,7 @@ describe("Obstacle Shift exclusion", () => {
 		for (let i = 0; i < 5; i++) {
 			const v = i / 5;
 			const r = tickComplication(
-				makePhase({
-					complicationSchedule: { countdown: 0, settingShiftFired: false },
+				makeFiringPhase({
 					world: { entities: fullBlockEntities },
 				}),
 				seededRng([v, 0.0, 0.0, 0.5]),
@@ -330,8 +232,7 @@ describe("Obstacle Shift exclusion", () => {
 		for (let i = 0; i < 5; i++) {
 			const v = i / 5;
 			const r = tickComplication(
-				makePhase({
-					complicationSchedule: { countdown: 0, settingShiftFired: false },
+				makeFiringPhase({
 					world: { entities: [cornerObstacle] },
 					personaSpatial: corneredPersonas,
 				}),
@@ -349,8 +250,7 @@ describe("Obstacle Shift exclusion", () => {
 			green: { position: { row: 4, col: 4 } },
 			cyan: { position: { row: 3, col: 3 } },
 		};
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
+		const game = makeFiringPhase({
 			world: { entities: [obs] },
 			personaSpatial,
 		});
@@ -368,8 +268,7 @@ describe("Obstacle Shift exclusion", () => {
 			green: { row: 0, col: 1 },
 			cyan: { row: 0, col: 2 },
 		});
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
+		const game = makeFiringPhase({
 			world: { entities: [obs] },
 			personaSpatial,
 		});
@@ -404,8 +303,7 @@ describe("Obstacle Shift keeps every open cell reachable", () => {
 		const toCells: string[] = [];
 		for (let i = 0; i < 20; i++) {
 			const result = tickComplication(
-				makePhase({
-					complicationSchedule: { countdown: 0, settingShiftFired: false },
+				makeFiringPhase({
 					world: { entities: [cornerGuard, shiftable] },
 					personaSpatial: cornerPersonas,
 				}),
@@ -427,8 +325,7 @@ describe("Obstacle Shift keeps every open cell reachable", () => {
 		const kinds: string[] = [];
 		for (let i = 0; i < 10; i++) {
 			const result = tickComplication(
-				makePhase({
-					complicationSchedule: { countdown: 0, settingShiftFired: false },
+				makeFiringPhase({
 					world: { entities: [cornerGuard, shiftable, ...blockers] },
 					personaSpatial: cornerPersonas,
 				}),
@@ -451,8 +348,7 @@ describe("Targeted complications skip exhausted Daemons", () => {
 		for (const pick of TARGETED_PICKS) {
 			for (let i = 0; i < 6; i++) {
 				const result = tickComplication(
-					makePhase({
-						complicationSchedule: { countdown: 0, settingShiftFired: false },
+					makeFiringPhase({
 						exhausted: new Set<AiId>(["red", "green"]),
 					}),
 					seededRng([pick, i / 6], () => 0.5),
@@ -478,8 +374,7 @@ describe("Targeted complications skip exhausted Daemons", () => {
 		const kinds = new Set<string>();
 		for (let i = 0; i < 20; i++) {
 			const result = tickComplication(
-				makePhase({
-					complicationSchedule: { countdown: 0, settingShiftFired: false },
+				makeFiringPhase({
 					exhausted: new Set<AiId>(AI_IDS),
 				}),
 				seededRng([i / 20], () => 0.5),
@@ -522,8 +417,7 @@ describe("Tool Disable exclusion", () => {
 				});
 			}
 		}
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
+		const game = makeFiringPhase({
 			activeComplications,
 		});
 		const result = tickComplication(
@@ -533,7 +427,7 @@ describe("Tool Disable exclusion", () => {
 		expect(result?.fired.kind).not.toBe("tool_disable");
 	});
 
-	it("excludes a (daemon, tool) pair already present in activeComplications", () => {
+	it("skips a (daemon, tool) pair already disabled but permits the same daemon's other tools", () => {
 		const activeComplications: ActiveComplication[] = [
 			{
 				kind: "tool_disable",
@@ -542,32 +436,7 @@ describe("Tool Disable exclusion", () => {
 				resolveAtRound: 99,
 			},
 		];
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-			activeComplications,
-		});
-		const result = tickComplication(
-			game,
-			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
-		);
-		if (result?.fired.kind === "tool_disable") {
-			expect(
-				result.fired.target === "red" && result.fired.tool === "pick_up",
-			).toBe(false);
-		}
-	});
-
-	it("permits a (daemon, tool) pair when the same daemon has a different tool disabled", () => {
-		const activeComplications: ActiveComplication[] = [
-			{
-				kind: "tool_disable",
-				target: "red",
-				tool: "pick_up",
-				resolveAtRound: 99,
-			},
-		];
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
+		const game = makeFiringPhase({
 			activeComplications,
 		});
 		const result = tickComplication(
@@ -575,6 +444,11 @@ describe("Tool Disable exclusion", () => {
 			seededRng([POOL_PICK.toolDisable, 0.0, 0.5]),
 		);
 		expect(result?.fired.kind).toBe("tool_disable");
+		if (result?.fired.kind === "tool_disable") {
+			expect(
+				result.fired.target === "red" && result.fired.tool === "pick_up",
+			).toBe(false);
+		}
 	});
 
 	it("permits a (daemon, tool) pair when a different daemon has the same tool disabled", () => {
@@ -586,8 +460,7 @@ describe("Tool Disable exclusion", () => {
 				resolveAtRound: 99,
 			},
 		];
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
+		const game = makeFiringPhase({
 			activeComplications,
 		});
 		const result = tickComplication(
@@ -607,9 +480,7 @@ describe("Tool Disable pool — the retired `face` tool is not selectable", () =
 	it("draws only the five Daemon tools across every (daemon, tool) pair", () => {
 		const drawn = new Set<string>();
 		for (let i = 0; i < 15; i++) {
-			const game = makePhase({
-				complicationSchedule: { countdown: 0, settingShiftFired: false },
-			});
+			const game = makeFiringPhase();
 			const result = tickComplication(
 				game,
 				seededRng([POOL_PICK.toolDisable, i / 15, 0.5]),
@@ -641,8 +512,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		const added = updatedPhase.activeComplications.find(
+		const added = updated.activeComplications.find(
 			(c) => c.kind === "sysadmin_directive",
 		);
 		expect(added).toBeDefined();
@@ -651,47 +521,26 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		}
 	});
 
-	it("appends ActiveComplication for tool_disable", () => {
-		const game = makePhase();
-		const result = {
-			fired: {
-				kind: "tool_disable" as const,
-				target: "cyan" as AiId,
-				tool: "go" as ToolName,
-				duration: 3,
-			},
-		};
-		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		const added = updatedPhase.activeComplications.find(
-			(c) => c.kind === "tool_disable",
-		);
-		expect(added).toBeDefined();
-		if (added?.kind === "tool_disable") {
-			expect(added.target).toBe("cyan");
-			expect(added.tool).toBe("go");
-		}
-	});
-
 	it("appends ActiveComplication for tool_disable with resolveAtRound = phase.round + duration", () => {
 		const game = makePhase({ round: 7 });
 		const result = {
 			fired: {
 				kind: "tool_disable" as const,
-				target: "red" as AiId,
-				tool: "message" as ToolName,
+				target: "cyan" as AiId,
+				tool: "go" as ToolName,
 				duration: 4,
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		const added = updatedPhase.activeComplications.find(
+		const added = updated.activeComplications.find(
 			(c) => c.kind === "tool_disable",
 		);
-		expect(added).toBeDefined();
-		if (added?.kind === "tool_disable") {
-			expect(added.resolveAtRound).toBe(11);
-		}
+		expect(added).toEqual({
+			kind: "tool_disable",
+			target: "cyan",
+			tool: "go",
+			resolveAtRound: 11,
+		});
 	});
 
 	it("appends ActiveComplication for chat_lockout with resolveAtRound = phase.round + duration", () => {
@@ -704,8 +553,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 			},
 		};
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		const added = updatedPhase.activeComplications.find(
+		const added = updated.activeComplications.find(
 			(c) => c.kind === "chat_lockout",
 		);
 		expect(added).toBeDefined();
@@ -715,37 +563,22 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		}
 	});
 
-	it("does NOT append to activeComplications for weather_change", () => {
-		const game = makePhase();
-		const result = {
-			fired: { kind: "weather_change" as const, weather: "rainy" },
-		};
-		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		expect(updatedPhase.activeComplications).toHaveLength(0);
-	});
-
-	it("does NOT append to activeComplications for obstacle_shift", () => {
-		const game = makePhase();
-		const result = {
-			fired: {
-				kind: "obstacle_shift" as const,
-				obstacleId: "obs1",
-				fromCell: { row: 0, col: 0 },
-				toCell: { row: 0, col: 1 },
-			},
-		};
-		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		expect(updatedPhase.activeComplications).toHaveLength(0);
-	});
-
-	it("does NOT append to activeComplications for setting_shift", () => {
-		const game = makePhase();
-		const result = { fired: { kind: "setting_shift" as const } };
-		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		expect(updatedPhase.activeComplications).toHaveLength(0);
+	it.each([
+		{ kind: "weather_change" as const, weather: "rainy" },
+		{
+			kind: "obstacle_shift" as const,
+			obstacleId: "obs1",
+			fromCell: { row: 0, col: 0 },
+			toCell: { row: 0, col: 1 },
+		},
+		{ kind: "setting_shift" as const },
+	])("does NOT append to activeComplications for $kind", (fired) => {
+		const updated = applyComplicationResult(
+			makePhase(),
+			{ fired },
+			seededRng([0.5]),
+		);
+		expect(updated.activeComplications).toHaveLength(0);
 	});
 
 	it("sets settingShiftFired=true in schedule when result is setting_shift", () => {
@@ -754,8 +587,7 @@ describe("applyComplicationResult — activeComplications appends", () => {
 		});
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		expect(updatedPhase.complicationSchedule.settingShiftFired).toBe(true);
+		expect(updated.complicationSchedule.settingShiftFired).toBe(true);
 	});
 });
 
@@ -791,43 +623,15 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		};
 	}
 
-	it("sets activePackId to 'B' when setting_shift fires", () => {
+	it("switches activePackId, contentPack, setting, weather and timeOfDay to the B pack", () => {
 		const game = makeGameWithDualPacks();
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
 		expect(updated.activePackId).toBe("B");
-	});
-
-	it("updates phase.contentPack to the B-side pack after setting_shift", () => {
-		const game = makeGameWithDualPacks();
-		const result = { fired: { kind: "setting_shift" as const } };
-		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		expect(updatedPhase.contentPack.setting).toBe("sun-baked salt flat");
-	});
-
-	it("updates phase.setting to the B-side pack's setting string", () => {
-		const game = makeGameWithDualPacks();
-		const result = { fired: { kind: "setting_shift" as const } };
-		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		expect(updatedPhase.setting).toBe("sun-baked salt flat");
-	});
-
-	it("updates phase.weather to the B-side pack's weather string", () => {
-		const game = makeGameWithDualPacks();
-		const result = { fired: { kind: "setting_shift" as const } };
-		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		expect(updatedPhase.weather).toBe("hot");
-	});
-
-	it("updates phase.timeOfDay to the B-side pack's timeOfDay string", () => {
-		const game = makeGameWithDualPacks();
-		const result = { fired: { kind: "setting_shift" as const } };
-		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		expect(updatedPhase.timeOfDay).toBe("day");
+		expect(updated.contentPack.setting).toBe("sun-baked salt flat");
+		expect(updated.setting).toBe("sun-baked salt flat");
+		expect(updated.weather).toBe("hot");
+		expect(updated.timeOfDay).toBe("day");
 	});
 
 	it("leaves world entity positions unchanged after setting_shift", () => {
@@ -848,19 +652,17 @@ describe("applyComplicationResult — setting_shift swaps active pack", () => {
 		};
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
-		expect(updatedPhase.world.entities).toHaveLength(2);
-		expect(updatedPhase.world.entities[0]?.holder).toEqual({ row: 2, col: 3 });
-		expect(updatedPhase.world.entities[1]?.holder).toEqual({ row: 1, col: 1 });
+		expect(updated.world.entities).toHaveLength(2);
+		expect(updated.world.entities[0]?.holder).toEqual({ row: 2, col: 3 });
+		expect(updated.world.entities[1]?.holder).toEqual({ row: 1, col: 1 });
 	});
 
 	it("appends a broadcast entry to every daemon's conversationLog", () => {
 		const game = makeGameWithDualPacks();
 		const result = { fired: { kind: "setting_shift" as const } };
 		const updated = applyComplicationResult(game, result, seededRng([0.5]));
-		const updatedPhase = updated;
 		for (const aiId of AI_IDS) {
-			const log = updatedPhase.conversationLogs[aiId] ?? [];
+			const log = updated.conversationLogs[aiId] ?? [];
 			const broadcast = log.find((e) => e.kind === "broadcast");
 			expect(broadcast).toBeDefined();
 			if (broadcast?.kind === "broadcast") {
@@ -1075,9 +877,7 @@ describe("applyComplicationResult — setting_shift reprojects world entities", 
 
 describe("determinism", () => {
 	it("same game state and same rng seed sequence produces the same ComplicationResult", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 0, settingShiftFired: false },
-		});
+		const game = makeFiringPhase();
 		const r1 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
 		const r2 = tickComplication(game, seededRng([0.5, 0.0, 0.0]));
 		expect(r1).toEqual(r2);
@@ -1174,8 +974,7 @@ describe("resolveExpiredChatLockouts", () => {
 		});
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("red");
-		const nextPhase = nextState;
-		expect(nextPhase.activeComplications).toHaveLength(0);
+		expect(nextState.activeComplications).toHaveLength(0);
 	});
 
 	it("only removes expired lockouts, leaving unexpired ones intact", () => {
@@ -1189,9 +988,8 @@ describe("resolveExpiredChatLockouts", () => {
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("red");
 		expect(resolvedAiIds).not.toContain("green");
-		const nextPhase = nextState;
-		expect(nextPhase.activeComplications).toHaveLength(1);
-		expect(nextPhase.activeComplications[0]?.target).toBe("green");
+		expect(nextState.activeComplications).toHaveLength(1);
+		expect(nextState.activeComplications[0]?.target).toBe("green");
 	});
 
 	it("does not remove non-chat_lockout complications", () => {
@@ -1209,10 +1007,9 @@ describe("resolveExpiredChatLockouts", () => {
 		});
 		const { nextState, resolvedAiIds } = resolveExpiredChatLockouts(game);
 		expect(resolvedAiIds).toContain("cyan");
-		const nextPhase = nextState;
 		expect(
-			nextPhase.activeComplications.some((c) => c.kind === "tool_disable"),
+			nextState.activeComplications.some((c) => c.kind === "tool_disable"),
 		).toBe(true);
-		expect(nextPhase.activeComplications).toHaveLength(1);
+		expect(nextState.activeComplications).toHaveLength(1);
 	});
 });

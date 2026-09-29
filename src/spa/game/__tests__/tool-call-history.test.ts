@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { appendMessage } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
-import type { AiPersona, ConversationEntry } from "../types";
+import type { AiPersona } from "../types";
 import { makeTestGame, TEST_PERSONAS } from "./fixtures/make-game-state";
 
 const BLUE_PERSONA: AiPersona = {
@@ -22,75 +22,21 @@ function makeGame() {
 	});
 }
 
-describe("ConversationEntry message kind with tool call fields", () => {
-	it("accepts optional toolCallId field", () => {
-		const entry: ConversationEntry = {
-			kind: "message",
-			round: 0,
-			from: "red",
-			to: "blue",
-			content: "Hello",
-			toolCallId: "call_abc123",
-		};
-		expect(entry.kind).toBe("message");
-		expect((entry as { toolCallId?: string }).toolCallId).toBe("call_abc123");
-	});
-
-	it("accepts optional toolArgumentsJson field", () => {
-		const entry: ConversationEntry = {
-			kind: "message",
-			round: 0,
-			from: "red",
-			to: "blue",
-			content: "Hello",
-			toolArgumentsJson: '{"to":"blue","content":"Hello"}',
-		};
-		expect((entry as { toolArgumentsJson?: string }).toolArgumentsJson).toBe(
-			'{"to":"blue","content":"Hello"}',
-		);
-	});
-
-	it("works without tool call fields (backward compatibility)", () => {
-		const entry: ConversationEntry = {
-			kind: "message",
-			round: 0,
-			from: "red",
-			to: "blue",
-			content: "Hello",
-		};
-		expect(entry.kind).toBe("message");
-		expect((entry as { toolCallId?: string }).toolCallId).toBeUndefined();
-	});
-});
-
 describe("appendMessage with tool call data", () => {
-	it("stores toolCallId when provided", () => {
-		let game = makeGame();
-		game = appendMessage(game, "red", "blue", "Hello", {
-			toolCallId: "call_test123",
-		});
-
-		// biome-ignore lint/style/noNonNullAssertion: test guarantees red log exists
-		const redLog = game.conversationLogs.red!;
-		expect(redLog).toHaveLength(1);
-		expect(redLog[0]?.kind).toBe("message");
-		expect((redLog[0] as { toolCallId?: string }).toolCallId).toBe(
-			"call_test123",
-		);
-	});
-
-	it("stores toolArgumentsJson when provided", () => {
-		let game = makeGame();
+	it("stores toolCallId and toolArgumentsJson when provided", () => {
 		const argsJson = '{"to":"blue","content":"Hello"}';
-		game = appendMessage(game, "red", "blue", "Hello", {
+		const game = appendMessage(makeGame(), "red", "blue", "Hello", {
+			toolCallId: "call_test123",
 			toolArgumentsJson: argsJson,
 		});
 
-		// biome-ignore lint/style/noNonNullAssertion: test guarantees red log exists
-		const redLog = game.conversationLogs.red!;
-		expect(
-			(redLog[0] as { toolArgumentsJson?: string }).toolArgumentsJson,
-		).toBe(argsJson);
+		const redLog = game.conversationLogs.red ?? [];
+		expect(redLog).toHaveLength(1);
+		expect(redLog[0]).toMatchObject({
+			kind: "message",
+			toolCallId: "call_test123",
+			toolArgumentsJson: argsJson,
+		});
 	});
 
 	it("works without tool call data (backward compatibility)", () => {
@@ -105,7 +51,7 @@ describe("appendMessage with tool call data", () => {
 });
 
 describe("buildOpenAiMessages — outgoing messages rendered as tool calls", () => {
-	it("renders outgoing message as tool call when toolCallId exists", () => {
+	it("renders outgoing message as a tool call immediately followed by its tool result when toolCallId exists", () => {
 		let game = makeGame();
 		game = appendMessage(game, "red", "blue", "Hello there", {
 			toolCallId: "call_msg123",
@@ -130,11 +76,13 @@ describe("buildOpenAiMessages — outgoing messages rendered as tool calls", () 
 			);
 		}
 
-		const toolMsg = messages.find(
-			(m) => m.role === "tool" && m.tool_call_id === "call_msg123",
+		const assistantIdx = messages.findIndex(
+			(m) => m.role === "assistant" && "tool_calls" in m,
 		);
-		expect(toolMsg).toBeDefined();
+		const toolMsg = messages[assistantIdx + 1];
+		expect(toolMsg?.role).toBe("tool");
 		if (toolMsg?.role === "tool") {
+			expect(toolMsg.tool_call_id).toBe("call_msg123");
 			expect(toolMsg.content).toContain("Hello there");
 		}
 	});
@@ -158,51 +106,5 @@ describe("buildOpenAiMessages — outgoing messages rendered as tool calls", () 
 		expect((assistantWithContent as { content: string }).content).toContain(
 			"you dm blue",
 		);
-	});
-
-	it("tool result for message appears immediately after assistant tool_calls message", () => {
-		let game = makeGame();
-		game = appendMessage(game, "red", "blue", "Test message", {
-			toolCallId: "call_order123",
-			toolArgumentsJson: '{"to":"blue","content":"Test message"}',
-		});
-
-		const ctx = buildAiContext(game, "red");
-		const messages = buildOpenAiMessages(ctx, undefined);
-
-		const assistantIdx = messages.findIndex(
-			(m) => m.role === "assistant" && "tool_calls" in m,
-		);
-		expect(assistantIdx).toBeGreaterThanOrEqual(0);
-
-		const nextMsg = messages[assistantIdx + 1];
-		expect(nextMsg?.role).toBe("tool");
-		if (nextMsg?.role === "tool") {
-			expect(nextMsg.tool_call_id).toBe("call_order123");
-		}
-	});
-});
-
-describe("tool call history preservation — full integration", () => {
-	it("message tool call in round N appears as tool call pair in round N+1 history", () => {
-		let game = makeGame();
-
-		game = appendMessage(game, "red", "blue", "I can help you", {
-			toolCallId: "call_round0_msg",
-			toolArgumentsJson: '{"to":"blue","content":"I can help you"}',
-		});
-
-		const ctx = buildAiContext(game, "red");
-		const messages = buildOpenAiMessages(ctx, undefined, 0);
-
-		const assistantToolMsg = messages.find(
-			(m) => m.role === "assistant" && "tool_calls" in m,
-		);
-		expect(assistantToolMsg).toBeDefined();
-
-		const toolResultMsg = messages.find(
-			(m) => m.role === "tool" && m.tool_call_id === "call_round0_msg",
-		);
-		expect(toolResultMsg).toBeDefined();
 	});
 });

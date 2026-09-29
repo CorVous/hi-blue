@@ -228,7 +228,8 @@ re-render is a call to `renderApp` from a view.
 `http://localhost:8787` (ADR 0013).
 
 `test-setup.ts` stubs the Worker URL and `__DEV__ = true` before every jsdom
-test and resets `location.search`. The `setSearch()` helpers use
+and node-environment (`logic` project) test, and resets `location.search`
+when there is a `window`. The `setSearch()` helpers use
 `history.replaceState`, which persists between tests, so a leaked test
 affordance such as `?winImmediately=1` would change a later test's round.
 
@@ -370,3 +371,12 @@ affordance such as `?winImmediately=1` would change a later test's round.
   so `location.origin` matches the wrangler-dev origin and the SPA's
   dev-affordance gates (`location.origin === __WORKER_BASE_URL__`) hold under
   test.
+- `fixtures/wait-until-passes.ts` wraps `vi.waitFor` with a 1 ms poll
+  interval. The default interval is 50 ms, and most of these waits pass on
+  the second poll, so the default added about 50 ms per wait.
+- The bootstrap-timeout tests in `game.test.ts` mock
+  `BOOTSTRAP_LOADING_TIMEOUT_MS` down to one second. The generating-room
+  screen runs a `requestAnimationFrame` wipe, an 80 ms spinner interval and
+  the dev inspector's 100 ms ticker, and advancing fake timers through the
+  real five minutes fired about 25,000 callbacks and took around a second
+  per test. The timeout path is the same at either length.

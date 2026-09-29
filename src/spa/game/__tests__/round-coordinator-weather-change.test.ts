@@ -4,16 +4,14 @@ import {
 	deserializeSession,
 	serializeSession,
 } from "../../persistence/session-codec";
-import { runRound } from "../round-coordinator";
-import type { WorldEntity } from "../types";
+import type { GameState, WorldEntity } from "../types";
 import {
-	makeSilentProvider,
 	makeTestGame,
 	ROW_AI_STARTS,
-	seededRng,
 	TEST_PERSONAS,
 	withPackOrderedWorld,
 } from "./fixtures/make-game-state";
+import { runComplicationRound } from "./round-coordinator-harness";
 
 const OBJECTIVE_OBJECT: WorldEntity = {
 	id: "obj_a",
@@ -45,23 +43,16 @@ function makeBaseGame() {
 	);
 }
 
+function fireWeatherChange(game: GameState) {
+	return runComplicationRound(game, WEATHER_CHANGE_DRAWS, Math.random);
+}
+
 describe("runRound — weather_change complication (issue #487)", () => {
 	it("changes game.weather to a different WEATHER_POOL entry", async () => {
 		const game = makeBaseGame();
 		const initialWeather = game.weather;
 
-		const withCountdown = {
-			...game,
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
-		);
+		const { nextState } = await fireWeatherChange(game);
 
 		expect(nextState.weather).not.toBe(initialWeather);
 		expect(WEATHER_POOL).toContain(nextState.weather);
@@ -70,18 +61,7 @@ describe("runRound — weather_change complication (issue #487)", () => {
 	it("changes only game.weather, so the change survives a save round-trip", async () => {
 		const game = makeBaseGame();
 
-		const withCountdown = {
-			...game,
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
-		);
+		const { nextState } = await fireWeatherChange(game);
 
 		expect(nextState.contentPack).toEqual(game.contentPack);
 		const files = serializeSession(nextState, "t", "t");
@@ -95,18 +75,7 @@ describe("runRound — weather_change complication (issue #487)", () => {
 	it("appends a broadcast entry to all Daemons' conversationLogs", async () => {
 		const game = makeBaseGame();
 
-		const withCountdown = {
-			...game,
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
-		);
+		const { nextState } = await fireWeatherChange(game);
 
 		for (const aiId of Object.keys(TEST_PERSONAS)) {
 			const log = nextState.conversationLogs[aiId] ?? [];
@@ -128,18 +97,7 @@ describe("runRound — weather_change complication (issue #487)", () => {
 
 	it("resets the complication countdown after weather_change fires", async () => {
 		const game = makeBaseGame();
-		const withCountdown = {
-			...game,
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
-		);
+		const { nextState } = await fireWeatherChange(game);
 
 		expect(nextState.complicationSchedule.countdown).toBeGreaterThan(0);
 		expect(nextState.complicationSchedule.countdown).toBeLessThanOrEqual(15);
@@ -151,18 +109,7 @@ describe("runRound — weather_change complication (issue #487)", () => {
 		const initialTimeOfDay = game.timeOfDay;
 		const initialActivePackId = game.activePackId;
 
-		const withCountdown = {
-			...game,
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
-		);
+		const { nextState } = await fireWeatherChange(game);
 
 		expect(nextState.setting).toBe(initialSetting);
 		expect(nextState.timeOfDay).toBe(initialTimeOfDay);

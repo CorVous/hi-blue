@@ -244,6 +244,9 @@ day:
   This works because the worker isolate shares `globalThis` with the test
   runner. Pricing is seeded through `_setPricingCacheForTests` so `/models`
   is never hit.
+- `openai-proxy.test.ts` calls `reset()` from `cloudflare:test` after every
+  test, which empties `RATE_GUARD_KV`, so its tests start from empty counters
+  without clearing KV themselves.
 - KV writes made under `ctx.waitUntil` are awaited by polling
   (`waitForCounter`), not by fixed sleeps. Sleeps raced KV write visibility in
   Miniflare.

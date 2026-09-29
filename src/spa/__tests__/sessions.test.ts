@@ -16,6 +16,7 @@ import {
 	STATIC_CONTENT_PACKS,
 	STATIC_OBJECTIVE_TYPES,
 } from "./fixtures/static-content-packs";
+import { waitUntilPasses } from "./fixtures/wait-until-passes";
 
 const generateDualContentPacks = vi.hoisted(() => vi.fn());
 
@@ -148,16 +149,21 @@ async function seedVersionMismatchSession(
 	stub._store[`${prefix}engine.dat`] = obfuscate(JSON.stringify(sealed));
 }
 
+beforeEach(() => {
+	document.body.innerHTML = INDEX_BODY_HTML;
+});
+
+afterEach(() => {
+	vi.useRealTimers();
+	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
+	vi.resetModules();
+	document.body.innerHTML = "";
+});
+
 describe("renderSessions — screen visibility", () => {
 	beforeEach(() => {
-		document.body.innerHTML = INDEX_BODY_HTML;
 		installLocalStorageStub();
-	});
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
 	});
 
 	it("shows #sessions-screen and hides #start-screen, #panels, #composer, #endgame, #cap-hit", async () => {
@@ -180,14 +186,7 @@ describe("renderSessions — screen visibility", () => {
 
 describe("renderSessions — banner", () => {
 	beforeEach(() => {
-		document.body.innerHTML = INDEX_BODY_HTML;
 		installLocalStorageStub();
-	});
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
 	});
 
 	it("?reason=broken shows the broken banner", async () => {
@@ -242,16 +241,6 @@ describe("renderSessions — banner", () => {
 });
 
 describe("renderSessions — row rendering", () => {
-	beforeEach(() => {
-		document.body.innerHTML = INDEX_BODY_HTML;
-	});
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("renders 4 rows: 2 ok + 1 broken + 1 version-mismatch", async () => {
 		vi.resetModules();
 		const stub = installLocalStorageStub();
@@ -379,16 +368,6 @@ describe("renderSessions — row rendering", () => {
 });
 
 describe("renderSessions — [ rm ] confirm/cancel", () => {
-	beforeEach(() => {
-		document.body.innerHTML = INDEX_BODY_HTML;
-	});
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("[ rm ] click swaps to [ confirm rm ] + [ cancel ]", async () => {
 		vi.resetModules();
 		const stub = installLocalStorageStub();
@@ -476,16 +455,6 @@ describe("renderSessions — [ rm ] confirm/cancel", () => {
 });
 
 describe("renderSessions — [ + new session ] button", () => {
-	beforeEach(() => {
-		document.body.innerHTML = INDEX_BODY_HTML;
-	});
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("mints a new session and transitions the view to start", async () => {
 		vi.resetModules();
 		const stub = installLocalStorageStub();
@@ -505,16 +474,6 @@ describe("renderSessions — [ + new session ] button", () => {
 });
 
 describe("renderSessions — [ load ] button", () => {
-	beforeEach(() => {
-		document.body.innerHTML = INDEX_BODY_HTML;
-	});
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("sets active pointer and transitions the view to game when loading a non-active session", async () => {
 		vi.resetModules();
 		const stub = installLocalStorageStub();
@@ -568,16 +527,6 @@ async function seedArchivedSessionInStore(
 }
 
 describe("renderSessions — archived sessions section", () => {
-	beforeEach(() => {
-		document.body.innerHTML = INDEX_BODY_HTML;
-	});
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("renders both 'active sessions' and 'archived sessions' headings with one of each", async () => {
 		vi.resetModules();
 		const stub = installLocalStorageStub();
@@ -713,16 +662,6 @@ describe("renderSessions — archived sessions section", () => {
 });
 
 describe("renderSessions — archived Continue button", () => {
-	beforeEach(() => {
-		document.body.innerHTML = INDEX_BODY_HTML;
-	});
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("button visible when openrouter_key present", async () => {
 		vi.resetModules();
 		const stub = makeLocalStorageStub();
@@ -809,15 +748,7 @@ async function landOnSessionsWithBrokenActive(): Promise<LocalStorageStub> {
 
 describe("renderSessions — continue with new room from a forced sessions view", () => {
 	beforeEach(() => {
-		document.body.innerHTML = INDEX_BODY_HTML;
 		generateDualContentPacks.mockReset();
-	});
-	afterEach(() => {
-		vi.useRealTimers();
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
 	});
 
 	it("takes the player into the new room when a broken active session forced the picker open", async () => {
@@ -831,10 +762,14 @@ describe("renderSessions — continue with new room from a forced sessions view"
 		expect(getMain().dataset.view).toBe("sessions");
 
 		archivedContinueButton("0xARCH").click();
-		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		await waitUntilPasses(() =>
+			expect(generateDualContentPacks).toHaveBeenCalled(),
+		);
 		packs.resolve();
 
-		await vi.waitFor(() => expect(stub._store[ACTIVE_KEY]).not.toBe("0xBROK"));
+		await waitUntilPasses(() =>
+			expect(stub._store[ACTIVE_KEY]).not.toBe("0xBROK"),
+		);
 		expect(stub._store[ACTIVE_KEY]).toMatch(/^0x/);
 		expect(getMain().dataset.view).toBe("game");
 	});
@@ -850,11 +785,13 @@ describe("renderSessions — continue with new room from a forced sessions view"
 		renderSessions(root, { reason: "broken" });
 
 		archivedContinueButton("0xARCH").click();
-		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		await waitUntilPasses(() =>
+			expect(generateDualContentPacks).toHaveBeenCalled(),
+		);
 		stub._store[ACTIVE_KEY] = "0xOKAY";
 		packs.resolve();
 
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(archivedContinueStatus("0xARCH")).toContain("new room ready"),
 		);
 		expect(stub._store[ACTIVE_KEY]).toBe("0xOKAY");
@@ -877,7 +814,9 @@ describe("renderSessions — continue with new room from a forced sessions view"
 		renderSessions(root, { reason: "broken" });
 
 		archivedContinueButton("0xARCH").click();
-		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		await waitUntilPasses(() =>
+			expect(generateDualContentPacks).toHaveBeenCalled(),
+		);
 		expect(archivedContinueButton("0xARCH").disabled).toBe(true);
 		const provider = generateDualContentPacks.mock.calls[0]?.[3] as {
 			signal?: AbortSignal;

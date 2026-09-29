@@ -1,8 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { installLocalStorageStub } from "../../__tests__/fixtures/local-storage";
-import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
-import { startGame } from "../../game/engine.js";
-import type { AiPersona, GameState } from "../../game/types.js";
+import type { GameState } from "../../game/types.js";
 import type { DaemonFile } from "../session-codec.js";
 import {
 	ACTIVE_KEY,
@@ -11,61 +9,9 @@ import {
 	SESSIONS_PREFIX,
 	saveActiveSession,
 } from "../session-storage.js";
-
-const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
-		typingQuirks: ["fragments", "ALL CAPS"],
-		voiceExamples: ["Now.", "BURN IT.", "Soon, soon."],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
-		typingQuirks: ["ellipses", "no contractions"],
-		voiceExamples: [
-			"I will count again...",
-			"That is not balanced.",
-			"One more sweep through the list.",
-		],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
-		typingQuirks: ["lowercase only", "fragments"],
-		voiceExamples: ["sure.", "if you say so.", "fine."],
-	},
-};
-
-function makeFreshGame(): GameState {
-	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-		budgetPerAi: 5,
-		rng: () => 0,
-	});
-}
+import { makeFreshGame } from "./make-fresh-game.js";
 
 describe("devtools-edit: mutating daemon .txt affects conversationLogs on reload", () => {
-	beforeEach(() => {
-		installLocalStorageStub();
-	});
-	afterEach(() => {
-		vi.restoreAllMocks();
-	});
-
 	it("editing red daemon .txt message entry is visible after loadActiveSession()", () => {
 		const stub = installLocalStorageStub();
 

@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { advanceRound, appendLogEntry, appendMessage } from "../engine";
 import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
-import type { ConversationEntry, ToolRoundtripMessage } from "../types";
+import type { AiId, ConversationEntry, ToolRoundtripMessage } from "../types";
 import { makeTestGame } from "./fixtures/make-game-state";
 
 const SILENT_TURN = "You have received no messages.";
 
 describe("buildOpenAiMessages", () => {
-	it("empty chat history + no roundtrip → [system, current-state user turn]", () => {
+	it("empty chat history + no roundtrip + no currentRound → [system, current-state user turn], with no silent-turn anchor", () => {
 		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
 		const messages = buildOpenAiMessages(ctx, undefined);
@@ -121,40 +121,6 @@ describe("buildOpenAiMessages", () => {
 		);
 	});
 
-	it("matching tool_call_id in assistant message and tool message", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-
-		const roundtrip: ToolRoundtripMessage = {
-			assistantToolCalls: [
-				{
-					id: "call_xyz",
-					name: "put_down",
-					argumentsJson: '{"item":"flower"}',
-				},
-			],
-			toolResults: [
-				{
-					tool_call_id: "call_xyz",
-					success: true,
-					description: "Ember put down the flower",
-				},
-			],
-		};
-
-		const messages = buildOpenAiMessages(ctx, roundtrip);
-		const assistantMsg = messages.find(
-			(m) => m.role === "assistant" && "tool_calls" in m,
-		);
-		const toolMsg = messages.find((m) => m.role === "tool");
-
-		expect(assistantMsg).toBeDefined();
-		expect(toolMsg).toBeDefined();
-		if (assistantMsg?.role === "assistant" && toolMsg?.role === "tool") {
-			expect(assistantMsg.tool_calls?.[0]?.id).toBe(toolMsg.tool_call_id);
-		}
-	});
-
 	it("failed prior call: tool result content reads as dispatcher failure reason", () => {
 		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
@@ -224,49 +190,31 @@ describe("buildOpenAiMessages", () => {
 		);
 	});
 
-	it("(b) peer messages this daemon this round → no silent-turn anchor, last conversational user msg is peer message", () => {
-		let game = makeTestGame();
-		const currentRound = game.round;
-		game = appendMessage(game, "green", "red", "psst red");
-
-		const ctx = buildAiContext(game, "red");
-		const silent = SILENT_TURN;
-		const stateContent = ctx.toCurrentStateUserMessage();
-		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
-
-		expect(
-			messages.some(
-				(m) =>
-					m.role === "user" && (m as { content: string }).content === silent,
-			),
-		).toBe(false);
-
-		const conversationalUserTurns = messages.filter(
-			(m) =>
-				m.role === "user" &&
-				(m as { content: string }).content !== stateContent,
-		);
-		const lastConversational =
-			conversationalUserTurns[conversationalUserTurns.length - 1];
-		expect((lastConversational as { content: string }).content).toBe(
+	it.each<[string, AiId, string]>([
+		[
+			"(b) peer messages this daemon this round",
+			"green",
 			"[Round 0] *green dms you: psst red",
-		);
-	});
-
-	it("(c) blue addresses this daemon → no silent-turn anchor, last conversational user msg is player message", () => {
+		],
+		[
+			"(c) blue addresses this daemon",
+			"blue",
+			"[Round 0] blue dms you: psst red",
+		],
+	])("%s → no silent-turn anchor, last conversational user msg is that message", (_case, from, expectedLast) => {
 		let game = makeTestGame();
 		const currentRound = game.round;
-		game = appendMessage(game, "blue", "red", "Hi Ember");
+		game = appendMessage(game, from, "red", "psst red");
 
 		const ctx = buildAiContext(game, "red");
-		const silent = SILENT_TURN;
 		const stateContent = ctx.toCurrentStateUserMessage();
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
 		expect(
 			messages.some(
 				(m) =>
-					m.role === "user" && (m as { content: string }).content === silent,
+					m.role === "user" &&
+					(m as { content: string }).content === SILENT_TURN,
 			),
 		).toBe(false);
 
@@ -278,21 +226,8 @@ describe("buildOpenAiMessages", () => {
 		const lastConversational =
 			conversationalUserTurns[conversationalUserTurns.length - 1];
 		expect((lastConversational as { content: string }).content).toBe(
-			"[Round 0] blue dms you: Hi Ember",
+			expectedLast,
 		);
-	});
-
-	it("when `currentRound` is omitted, no anchor is appended (back-compat)", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const silent = SILENT_TURN;
-		const messages = buildOpenAiMessages(ctx, undefined);
-		expect(
-			messages.some(
-				(m) =>
-					m.role === "user" && (m as { content: string }).content === silent,
-			),
-		).toBe(false);
 	});
 
 	it("incoming message from a prior round does not suppress the anchor for currentRound", () => {
@@ -550,37 +485,6 @@ describe("buildOpenAiMessages — action-failure entries", () => {
 		expect(failureIdx).toBeGreaterThanOrEqual(0);
 		expect(messageIdx).toBeGreaterThanOrEqual(0);
 		expect(failureIdx).toBeLessThan(messageIdx);
-	});
-
-	it("regression: existing prior-round FAILED: tool-result tests still pass — action-failure does not replace tool result channel", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-
-		const roundtrip: ToolRoundtripMessage = {
-			assistantToolCalls: [
-				{
-					id: "call_fail",
-					name: "pick_up",
-					argumentsJson: '{"item":"nonexistent"}',
-				},
-			],
-			toolResults: [
-				{
-					tool_call_id: "call_fail",
-					success: false,
-					description:
-						'Ember tried to pick_up nonexistent but failed: Item "nonexistent" does not exist',
-					reason: 'Item "nonexistent" does not exist',
-				},
-			],
-		};
-
-		const messages = buildOpenAiMessages(ctx, roundtrip);
-		const toolMsg = messages.find((m) => m.role === "tool");
-		expect(toolMsg).toBeDefined();
-		if (toolMsg?.role === "tool") {
-			expect(toolMsg.content).toContain("FAILED:");
-		}
 	});
 });
 

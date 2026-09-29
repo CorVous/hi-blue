@@ -1,4 +1,9 @@
-import { expect, type Page, type Request } from "@playwright/test";
+import {
+	expect,
+	type Locator,
+	type Page,
+	type Request,
+} from "@playwright/test";
 import {
 	deobfuscateEngineBlob,
 	ENGINE_OBFUSCATION_KEY,
@@ -410,6 +415,20 @@ export async function holdChatCompletions(
 	return { release: () => release(), requestCount: () => requests };
 }
 
+const LONGEST_CONTENT_PACK_RETRY_BACKOFF_MS = 2_000;
+const RETRY_BACKOFF_POLL_MS = 250;
+
+export async function expectVisibleSkippingRetryBackoff(
+	page: Page,
+	locator: Locator,
+	timeoutMs = 30_000,
+): Promise<void> {
+	await expect(async () => {
+		await page.clock.fastForward(LONGEST_CONTENT_PACK_RETRY_BACKOFF_MS);
+		await expect(locator).toBeVisible({ timeout: RETRY_BACKOFF_POLL_MS });
+	}).toPass({ timeout: timeoutMs });
+}
+
 export function isDualContentPackRequest(body: ParsedBody): boolean {
 	return classifyJsonRequest(body) === "dual-content-pack";
 }
@@ -538,6 +557,15 @@ export interface SealedEngine {
 	activePackId: "A" | "B";
 	weather?: string;
 	complicationSchedule?: { countdown: number; settingShiftFired: boolean };
+	activeComplications?: SealedComplication[];
+	budgets?: Record<string, { total: number; remaining: number }>;
+	isComplete?: boolean;
+}
+
+export interface SealedComplication {
+	kind: string;
+	target?: string;
+	resolveAtRound?: number;
 }
 
 export interface SealedConversationEntry {
@@ -595,6 +623,22 @@ export async function readActiveSessionEngine(
 		sessionId: raw.sessionId,
 		sealed: JSON.parse(deobfuscateEngineBlob(raw.blob)) as SealedEngine,
 	};
+}
+
+export async function waitForActiveSessionEngine(
+	page: Page,
+): Promise<{ sessionId: string; sealed: SealedEngine }> {
+	await expect
+		.poll(async () => {
+			try {
+				await readActiveSessionEngine(page);
+				return true;
+			} catch {
+				return false;
+			}
+		})
+		.toBe(true);
+	return readActiveSessionEngine(page);
 }
 
 export async function writeActiveSessionEngine(

@@ -41,6 +41,22 @@ export function listSessionIds(
 	}, prefix);
 }
 
+export function readStoredDaemonLogs(
+	page: Page,
+	sessionId: string,
+): Promise<string> {
+	return page.evaluate((prefix) => {
+		const logs: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key?.startsWith(prefix) && key.endsWith(".txt")) {
+				logs.push(localStorage.getItem(key) ?? "");
+			}
+		}
+		return logs.join("\n");
+	}, sessionDir(sessionId));
+}
+
 export async function seedOkSession(
 	page: Page,
 	sessionId: string,

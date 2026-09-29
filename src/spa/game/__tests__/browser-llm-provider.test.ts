@@ -1,12 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BrowserLLMProvider } from "../browser-llm-provider";
 
-function makeSseBody(words: string[]): ReadableStream<Uint8Array> {
+function makeSseBody(
+	deltas: Array<Record<string, string>>,
+): ReadableStream<Uint8Array> {
 	const encoder = new TextEncoder();
 	return new ReadableStream<Uint8Array>({
 		start(controller) {
-			for (const word of words) {
-				const line = `data: ${JSON.stringify({ choices: [{ delta: { content: word }, finish_reason: null }] })}\n\n`;
+			for (const delta of deltas) {
+				const line = `data: ${JSON.stringify({ choices: [{ delta, finish_reason: null }] })}\n\n`;
 				controller.enqueue(encoder.encode(line));
 			}
 			controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -15,91 +17,55 @@ function makeSseBody(words: string[]): ReadableStream<Uint8Array> {
 	});
 }
 
+function stubFetchWithBody(body: ReadableStream<Uint8Array>) {
+	const fetchMock = vi.fn().mockResolvedValue(
+		new Response(body, {
+			status: 200,
+			headers: { "Content-Type": "text/event-stream" },
+		}),
+	);
+	vi.stubGlobal("fetch", fetchMock);
+	return fetchMock;
+}
+
+function stubFetchWithWords(words: string[]) {
+	return stubFetchWithBody(makeSseBody(words.map((content) => ({ content }))));
+}
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+});
+
 describe("BrowserLLMProvider.streamRound — onDelta callback", () => {
-	it("invokes onDelta once per SSE chunk, in order", async () => {
-		const words = ["hello ", "world"];
-
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response(makeSseBody(words), {
-					status: 200,
-					headers: { "Content-Type": "text/event-stream" },
-				}),
-			),
-		);
-
-		const provider = new BrowserLLMProvider();
-		const received: string[] = [];
-
-		const result = await provider.streamRound([], [], (text) => {
-			received.push(text);
-		});
-
-		expect(received).toEqual(words);
-		expect(result.assistantText).toBe("hello world");
-
-		vi.restoreAllMocks();
-	});
-
-	it("invokes onDelta for each of three chunks and concatenates correctly", async () => {
+	it("invokes onDelta once per SSE chunk, in order, and concatenates the text", async () => {
 		const words = ["alpha ", "beta ", "gamma."];
+		stubFetchWithWords(words);
 
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response(makeSseBody(words), {
-					status: 200,
-					headers: { "Content-Type": "text/event-stream" },
-				}),
-			),
+		const received: string[] = [];
+		const result = await new BrowserLLMProvider().streamRound(
+			[],
+			[],
+			(text) => {
+				received.push(text);
+			},
 		);
 
-		const provider = new BrowserLLMProvider();
-		const received: string[] = [];
-
-		const result = await provider.streamRound([], [], (text) => {
-			received.push(text);
-		});
-
-		expect(received).toHaveLength(3);
 		expect(received).toEqual(words);
 		expect(result.assistantText).toBe("alpha beta gamma.");
-
-		vi.restoreAllMocks();
 	});
 
 	it("still collects assistantText when onDelta is not provided", async () => {
-		const words = ["one ", "two"];
+		stubFetchWithWords(["one ", "two"]);
 
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response(makeSseBody(words), {
-					status: 200,
-					headers: { "Content-Type": "text/event-stream" },
-				}),
-			),
-		);
-
-		const provider = new BrowserLLMProvider();
-		const result = await provider.streamRound([], []);
+		const result = await new BrowserLLMProvider().streamRound([], []);
 
 		expect(result.assistantText).toBe("one two");
-
-		vi.restoreAllMocks();
 	});
 });
 
 describe("BrowserLLMProvider — reasoning default", () => {
 	function captureRequestBody(): { getBody: () => Record<string, unknown> } {
-		const fetchMock = vi.fn().mockResolvedValue(
-			new Response(makeSseBody(["ok"]), {
-				status: 200,
-				headers: { "Content-Type": "text/event-stream" },
-			}),
-		);
-		vi.stubGlobal("fetch", fetchMock);
+		const fetchMock = stubFetchWithWords(["ok"]);
 		return {
 			getBody: () => {
 				const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
@@ -114,8 +80,6 @@ describe("BrowserLLMProvider — reasoning default", () => {
 		await new BrowserLLMProvider().streamRound([], []);
 
 		expect(getBody()).not.toHaveProperty("reasoning");
-
-		vi.restoreAllMocks();
 	});
 
 	it("disables reasoning when constructed with { disableReasoning: true }", async () => {
@@ -127,8 +91,6 @@ describe("BrowserLLMProvider — reasoning default", () => {
 		);
 
 		expect(getBody().reasoning).toEqual({ enabled: false });
-
-		vi.restoreAllMocks();
 	});
 
 	it("omits the reasoning field when constructed with { disableReasoning: false }", async () => {
@@ -140,29 +102,15 @@ describe("BrowserLLMProvider — reasoning default", () => {
 		);
 
 		expect(getBody()).not.toHaveProperty("reasoning");
-
-		vi.restoreAllMocks();
 	});
 });
 
 describe("BrowserLLMProvider.streamRound — onLifecycle callback", () => {
-	it("fires started → first-token → completed for a normal stream", async () => {
-		const words = ["hello ", "world"];
+	it("fires started → first-token → completed for a multi-delta stream, with first-token only once", async () => {
+		stubFetchWithWords(["hello ", "world"]);
 
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response(makeSseBody(words), {
-					status: 200,
-					headers: { "Content-Type": "text/event-stream" },
-				}),
-			),
-		);
-
-		const provider = new BrowserLLMProvider();
 		const events: string[] = [];
-
-		const result = await provider.streamRound(
+		const result = await new BrowserLLMProvider().streamRound(
 			[],
 			[],
 			undefined,
@@ -174,148 +122,88 @@ describe("BrowserLLMProvider.streamRound — onLifecycle callback", () => {
 
 		expect(events).toEqual(["started", "first-token", "completed"]);
 		expect(result.assistantText).toBe("hello world");
-
-		vi.restoreAllMocks();
-	});
-
-	it("fires first-token only once across multiple deltas", async () => {
-		const words = ["a", "b", "c", "d"];
-
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response(makeSseBody(words), {
-					status: 200,
-					headers: { "Content-Type": "text/event-stream" },
-				}),
-			),
-		);
-
-		const provider = new BrowserLLMProvider();
-		const events: string[] = [];
-
-		await provider.streamRound([], [], undefined, undefined, (event) => {
-			events.push(event.phase);
-		});
-
-		const firstTokenCount = events.filter((p) => p === "first-token").length;
-		expect(firstTokenCount).toBe(1);
-
-		vi.restoreAllMocks();
 	});
 
 	it("forwards daemonId on every event", async () => {
-		const words = ["test"];
+		stubFetchWithWords(["test"]);
 
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response(makeSseBody(words), {
-					status: 200,
-					headers: { "Content-Type": "text/event-stream" },
-				}),
-			),
+		const events: string[] = [];
+		await new BrowserLLMProvider().streamRound(
+			[],
+			[],
+			undefined,
+			"daemon-456",
+			(event) => {
+				events.push(
+					event.daemonId ? `${event.phase}:${event.daemonId}` : event.phase,
+				);
+			},
 		);
-
-		const provider = new BrowserLLMProvider();
-		const events: Array<string> = [];
-
-		await provider.streamRound([], [], undefined, "daemon-456", (event) => {
-			events.push(
-				event.daemonId ? `${event.phase}:${event.daemonId}` : event.phase,
-			);
-		});
 
 		expect(events).toEqual([
 			"started:daemon-456",
 			"first-token:daemon-456",
 			"completed:daemon-456",
 		]);
-
-		vi.restoreAllMocks();
 	});
 
 	it("fires started then errored when fetch rejects", async () => {
-		const fetchError = new Error("Network failed");
-
-		vi.stubGlobal("fetch", vi.fn().mockRejectedValue(fetchError));
-
-		const provider = new BrowserLLMProvider();
-		const events: Array<string> = [];
-
-		await expect(
-			provider.streamRound([], [], undefined, undefined, (event) => {
-				events.push(event.phase);
-			}),
-		).rejects.toThrow();
-
-		expect(events).toEqual(["started", "errored"]);
-
-		vi.restoreAllMocks();
-	});
-
-	it("does not fire first-token if no deltas arrive (errored before first chunk)", async () => {
-		const streamError = new Error("Stream failed");
-
 		vi.stubGlobal(
 			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response(
-					new ReadableStream<Uint8Array>({
-						start(controller) {
-							controller.error(streamError);
-						},
-					}),
-					{
-						status: 200,
-						headers: { "Content-Type": "text/event-stream" },
-					},
-				),
-			),
+			vi.fn().mockRejectedValue(new Error("Network failed")),
 		);
 
-		const provider = new BrowserLLMProvider();
 		const events: string[] = [];
-
 		await expect(
-			provider.streamRound([], [], undefined, undefined, (event) => {
-				events.push(event.phase);
-			}),
+			new BrowserLLMProvider().streamRound(
+				[],
+				[],
+				undefined,
+				undefined,
+				(event) => {
+					events.push(event.phase);
+				},
+			),
 		).rejects.toThrow();
 
 		expect(events).toEqual(["started", "errored"]);
-		expect(events).not.toContain("first-token");
+	});
 
-		vi.restoreAllMocks();
+	it("does not fire first-token if the stream errors before the first chunk", async () => {
+		stubFetchWithBody(
+			new ReadableStream<Uint8Array>({
+				start(controller) {
+					controller.error(new Error("Stream failed"));
+				},
+			}),
+		);
+
+		const events: string[] = [];
+		await expect(
+			new BrowserLLMProvider().streamRound(
+				[],
+				[],
+				undefined,
+				undefined,
+				(event) => {
+					events.push(event.phase);
+				},
+			),
+		).rejects.toThrow();
+
+		expect(events).toEqual(["started", "errored"]);
 	});
 });
 
 describe("BrowserLLMProvider.streamRound — reasoning stays out of assistantText", () => {
 	it("returns empty assistantText when the stream carries only reasoning", async () => {
-		const encoder = new TextEncoder();
-		const body = new ReadableStream<Uint8Array>({
-			start(controller) {
-				const line = `data: ${JSON.stringify({ choices: [{ delta: { reasoning: "I should greet blue first." }, finish_reason: null }] })}\n\n`;
-				controller.enqueue(encoder.encode(line));
-				controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-				controller.close();
-			},
-		});
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response(body, {
-					status: 200,
-					headers: { "Content-Type": "text/event-stream" },
-				}),
-			),
+		stubFetchWithBody(
+			makeSseBody([{ reasoning: "I should greet blue first." }]),
 		);
 
 		const result = await new BrowserLLMProvider().streamRound([], []);
 
 		expect(result.assistantText).toBe("");
 		expect(result.toolCalls).toEqual([]);
-
-		vi.restoreAllMocks();
 	});
 });

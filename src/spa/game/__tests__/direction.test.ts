@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CardinalDirection, GridPosition } from "../direction";
 import {
 	applyDirection,
 	CARDINAL_DIRECTIONS,
@@ -28,32 +29,13 @@ describe("COMPASS_ORDER — the shared compass rotation", () => {
 });
 
 describe("applyDirection", () => {
-	it("moves north from center", () => {
-		expect(applyDirection({ row: 2, col: 2 }, "north")).toEqual({
-			row: 1,
-			col: 2,
-		});
-	});
-
-	it("moves south from center", () => {
-		expect(applyDirection({ row: 2, col: 2 }, "south")).toEqual({
-			row: 3,
-			col: 2,
-		});
-	});
-
-	it("moves east from center", () => {
-		expect(applyDirection({ row: 2, col: 2 }, "east")).toEqual({
-			row: 2,
-			col: 3,
-		});
-	});
-
-	it("moves west from center", () => {
-		expect(applyDirection({ row: 2, col: 2 }, "west")).toEqual({
-			row: 2,
-			col: 1,
-		});
+	it.each<[CardinalDirection, GridPosition]>([
+		["north", { row: 1, col: 2 }],
+		["south", { row: 3, col: 2 }],
+		["east", { row: 2, col: 3 }],
+		["west", { row: 2, col: 1 }],
+	])("moves %s from center", (direction, expected) => {
+		expect(applyDirection({ row: 2, col: 2 }, direction)).toEqual(expected);
 	});
 
 	it("can produce out-of-bounds positions (caller must check)", () => {
@@ -64,32 +46,16 @@ describe("applyDirection", () => {
 });
 
 describe("inBounds", () => {
-	it("center cell (2,2) is in bounds", () => {
-		expect(inBounds({ row: 2, col: 2 })).toBe(true);
-	});
-
-	it("top-left corner (0,0) is in bounds", () => {
-		expect(inBounds({ row: 0, col: 0 })).toBe(true);
-	});
-
-	it("bottom-right corner (4,4) is in bounds", () => {
-		expect(inBounds({ row: 4, col: 4 })).toBe(true);
-	});
-
-	it("row -1 is out of bounds", () => {
-		expect(inBounds({ row: -1, col: 0 })).toBe(false);
-	});
-
-	it("row 5 is out of bounds", () => {
-		expect(inBounds({ row: 5, col: 0 })).toBe(false);
-	});
-
-	it("col -1 is out of bounds", () => {
-		expect(inBounds({ row: 0, col: -1 })).toBe(false);
-	});
-
-	it("col 5 is out of bounds", () => {
-		expect(inBounds({ row: 0, col: 5 })).toBe(false);
+	it.each<[string, GridPosition, boolean]>([
+		["center cell (2,2)", { row: 2, col: 2 }, true],
+		["top-left corner (0,0)", { row: 0, col: 0 }, true],
+		["bottom-right corner (4,4)", { row: 4, col: 4 }, true],
+		["row -1", { row: -1, col: 0 }, false],
+		["row 5", { row: 5, col: 0 }, false],
+		["col -1", { row: 0, col: -1 }, false],
+		["col 5", { row: 0, col: 5 }, false],
+	])("%s → in bounds: %s", (_label, position, expected) => {
+		expect(inBounds(position)).toBe(expected);
 	});
 });
 

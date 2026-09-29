@@ -68,8 +68,6 @@ function getEl<T extends HTMLElement>(selector: string): T {
 
 describe("renderGame — session restore (formerly async bootstrap)", () => {
 	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const stub = makeLocalStorageStub();
 		await seedSessionInStub(stub);

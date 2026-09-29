@@ -113,12 +113,24 @@ itself fires, never `page.request.*`.
 - `page.waitForFunction` takes `(pageFunction, arg, options)`. A poll with no
   argument must pass `undefined` second and `{ timeout }` third: passed second,
   the object becomes the page function's argument and no timeout applies.
-  `getAiHandles` and `start-screen.spec.ts`'s `waitForActiveSession`
-  follow this form.
+  `getAiHandles` follows this form.
 - `SealedContentPack.entities` is the flat entity list of session v11 and later,
   and `obstacleCellsOf` reads obstacles from it alone. The bucketed `obstacles`
   list of older blobs is gone from the type: every spec seals a fresh session,
   so the fallback that read it could never run.
+- `readActiveSessionEngine` / `writeActiveSessionEngine` decode and re-seal
+  `engine.dat`; specs that seed a state (a lockout, a lowered budget) go
+  through them instead of inlining the XOR. `SealedEngine` types the fields
+  specs rewrite (`budgets`, `activeComplications`, `isComplete`).
+  `waitForActiveSessionEngine` polls until the BEGIN save has written
+  `engine.dat`, which lands just after the game view renders.
+- **Content-pack retry backoff.** The content-pack provider sleeps 1 s and
+  then 2 s between its three attempts (`BACKOFF_MS_BEFORE_RETRY`), so every
+  failed budget used to cost a spec 3 s of real time. Specs that need a
+  budget to fail install `page.clock` before navigating and wait for the
+  recovery UI with `expectVisibleSkippingRetryBackoff`, which fast-forwards
+  the page clock 2 s at a time until the locator is visible. The page's
+  300 s loading timeout stays far out of reach of those steps.
 - `stubs.ts` re-exports `engine-blob.ts` and `vista-geometry.ts`, so specs
   import from one place.
 
@@ -130,8 +142,9 @@ itself fires, never `page.request.*`.
 build the key on the Node side and pass it in as the argument.
 `activeSessionId` / `requireActiveSessionId` read the active pointer,
 `listSessionIds` lists the session (or, with `ARCHIVE_PREFIX`, archive) ids
-in sorted order, and `seedOkSession` writes the picker's "ok" session under
-a given id.
+in sorted order, `readStoredDaemonLogs` joins every `<aiId>.txt` of a
+session (the cross-tab specs check what a save kept), and `seedOkSession`
+writes the picker's "ok" session under a given id.
 
 ### `engine-blob.ts` and `vista-geometry.ts`: deliberate mirrors
 
@@ -217,9 +230,8 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `persona-synthesis` | Synthesized blurbs flow from the persona record through `prompt-builder` into each Daemon's streaming system prompt. | |
 | `chat-lockout` | A lockout restored from storage mutes its panel before any typing, disables Send for that Daemon, and says nothing in the transcript. | |
 | `exhausted-daemon-reload` | A Daemon that spends its last budget and then skips a round shows the same panel lines live as after a reload: one "is unresponsive…" line, no bracketed duplicate. The budget is lowered through `engine.dat` and a reload. | |
-| `endgame-current-behaviour` | `game_ended` disables the composer, shows the choices, and keeps the URL. The active-session pointer survives until the player chooses. | #80, #101, #307 |
 | `endgame-outcome` | The endgame subtitle follows the outcome (win or budget exhausted), topinfo shows the final turn, the final round's Daemon lines appear on the endgame screen, and the finished round is saved so a reload reopens the endgame. The budget ending is reached by lowering every saved budget and reloading. Re-entering the endgame by toggling the picker must not stack button handlers: one click downloads once and starts one content-pack request. | #576 |
-| `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. After each choice (Same Daemons, Continue, and New Daemons followed by a new login) `#endgame` is hidden and `#prompt` is enabled again. The first request after Continue is checked twice, once with a quiet final round and once with a weather change in it, because a complication in the final round logs an entry for the round after it; the spec sets the complication countdown with `setComplicationCountdown` and pins `Math.random` to 0 for the final round (the weather change is always first in the draw pool), so neither variant depends on the random first countdown. | #307 |
+| `endgame-choices` | `game_ended` disables the composer, shows the choices, and keeps the URL; the active-session pointer survives until the player chooses. The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. After each choice (Same Daemons, Continue, and New Daemons followed by a new login) `#endgame` is hidden and `#prompt` is enabled again. The first request after Continue is checked twice, once with a quiet final round and once with a weather change in it, because a complication in the final round logs an entry for the round after it; the spec sets the complication countdown with `setComplicationCountdown` and pins `Math.random` to 0 for the final round (the weather change is always first in the draw pool), so neither variant depends on the random first countdown. | #80, #101, #307 |
 | `endgame-choice-safety` | Same Daemons and Continue leave a session the player loaded while the new room was generating untouched: no pointer move, no overwrite, no archive. When archiving the finished game fails, New Daemons and Same Daemons keep it, say why in `#endgame-choice-status` and re-enable the button. When the final save is torn (its `saving` marker is left), both go ahead without archiving and drop the torn session; Same Daemons shows the note before the new room is generated. | |
 | `round-session-switch` | A round still running when the player loads another session paints nothing into it and is saved under its own session; a round whose session was removed meanwhile is dropped without a warning. | |
 | `bootstrap-session-switch` | The loading timeout aborts the held content-pack request; a loading flow that timed out and was abandoned does not take over the start screen when its held response is later released, and a new game starts at epoch 01 after a later-epoch session was open. | |
@@ -228,7 +240,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `round-failure-draft` | A round that fails with an HTTP 500 puts `*Name <message>` back in `#prompt` and removes the player's `.msg-you` line. | |
 | `endgame-controls` | Toggling the picker while "same daemons" is generating keeps the choices disabled and the status shown, with one content-pack request; a triple-clicked diagnostics submit sends one POST; Continue hides again after the key is cleared in the BYOK dialog. | |
 | `round-reentry` | Opening and closing the session picker while a round is in flight keeps Send disabled, a forced submit starts no second round, and the held round still completes with one request per Daemon. | |
-| `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. The start screen's "broken" banner is hidden once the next login reaches the game. | #380 |
+| `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas (one synthesis request in all), and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. The start screen's "broken" banner is hidden once the next login reaches the game. | #380 |
 | `bootstrap-failure-bounce` | A content-pack failure after CONNECT, whether a network abort or an HTTP 200 with an error body, shows `#bootstrap-recovery` inside the game view instead of bouncing to start. A 402 is not retried, and the recovery copy names the upstream message. | #380 |
 | `start-screen` | Start-screen boot, login, restore on refresh, cap-hit (and a provider 429 that is not one), a non-cap failure that shows the retryable `#start-bootstrap-error` whose retry recovers, toggling the session picker (and Escape) after a failure without a new request, refresh during generation, and an empty active pointer. | ADR 0011 |
 | `stream-error` | An `error` chunk inside a 200 SSE stream before any content or tool call fails the round and shows `#round-error` with the upstream message. One that arrives after a message tool call keeps the message and completes the round. | |
@@ -261,11 +273,12 @@ specs that assert on generation failure check `#cap-hit` themselves.
   typed.
 - **bootstrap-recovery.** The initial bootstrap uses up the content-pack
   provider's `OUTER_ATTEMPT_BUDGET` (3 calls) before the recovery UI appears. Regen
-  starts a fresh budget, so the fourth call is allowed to succeed. The
-  button-state test holds the first regeneration call on a promise so the
-  in-flight `toBeDisabled()` check cannot race the attempt settling, then
-  fails that whole second budget (calls 4 to 6) to reach the retryable-failure
-  branch before a third budget succeeds.
+  starts a fresh budget. The regen test holds the first regeneration call on
+  a promise so the in-flight `toBeDisabled()` check cannot race the attempt
+  settling, then fails that whole second budget (calls 4 to 6) to reach the
+  retryable-failure branch; the third budget's first call (call 7) succeeds,
+  which is also the regen happy path. The abandon test goes on to log in
+  again, so it covers both the `broken` reason and the banner being cleared.
 - **bootstrap-failure-bounce.** The content-pack failure is held back until the
   game view is attached. That way the loading-flow catch in `game.ts`, which
   shows the recovery UI, handles it, and not the start screen's catch, which

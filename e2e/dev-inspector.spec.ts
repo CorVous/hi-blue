@@ -6,7 +6,6 @@ import {
 	goToGame,
 	inRoom,
 	readActiveSessionEngine,
-	type SealedEngine,
 	stubChatCompletions,
 	type VistaCell,
 	vistaCells,
@@ -583,13 +582,12 @@ test.describe("dev inspector daemon footer", () => {
 		if (target === undefined) throw new Error("e2e: no Daemon ids");
 
 		const { sessionId, sealed } = await readActiveSessionEngine(page);
-		const withLockout: SealedEngine & { activeComplications?: unknown[] } = {
+		await writeActiveSessionEngine(page, sessionId, {
 			...sealed,
-		};
-		withLockout.activeComplications = [
-			{ kind: "chat_lockout", target, resolveAtRound: 100 },
-		];
-		await writeActiveSessionEngine(page, sessionId, withLockout);
+			activeComplications: [
+				{ kind: "chat_lockout", target, resolveAtRound: 100 },
+			],
+		});
 
 		await page.reload();
 		await stubChatCompletions(page, ["hi"]);

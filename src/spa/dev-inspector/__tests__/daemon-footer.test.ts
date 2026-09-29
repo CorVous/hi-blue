@@ -33,6 +33,22 @@ function renderAndRefresh(
 	refreshDaemonFooter(panel, aiId, session);
 }
 
+function renderAndRefreshAll(session: GameSession): void {
+	for (const aiId of ["red", "green", "cyan"]) {
+		renderDaemonFooter(panelFor(aiId), aiId, session);
+	}
+	for (const aiId of ["red", "green", "cyan"]) {
+		refreshDaemonFooter(panelFor(aiId), aiId, session);
+	}
+}
+
+const NON_PERSONA_DISCLOSURES = [
+	"system-prompt",
+	"raw-completion",
+	"tool-calls",
+	"error",
+];
+
 describe("daemon-footer", () => {
 	let session: GameSession;
 	let redPanel: HTMLElement;
@@ -251,11 +267,8 @@ describe("daemon-footer", () => {
 	});
 
 	it("renderInspector fills the footer summary and details straight away", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const state = new GameSession(contentPack, STATIC_PERSONAS).getState();
-		const session = GameSession.restore({
-			...state,
+		const restoredSession = GameSession.restore({
+			...session.getState(),
 			activeComplications: [
 				{
 					kind: "tool_disable",
@@ -266,15 +279,12 @@ describe("daemon-footer", () => {
 			],
 		});
 
-		renderInspector(document.body, { session });
+		renderInspector(document.body, { session: restoredSession });
 
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
 		const chipTexts = Array.from(
-			redPanel?.querySelectorAll(
+			redPanel.querySelectorAll(
 				'[data-field="complication-chips"] .dev-footer-chip',
-			) ?? [],
+			),
 		).map((chip) => chip.textContent);
 		expect(chipTexts).toEqual(["[tool-dis:pick_up]"]);
 	});
@@ -343,13 +353,7 @@ describe("daemon-footer", () => {
 
 		const restoredSession = GameSession.restore(modifiedState);
 
-		renderDaemonFooter(redPanel, "red", restoredSession);
-		renderDaemonFooter(greenPanel, "green", restoredSession);
-		renderDaemonFooter(cyanPanel, "cyan", restoredSession);
-
-		refreshDaemonFooter(redPanel, "red", restoredSession);
-		refreshDaemonFooter(greenPanel, "green", restoredSession);
-		refreshDaemonFooter(cyanPanel, "cyan", restoredSession);
+		renderAndRefreshAll(restoredSession);
 
 		const redTools = redPanel.querySelector<HTMLElement>(
 			'[data-field="last-tools"]',
@@ -431,39 +435,9 @@ describe("daemon-footer", () => {
 		}
 	});
 
-	it("renderDaemonFooter initialises empty <pre> contents for the four non-persona disclosures", () => {
+	it("renderDaemonFooter initialises the four non-persona disclosures with empty <pre> and no round suffix", () => {
 		renderDaemonFooter(redPanel, "red", session);
 
-		const disclosures = [
-			"system-prompt",
-			"raw-completion",
-			"tool-calls",
-			"error",
-		];
-		const preElements: (HTMLElement | null)[] = [];
-		for (const disclosure of disclosures) {
-			const pre = redPanel.querySelector<HTMLElement>(
-				`[data-disclosure="${disclosure}"] pre`,
-			);
-			preElements.push(pre);
-		}
-
-		expect(preElements.length).toBe(4);
-
-		for (const pre of preElements) {
-			expect(pre?.textContent).toBe("");
-		}
-	});
-
-	it("renderDaemonFooter initialises summaries without round suffix when no round captured yet", () => {
-		renderDaemonFooter(redPanel, "red", session);
-
-		const disclosures = [
-			"system-prompt",
-			"raw-completion",
-			"tool-calls",
-			"error",
-		];
 		const expectedLabels = [
 			"last system prompt",
 			"last raw completion",
@@ -471,9 +445,13 @@ describe("daemon-footer", () => {
 			"last error",
 		];
 
-		for (let i = 0; i < disclosures.length; i++) {
+		for (const [i, disclosure] of NON_PERSONA_DISCLOSURES.entries()) {
+			const pre = redPanel.querySelector<HTMLElement>(
+				`[data-disclosure="${disclosure}"] pre`,
+			);
+			expect(pre?.textContent, disclosure).toBe("");
 			const summary = redPanel.querySelector(
-				`[data-disclosure="${disclosures[i]}"] summary`,
+				`[data-disclosure="${disclosure}"] summary`,
 			);
 			expect(summary?.textContent).toBe(expectedLabels[i]);
 		}
@@ -552,54 +530,36 @@ describe("daemon-footer", () => {
 		);
 	});
 
-	it("refreshDaemonFooter renders empty error pre when no error recorded", () => {
-		renderAndRefresh(redPanel, "red", session);
-
-		const pre = redPanel.querySelector<HTMLElement>(
-			'[data-disclosure="error"] pre[data-content="error"]',
-		);
-		expect(pre?.textContent).toBe("");
-	});
-
-	it("refreshDaemonFooter renders error with status code prefix when status present (CapHitError 429)", () => {
-		const error = new CapHitError({
-			message: "rate limit exceeded",
-			reason: "per-ip-daily",
-			retryAfterSec: 60,
-		});
-
-		recordDaemonError("red", error);
-
-		renderAndRefresh(redPanel, "red", session);
-
-		const pre = redPanel.querySelector<HTMLElement>(
-			'[data-disclosure="error"] pre[data-content="error"]',
-		);
-		expect(pre?.textContent).toBe("429 rate limit exceeded");
-	});
-
-	it("refreshDaemonFooter renders error message only when no status field (generic Error)", () => {
-		const error = new Error("something went wrong");
-
-		recordDaemonError("red", error);
+	it.each<[string, unknown, string]>([
+		["nothing recorded", undefined, ""],
+		[
+			"a CapHitError 429 with its status code prefix",
+			new CapHitError({
+				message: "rate limit exceeded",
+				reason: "per-ip-daily",
+				retryAfterSec: 60,
+			}),
+			"429 rate limit exceeded",
+		],
+		[
+			"a generic Error as its message only",
+			new Error("something went wrong"),
+			"something went wrong",
+		],
+		[
+			"a non-Error payload via String(error)",
+			"string error payload",
+			"string error payload",
+		],
+	])("refreshDaemonFooter renders the error pre for %s", (_label, error, expected) => {
+		if (error !== undefined) recordDaemonError("red", error);
 
 		renderAndRefresh(redPanel, "red", session);
 
 		const pre = redPanel.querySelector<HTMLElement>(
 			'[data-disclosure="error"] pre[data-content="error"]',
 		);
-		expect(pre?.textContent).toBe("something went wrong");
-	});
-
-	it("refreshDaemonFooter handles non-Error error payloads via String(error)", () => {
-		recordDaemonError("red", "string error payload");
-
-		renderAndRefresh(redPanel, "red", session);
-
-		const pre = redPanel.querySelector<HTMLElement>(
-			'[data-disclosure="error"] pre[data-content="error"]',
-		);
-		expect(pre?.textContent).toBe("string error payload");
+		expect(pre?.textContent).toBe(expected);
 	});
 
 	it("recordDaemonRound suffixes round number into the four non-persona summaries", () => {
@@ -607,14 +567,7 @@ describe("daemon-footer", () => {
 
 		renderAndRefresh(redPanel, "red", session);
 
-		const disclosures = [
-			"system-prompt",
-			"raw-completion",
-			"tool-calls",
-			"error",
-		];
-
-		for (const disclosure of disclosures) {
+		for (const disclosure of NON_PERSONA_DISCLOSURES) {
 			const summary = redPanel.querySelector(
 				`[data-disclosure="${disclosure}"] summary`,
 			);
@@ -675,13 +628,7 @@ describe("daemon-footer", () => {
 		recordDaemonSystemPrompt("green", "green prompt");
 		recordDaemonSystemPrompt("cyan", "cyan prompt");
 
-		renderDaemonFooter(redPanel, "red", session);
-		renderDaemonFooter(greenPanel, "green", session);
-		renderDaemonFooter(cyanPanel, "cyan", session);
-
-		refreshDaemonFooter(redPanel, "red", session);
-		refreshDaemonFooter(greenPanel, "green", session);
-		refreshDaemonFooter(cyanPanel, "cyan", session);
+		renderAndRefreshAll(session);
 
 		const redPre = redPanel.querySelector(
 			'[data-disclosure="system-prompt"] pre[data-content="system-prompt"]',

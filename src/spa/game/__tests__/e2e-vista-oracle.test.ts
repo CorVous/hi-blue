@@ -54,13 +54,6 @@ function renderedLabel(steps: readonly VistaAxisStep[]): string {
 }
 
 describe("e2e Vista oracle — parity with the shared production geometry", () => {
-	it("covers all 25 in-room observer positions", () => {
-		expect(ROOM_POSITIONS).toHaveLength(GRID_ROWS * GRID_COLS);
-		expect(ROOM_POSITIONS).toHaveLength(25);
-		expect(ROOM_AND_WALL_RING).toHaveLength((GRID_ROWS + 2) * (GRID_COLS + 2));
-		expect(ROOM_AND_WALL_RING).toHaveLength(49);
-	});
-
 	it("projects the cells projectVista projects, from every in-room observer", () => {
 		let cellsChecked = 0;
 		for (const observer of ROOM_POSITIONS) {

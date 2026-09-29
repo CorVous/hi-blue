@@ -7,6 +7,16 @@ import {
 } from "../action-preference-bias.js";
 import { TEMPERAMENT_POOL } from "../pools.js";
 
+const TEMPERAMENT_PAIRS = TEMPERAMENT_POOL.flatMap((t1) =>
+	TEMPERAMENT_POOL.map((t2) => [t1, t2] as const),
+);
+
+function pairsWhere(violates: (t1: string, t2: string) => boolean): string[] {
+	return TEMPERAMENT_PAIRS.filter(([t1, t2]) => violates(t1, t2)).map(
+		([t1, t2]) => `${t1} + ${t2}`,
+	);
+}
+
 describe("action-preference-bias", () => {
 	it("covers exactly the 4-tool surface (no examine, no give, no face)", () => {
 		expect([...ACTION_TOOLS]).toEqual(["go", "pick_up", "put_down", "use"]);
@@ -60,12 +70,6 @@ describe("action-preference-bias", () => {
 		});
 	});
 
-	it("has bias entries for every temperament in the pool", () => {
-		for (const t of TEMPERAMENT_POOL) {
-			expect(ACTION_TOOL_BIAS[t]).toBeDefined();
-		}
-	});
-
 	it("includes every action tool in each temperament entry, on a [-2, +2] scale", () => {
 		for (const t of TEMPERAMENT_POOL) {
 			const entry = ACTION_TOOL_BIAS[t];
@@ -82,13 +86,12 @@ describe("action-preference-bias", () => {
 	});
 
 	it("enforces the critical-path baseline floor (`go`/`use` ≥ -1) across every pair", () => {
-		for (const t1 of TEMPERAMENT_POOL) {
-			for (const t2 of TEMPERAMENT_POOL) {
+		expect(
+			pairsWhere((t1, t2) => {
 				const sums = toolBiasSum(t1, t2);
-				expect(sums.use).toBeGreaterThanOrEqual(-1);
-				expect(sums.go).toBeGreaterThanOrEqual(-1);
-			}
-		}
+				return sums.use < -1 || sums.go < -1;
+			}),
+		).toEqual([]);
 	});
 
 	it("floors `go` at -1 where doubled melancholic or melancholic + diffident would sum to -4", () => {
@@ -113,25 +116,22 @@ describe("action-preference-bias", () => {
 	});
 
 	it("emits a clause that names the persona for every temperament pair", () => {
-		for (const t1 of TEMPERAMENT_POOL) {
-			for (const t2 of TEMPERAMENT_POOL) {
+		expect(
+			pairsWhere((t1, t2) => {
 				const clause = actionProfileFor("xqr9", t1, t2);
-				expect(clause).toContain("*xqr9");
-				expect(clause.length).toBeGreaterThan(20);
-			}
-		}
+				return !clause.includes("*xqr9") || clause.length <= 20;
+			}),
+		).toEqual([]);
 	});
 
 	it("never names a removed tool (examine / look / give / face) in any clause", () => {
-		for (const t1 of TEMPERAMENT_POOL) {
-			for (const t2 of TEMPERAMENT_POOL) {
+		const removedTools = ["`examine`", "`look`", "`give`", "`face`"];
+		expect(
+			pairsWhere((t1, t2) => {
 				const clause = actionProfileFor("z", t1, t2);
-				expect(clause).not.toContain("`examine`");
-				expect(clause).not.toContain("`look`");
-				expect(clause).not.toContain("`give`");
-				expect(clause).not.toContain("`face`");
-			}
-		}
+				return removedTools.some((tool) => clause.includes(tool));
+			}),
+		).toEqual([]);
 	});
 
 	it("names every preferred tool (bias ≥ 2) explicitly with a lean, e.g. `use` for meticulous + curious", () => {
@@ -155,26 +155,25 @@ describe("action-preference-bias", () => {
 	});
 
 	it("never lists a critical-path tool (`go`/`use`) as avoided", () => {
-		for (const t1 of TEMPERAMENT_POOL) {
-			for (const t2 of TEMPERAMENT_POOL) {
-				const clause = actionProfileFor("z", t1, t2);
-				const avoidedSegment = clause.match(/hesitant about (.+?) —/);
-				if (!avoidedSegment) continue;
-				expect(avoidedSegment[1]).not.toContain("`go`");
-				expect(avoidedSegment[1]).not.toContain("`use`");
-			}
-		}
+		expect(
+			pairsWhere((t1, t2) => {
+				const avoided =
+					actionProfileFor("z", t1, t2).match(/hesitant about (.+?) —/)?.[1] ??
+					"";
+				return avoided.includes("`go`") || avoided.includes("`use`");
+			}),
+		).toEqual([]);
 	});
 
 	it("never calls a persona both balanced and hesitant in the same clause", () => {
-		for (const t1 of TEMPERAMENT_POOL) {
-			for (const t2 of TEMPERAMENT_POOL) {
+		expect(
+			pairsWhere((t1, t2) => {
 				const clause = actionProfileFor("z", t1, t2).toLowerCase();
-				const balanced = clause.includes("balanced way");
-				const hesitant = clause.includes("hesitant about");
-				expect(balanced && hesitant).toBe(false);
-			}
-		}
+				return (
+					clause.includes("balanced way") && clause.includes("hesitant about")
+				);
+			}),
+		).toEqual([]);
 	});
 
 	it("orders preferred tools by descending bias: `go` (4) before `pick_up` (2) for zealous + hot-headed", () => {
@@ -183,11 +182,6 @@ describe("action-preference-bias", () => {
 		const pickUpIdx = clause.indexOf("`pick_up`");
 		expect(goIdx).toBeGreaterThanOrEqual(0);
 		expect(pickUpIdx).toBeGreaterThan(goIdx);
-	});
-
-	it("gives a go-heavy pair a go lean", () => {
-		const clause = actionProfileFor("c", "zealous", "hot-headed");
-		expect(clause).toContain("`go`");
 	});
 
 	it("falls through to the balanced default when no tool reaches ±threshold (stoic + earnest)", () => {

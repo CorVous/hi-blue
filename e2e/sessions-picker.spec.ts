@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
+	ACTIVE_SESSION_KEY,
 	activeSessionId,
 	collectPageErrors,
 	expectNoPageErrors,
@@ -16,6 +17,27 @@ const RETIRED_SCHEMA_WITH_ARCHIVED_BUILD = 11;
 const ARCHIVED_BUILD_VERSION = "0.0.2-beta.2";
 
 const ARCHIVED_BUILD_HREF = `./v/${ARCHIVED_BUILD_VERSION}/`;
+
+async function runOnInit(page: Page, script: string): Promise<void> {
+	await page.addInitScript(new Function(script) as () => void);
+}
+
+function seedOkSessionOnInit(
+	page: Page,
+	id: string,
+	lastSavedAt: string,
+): Promise<void> {
+	return runOnInit(page, pickerOkSessionSeedScript(id, lastSavedAt));
+}
+
+async function setActiveSessionOnInit(page: Page, id: string): Promise<void> {
+	await page.addInitScript(
+		({ activeKey, sessionId }) => {
+			localStorage.setItem(activeKey, sessionId);
+		},
+		{ activeKey: ACTIVE_SESSION_KEY, sessionId: id },
+	);
+}
 
 function seedSessionWithoutEngineDatScript(id: string): string {
 	return `
@@ -63,20 +85,10 @@ test("picker renders ok/broken/version-mismatch rows with correct tags and butto
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	await page.addInitScript(() => {
-		localStorage.setItem("hi-blue:active-session", "0xAAAA");
-	});
-	await page.addInitScript(
-		new Function(
-			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
-		) as () => void,
-	);
-	await page.addInitScript(
-		new Function(seedSessionWithoutEngineDatScript("0xBBBB")) as () => void,
-	);
-	await page.addInitScript(
-		new Function(seedVersionMismatchScript("0xCCCC")) as () => void,
-	);
+	await setActiveSessionOnInit(page, "0xAAAA");
+	await seedOkSessionOnInit(page, "0xAAAA", "2025-03-01T10:00:00.000Z");
+	await runOnInit(page, seedSessionWithoutEngineDatScript("0xBBBB"));
+	await runOnInit(page, seedVersionMismatchScript("0xCCCC"));
 
 	await page.goto("/");
 	await page.locator("#sessions-icon").click();
@@ -124,19 +136,9 @@ test("[ load ] flow: click load on non-active row → game view", async ({
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
-	await page.addInitScript(() => {
-		localStorage.setItem("hi-blue:active-session", "0xAAAA");
-	});
-	await page.addInitScript(
-		new Function(
-			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
-		) as () => void,
-	);
-	await page.addInitScript(
-		new Function(
-			pickerOkSessionSeedScript("0xBBBB", "2025-02-01T10:00:00.000Z"),
-		) as () => void,
-	);
+	await setActiveSessionOnInit(page, "0xAAAA");
+	await seedOkSessionOnInit(page, "0xAAAA", "2025-03-01T10:00:00.000Z");
+	await seedOkSessionOnInit(page, "0xBBBB", "2025-02-01T10:00:00.000Z");
 
 	await page.goto("/");
 	await page.locator("#sessions-icon").click();
@@ -158,14 +160,8 @@ test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	await page.addInitScript(() => {
-		localStorage.setItem("hi-blue:active-session", "0xAAAA");
-	});
-	await page.addInitScript(
-		new Function(
-			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
-		) as () => void,
-	);
+	await setActiveSessionOnInit(page, "0xAAAA");
+	await seedOkSessionOnInit(page, "0xAAAA", "2025-03-01T10:00:00.000Z");
 
 	await page.goto("/");
 	await page.locator("#sessions-icon").click();
@@ -187,14 +183,8 @@ test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
 test("[ rm ] confirm/cancel flow", async ({ page }) => {
 	const pageErrors = collectPageErrors(page);
 
-	await page.addInitScript(() => {
-		localStorage.setItem("hi-blue:active-session", "0xAAAA");
-	});
-	await page.addInitScript(
-		new Function(
-			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
-		) as () => void,
-	);
+	await setActiveSessionOnInit(page, "0xAAAA");
+	await seedOkSessionOnInit(page, "0xAAAA", "2025-03-01T10:00:00.000Z");
 
 	await page.goto("/");
 	await page.locator("#sessions-icon").click();
@@ -223,29 +213,18 @@ test("[ rm ] confirm/cancel flow", async ({ page }) => {
 	await expectNoPageErrors(page, pageErrors);
 });
 
-test("sessions-icon click → sessions view", async ({ page }) => {
+test("sessions-icon opens the sessions view and toggles back to game on second click", async ({
+	page,
+}) => {
 	const pageErrors = collectPageErrors(page);
 
 	await goToGame(page);
-
 	const sessionsIcon = page.locator("#sessions-icon");
 	await expect(sessionsIcon).toBeVisible();
-	await sessionsIcon.click();
 
+	await sessionsIcon.click();
 	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
 	await expect(page.locator("#sessions-screen")).toBeVisible();
-
-	await expectNoPageErrors(page, pageErrors);
-});
-
-test("sessions-icon toggles back to game on second click", async ({ page }) => {
-	const pageErrors = collectPageErrors(page);
-
-	await goToGame(page);
-	const sessionsIcon = page.locator("#sessions-icon");
-
-	await sessionsIcon.click();
-	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
 
 	await sessionsIcon.click();
 	await expect(page.locator('main[data-view="game"]')).toBeAttached();
@@ -295,12 +274,8 @@ test("broken-session banner: active session with missing engine.dat → sessions
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	await page.addInitScript(() => {
-		localStorage.setItem("hi-blue:active-session", "0xBROK");
-	});
-	await page.addInitScript(
-		new Function(seedSessionWithoutEngineDatScript("0xBROK")) as () => void,
-	);
+	await setActiveSessionOnInit(page, "0xBROK");
+	await runOnInit(page, seedSessionWithoutEngineDatScript("0xBROK"));
 
 	await page.goto("/");
 
@@ -319,12 +294,8 @@ test("version-mismatch banner: active session with stale schema → sessions vie
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	await page.addInitScript(() => {
-		localStorage.setItem("hi-blue:active-session", "0xSTAL");
-	});
-	await page.addInitScript(
-		new Function(seedVersionMismatchScript("0xSTAL")) as () => void,
-	);
+	await setActiveSessionOnInit(page, "0xSTAL");
+	await runOnInit(page, seedVersionMismatchScript("0xSTAL"));
 
 	await page.goto("/");
 
@@ -346,13 +317,10 @@ test("version-mismatch archive link: a session stamped with retired schema 11 li
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	await page.addInitScript(() => {
-		localStorage.setItem("hi-blue:active-session", "0xV11X");
-	});
-	await page.addInitScript(
-		new Function(
-			seedVersionMismatchScript("0xV11X", RETIRED_SCHEMA_WITH_ARCHIVED_BUILD),
-		) as () => void,
+	await setActiveSessionOnInit(page, "0xV11X");
+	await runOnInit(
+		page,
+		seedVersionMismatchScript("0xV11X", RETIRED_SCHEMA_WITH_ARCHIVED_BUILD),
 	);
 
 	await page.goto("/");
@@ -401,14 +369,8 @@ test("[ + new session ] flow: click → start view, new active pointer", async (
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
-	await page.addInitScript(() => {
-		localStorage.setItem("hi-blue:active-session", "0xAAAA");
-	});
-	await page.addInitScript(
-		new Function(
-			pickerOkSessionSeedScript("0xAAAA", "2025-03-01T10:00:00.000Z"),
-		) as () => void,
-	);
+	await setActiveSessionOnInit(page, "0xAAAA");
+	await seedOkSessionOnInit(page, "0xAAAA", "2025-03-01T10:00:00.000Z");
 
 	await page.goto("/");
 	await page.locator("#sessions-icon").click();

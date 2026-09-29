@@ -2,24 +2,41 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { STATIC_CONTENT_PACKS } from "../../__tests__/fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas";
 import { GameSession } from "../../game/game-session";
-import type { WorldEntity } from "../../game/types";
+import type { GameState, WorldEntity } from "../../game/types";
 import { renderWorldMap, updateWorldMap } from "../world-map";
 
 describe("world-map", () => {
+	let session: GameSession;
+	let state: GameState;
+	let containerEl: HTMLElement;
+
 	beforeEach(() => {
 		document.body.innerHTML = '<div id="dev-world-map"></div>';
-	});
-
-	it("renders a room-only 5×5 grid (25 cells)", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
+		session = new GameSession(contentPack, STATIC_PERSONAS);
+		state = session.getState();
+		containerEl = document.getElementById("dev-world-map") as HTMLElement;
+	});
 
+	it("renders a room-only 5×5 grid: 25 distinct room cells (r,c) in [0..4]", () => {
 		renderWorldMap(containerEl, session);
 
 		const cells = containerEl.querySelectorAll(".dev-map-cell");
 		expect(cells.length).toBe(25);
+		const seen = new Set<string>();
+		for (const cell of cells) {
+			const cellStr = cell.getAttribute("data-cell");
+			expect(cellStr).toBeTruthy();
+			if (!cellStr) continue;
+			const [row, col] = cellStr.split(",").map(Number);
+			expect(row).toBeGreaterThanOrEqual(0);
+			expect(row).toBeLessThanOrEqual(4);
+			expect(col).toBeGreaterThanOrEqual(0);
+			expect(col).toBeLessThanOrEqual(4);
+			seen.add(cellStr);
+		}
+		expect(seen.size).toBe(25);
 
 		const grid = containerEl.querySelector(".dev-map-grid");
 		expect(grid?.getAttribute("data-rows")).toBe("5");
@@ -27,11 +44,6 @@ describe("world-map", () => {
 	});
 
 	it("renders no wall cells and no out-of-bounds tooltip", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
 		renderWorldMap(containerEl, session);
 
 		expect(
@@ -45,37 +57,7 @@ describe("world-map", () => {
 		}
 	});
 
-	it("every cell is a room cell: data-cell (r,c) is the room (r,c) in [0..4]", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
-		renderWorldMap(containerEl, session);
-
-		const seen = new Set<string>();
-		for (const cell of containerEl.querySelectorAll(".dev-map-cell")) {
-			const cellStr = cell.getAttribute("data-cell");
-			expect(cellStr).toBeTruthy();
-			if (!cellStr) continue;
-			const [rowStr, colStr] = cellStr.split(",");
-			const row = Number(rowStr);
-			const col = Number(colStr);
-			expect(row).toBeGreaterThanOrEqual(0);
-			expect(row).toBeLessThanOrEqual(4);
-			expect(col).toBeGreaterThanOrEqual(0);
-			expect(col).toBeLessThanOrEqual(4);
-			seen.add(cellStr);
-		}
-		expect(seen.size).toBe(25);
-	});
-
 	it("daemon cell renders the identity marker with persona color and data-ai", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
 		renderWorldMap(containerEl, session);
 
 		const daemonCell = containerEl.querySelector(
@@ -91,36 +73,7 @@ describe("world-map", () => {
 		}
 	});
 
-	it("daemon markers show identity and position only — no arrow glyph, no direction text", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
-		renderWorldMap(containerEl, session);
-
-		const daemonCells = containerEl.querySelectorAll(".dev-map-cell[data-ai]");
-		expect(daemonCells.length).toBe(3);
-
-		for (const cell of daemonCells) {
-			const glyph = cell.querySelector(".dev-map-glyph")?.textContent;
-			expect(glyph).toBe("@ ");
-			expect(glyph).not.toMatch(/[<>^v]/);
-
-			const tooltip = cell.querySelector(".dev-map-tooltip")?.textContent;
-			expect(tooltip).toMatch(/^\*[A-Za-z]+ — holds: .+$/);
-
-			expect(cell.textContent).toMatch(/^@ \*[A-Za-z]+ — holds: .+$/);
-		}
-	});
-
 	it("daemon glyph is direction-independent: same '@ ' however the Daemon moved", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-		const state = session.getState();
-
 		renderWorldMap(containerEl, session);
 
 		const snapshot = Object.values(state.personaSpatial).map((spatial) => ({
@@ -163,17 +116,14 @@ describe("world-map", () => {
 		}
 	});
 
-	it("daemon marker carries no direction arrow, letter, or last-movement marker", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
+	it("daemon markers show identity and position only: no direction arrow, letter, or last-movement marker", () => {
 		renderWorldMap(containerEl, session);
 
-		for (const cell of containerEl.querySelectorAll<HTMLElement>(
+		const daemonCells = containerEl.querySelectorAll<HTMLElement>(
 			".dev-map-cell[data-ai]",
-		)) {
+		);
+		expect(daemonCells.length).toBe(3);
+		for (const cell of daemonCells) {
 			expect(cell.querySelector(".dev-map-glyph")?.textContent).toBe("@ ");
 			expect(cell.textContent).toMatch(/^@ \*[A-Za-z]+ — holds: .+$/);
 
@@ -187,26 +137,12 @@ describe("world-map", () => {
 		}
 	});
 
-	it("daemon tooltip format: *<name> — holds: <item> (<id>)", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
+	it("daemon tooltip format: *<name> — holds: nothing when no held entity", () => {
 		renderWorldMap(containerEl, session);
 
 		const redCell = containerEl.querySelector('.dev-map-cell[data-ai="red"]');
 		const tooltip = redCell?.querySelector(".dev-map-tooltip");
 		expect(tooltip?.textContent).toMatch(/^\*Ember — holds: nothing$/);
-	});
-
-	it("daemon tooltip 'holds: nothing' when no held entity", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
-		renderWorldMap(containerEl, session);
 
 		const daemonCells = containerEl.querySelectorAll(".dev-map-cell[data-ai]");
 		for (const cell of daemonCells) {
@@ -216,11 +152,6 @@ describe("world-map", () => {
 	});
 
 	it("obstacle cell renders ## with data-kind and data-entity-id", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-
 		const obstacle: WorldEntity = {
 			id: "test_obstacle",
 			kind: "obstacle",
@@ -230,7 +161,6 @@ describe("world-map", () => {
 		};
 		state.world.entities.push(obstacle);
 
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
 		const obstacleCell = containerEl.querySelector(
@@ -243,12 +173,7 @@ describe("world-map", () => {
 		expect(glyph?.textContent).toBe("##");
 	});
 
-	it("objective_object alone renders '* ' with data-kind='objective-object'", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-
+	it("objective_object and objective_space apart render '* ' and '+ ' with their data-kind", () => {
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -256,49 +181,22 @@ describe("world-map", () => {
 			objEntity.holder = { row: 2, col: 2 };
 		}
 
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
 		const objCell = containerEl.querySelector(
 			'.dev-map-cell[data-kind="objective-object"]',
 		);
 		expect(objCell).toBeTruthy();
-
-		const glyph = objCell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toBe("* ");
-	});
-
-	it("objective_space alone renders '+ ' with data-kind='objective-space'", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-
-		const objEntity = state.world.entities.find(
-			(e) => e.kind === "objective_object",
-		);
-		if (objEntity) {
-			objEntity.holder = { row: 2, col: 2 };
-		}
-
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-		renderWorldMap(containerEl, session);
+		expect(objCell?.querySelector(".dev-map-glyph")?.textContent).toBe("* ");
 
 		const spaceCell = containerEl.querySelector(
 			'.dev-map-cell[data-kind="objective-space"]',
 		);
 		expect(spaceCell).toBeTruthy();
-
-		const glyph = spaceCell?.querySelector(".dev-map-glyph");
-		expect(glyph?.textContent).toBe("+ ");
+		expect(spaceCell?.querySelector(".dev-map-glyph")?.textContent).toBe("+ ");
 	});
 
 	it("objective object on paired space renders '**' with data-kind='objective-object-on-space'", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -311,7 +209,6 @@ describe("world-map", () => {
 			spaceEntity.holder = { row: 3, col: 3 };
 		}
 
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
 		const pairCell = containerEl.querySelector(
@@ -324,11 +221,6 @@ describe("world-map", () => {
 	});
 
 	it("interesting_object renders 'o ' with data-kind='interesting-object'", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-
 		const interesting: WorldEntity = {
 			id: "test_interesting",
 			kind: "interesting_object",
@@ -338,7 +230,6 @@ describe("world-map", () => {
 		};
 		state.world.entities.push(interesting);
 
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
 		const interestingCell = containerEl.querySelector(
@@ -351,11 +242,6 @@ describe("world-map", () => {
 	});
 
 	it("floor cell renders '. ' with tooltip 'floor (r,c)'", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
 		renderWorldMap(containerEl, session);
 
 		const floorCell = containerEl.querySelector(
@@ -371,11 +257,6 @@ describe("world-map", () => {
 	});
 
 	it("daemon glyph beats obstacle on same cell (precedence)", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-
 		const obstacle: WorldEntity = {
 			id: "test_obstacle",
 			kind: "obstacle",
@@ -385,7 +266,6 @@ describe("world-map", () => {
 		};
 		state.world.entities.push(obstacle);
 
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
 		const cell = containerEl.querySelector('.dev-map-cell[data-ai="red"]');
@@ -396,11 +276,6 @@ describe("world-map", () => {
 	});
 
 	it("obstacle glyph beats objective object on same cell", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -417,7 +292,6 @@ describe("world-map", () => {
 		};
 		state.world.entities.push(obstacle);
 
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
 		const cell = containerEl.querySelector(
@@ -430,11 +304,6 @@ describe("world-map", () => {
 	});
 
 	it("objective object held by daemon does not render on floor; appears in daemon tooltip", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -442,7 +311,6 @@ describe("world-map", () => {
 			objEntity.holder = "red";
 		}
 
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
 		renderWorldMap(containerEl, session);
 
 		const objCell = containerEl.querySelector(
@@ -455,29 +323,7 @@ describe("world-map", () => {
 		expect(tooltip?.textContent).toContain("cracked lantern");
 	});
 
-	it("updateWorldMap preserves cell span identity (no re-creation)", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
-		renderWorldMap(containerEl, session);
-
-		const firstCell = containerEl.querySelector(".dev-map-cell");
-		const firstCellIdentity = firstCell;
-
-		updateWorldMap(containerEl, session);
-
-		const firstCellAfter = containerEl.querySelector(".dev-map-cell");
-		expect(firstCellAfter).toBe(firstCellIdentity);
-	});
-
-	it("updateWorldMap does not create or remove cells", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
+	it("updateWorldMap keeps every cell span (no creation, removal or re-creation)", () => {
 		renderWorldMap(containerEl, session);
 
 		const cellsBefore = [...containerEl.querySelectorAll(".dev-map-cell")];
@@ -486,11 +332,8 @@ describe("world-map", () => {
 
 		const cellsAfter = [...containerEl.querySelectorAll(".dev-map-cell")];
 		expect(cellsAfter.length).toBe(25);
-		expect(cellsAfter).toEqual(cellsBefore);
 		for (const [index, cell] of cellsAfter.entries()) {
-			expect(cell.getAttribute("data-cell")).toBe(
-				cellsBefore[index]?.getAttribute("data-cell"),
-			);
+			expect(cell).toBe(cellsBefore[index]);
 		}
 		expect(
 			containerEl.querySelectorAll('.dev-map-cell[data-kind="wall"]').length,
@@ -498,12 +341,6 @@ describe("world-map", () => {
 	});
 
 	it("updateWorldMap reflects new daemon position after mutation", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
 		renderWorldMap(containerEl, session);
 
 		const tooltipBefore = containerEl
@@ -533,12 +370,6 @@ describe("world-map", () => {
 	});
 
 	it("updateWorldMap reflects satisfaction state change in data-satisfaction and tooltip", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const state = session.getState();
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
 		const objEntity = state.world.entities.find(
 			(e) => e.kind === "objective_object",
 		);
@@ -567,11 +398,6 @@ describe("world-map", () => {
 	});
 
 	it("tooltip is a child span, not a native title attribute", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
 		renderWorldMap(containerEl, session);
 
 		const cellsWithTitle = containerEl.querySelectorAll(".dev-map-cell[title]");
@@ -585,11 +411,6 @@ describe("world-map", () => {
 	});
 
 	it("renderWorldMap is idempotent — second call leaves exactly one .dev-map-grid child", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-		const containerEl = document.getElementById("dev-world-map") as HTMLElement;
-
 		renderWorldMap(containerEl, session);
 		const firstGrids = containerEl.querySelectorAll(".dev-map-grid");
 		expect(firstGrids.length).toBe(1);

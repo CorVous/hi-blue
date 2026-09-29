@@ -32,6 +32,7 @@ describe("findFirstMention aiId", () => {
 		["hello world", null],
 		["email me at user@host", null],
 		["*Nonpersona hi", null],
+		["*Nonpersona", null],
 		["*", null],
 		["*Ember", "red"],
 		["*Frost", "cyan"],
@@ -41,75 +42,21 @@ describe("findFirstMention aiId", () => {
 });
 
 describe("findFirstMention", () => {
-	it('"*Sage" → { aiId: "green", start: 0, nameEnd: 5, end: 5 }', () => {
-		expect(findFirstMention("*Sage", nameMap)).toEqual({
-			aiId: "green",
-			start: 0,
-			nameEnd: 5,
-			end: 5,
+	it.each<[string, AiId, number, number, number]>([
+		["*Sage", "green", 0, 5, 5],
+		["*Sage hi", "green", 0, 5, 5],
+		["hi *Sage", "green", 3, 8, 8],
+		["*sage", "green", 0, 5, 5],
+		["*Sage,", "green", 0, 5, 6],
+		["hi *Sage.", "green", 3, 8, 9],
+		["*Frost *Sage", "cyan", 0, 6, 6],
+	])("%j → aiId %j, start %j, nameEnd %j (excludes trailing punctuation), end %j (includes it)", (text, aiId, start, nameEnd, end) => {
+		expect(findFirstMention(text, nameMap)).toEqual({
+			aiId,
+			start,
+			nameEnd,
+			end,
 		});
-	});
-
-	it('"*Sage hi" → { aiId: "green", start: 0, nameEnd: 5, end: 5 }', () => {
-		expect(findFirstMention("*Sage hi", nameMap)).toEqual({
-			aiId: "green",
-			start: 0,
-			nameEnd: 5,
-			end: 5,
-		});
-	});
-
-	it('"hi *Sage" → { aiId: "green", start: 3, nameEnd: 8, end: 8 }', () => {
-		expect(findFirstMention("hi *Sage", nameMap)).toEqual({
-			aiId: "green",
-			start: 3,
-			nameEnd: 8,
-			end: 8,
-		});
-	});
-
-	it('"*sage" (lowercase) → { aiId: "green", start: 0, nameEnd: 5, end: 5 }', () => {
-		expect(findFirstMention("*sage", nameMap)).toEqual({
-			aiId: "green",
-			start: 0,
-			nameEnd: 5,
-			end: 5,
-		});
-	});
-
-	it('"*Sage," → nameEnd: 5 (excludes comma), end: 6 (includes comma)', () => {
-		expect(findFirstMention("*Sage,", nameMap)).toEqual({
-			aiId: "green",
-			start: 0,
-			nameEnd: 5,
-			end: 6,
-		});
-	});
-
-	it('"hi *Sage." → nameEnd: 8 (excludes period), end: 9 (includes period)', () => {
-		expect(findFirstMention("hi *Sage.", nameMap)).toEqual({
-			aiId: "green",
-			start: 3,
-			nameEnd: 8,
-			end: 9,
-		});
-	});
-
-	it('"*Frost *Sage" → first match is Frost (cyan), nameEnd: 6, end: 6', () => {
-		expect(findFirstMention("*Frost *Sage", nameMap)).toEqual({
-			aiId: "cyan",
-			start: 0,
-			nameEnd: 6,
-			end: 6,
-		});
-	});
-
-	it('"hello world" → null', () => {
-		expect(findFirstMention("hello world", nameMap)).toBeNull();
-	});
-
-	it('"*Nonpersona" → null', () => {
-		expect(findFirstMention("*Nonpersona", nameMap)).toBeNull();
 	});
 });
 
@@ -140,18 +87,6 @@ describe("buildPersonaColorMap", () => {
 		expect(map.get("green")).toBe("lime");
 		expect(map.get("cyan")).toBe("cyan");
 		expect(map.size).toBe(3);
-	});
-
-	it("returns the color string from the persona record, not the AiId key", () => {
-		const personas = {
-			red: { color: "tomato" },
-			green: { color: "forest" },
-			cyan: { color: "ocean" },
-		} as Record<AiId, { color: string }>;
-		const map = buildPersonaColorMap(personas);
-		expect(map.get("red")).not.toBe("red");
-		expect(map.get("green")).not.toBe("green");
-		expect(map.get("cyan")).not.toBe("cyan");
 	});
 });
 

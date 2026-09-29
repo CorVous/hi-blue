@@ -9,6 +9,7 @@ import {
 	validateOpenRouterKey,
 	writeKeyAndMeta,
 } from "../byok-modal.js";
+import { waitUntilPasses } from "./fixtures/wait-until-passes";
 
 describe("validateOpenRouterKey", () => {
 	it("hits GET https://openrouter.ai/api/v1/auth/key with Bearer auth", async () => {
@@ -450,7 +451,7 @@ describe("openByokModal UI", () => {
 		);
 
 		getEl("byok-validate-save").click();
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(store.openrouter_key).toBe("sk-or-v1-goodkey");
 		});
 
@@ -478,7 +479,7 @@ describe("openByokModal UI", () => {
 		);
 
 		getEl("byok-validate-save").click();
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-status").textContent).toContain(
 				"Couldn't store the key",
 			);
@@ -516,7 +517,7 @@ describe("openByokModal UI", () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 401 }));
 
 		getEl("byok-validate-save").click();
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-status").textContent).toContain(
 				"That key didn't authenticate",
 			);
@@ -535,7 +536,7 @@ describe("openByokModal UI", () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 402 }));
 
 		getEl("byok-validate-save").click();
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-status").textContent).toContain("out of credit");
 		});
 
@@ -552,7 +553,7 @@ describe("openByokModal UI", () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 502 }));
 
 		getEl("byok-validate-save").click();
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-status").textContent).toContain(
 				"Couldn't reach OpenRouter",
 			);
@@ -570,7 +571,7 @@ describe("openByokModal UI", () => {
 
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 502 }));
 		getEl("byok-validate-save").click();
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-save-unverified").hidden).toBe(false);
 		});
 
@@ -605,7 +606,7 @@ describe("openByokModal UI", () => {
 		);
 
 		getEl("byok-revalidate").click();
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-status").textContent).toBe("Key validated.");
 		});
 
@@ -629,7 +630,7 @@ describe("openByokModal UI", () => {
 
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 503 }));
 		getEl("byok-revalidate").click();
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-save-unverified").hidden).toBe(false);
 		});
 
@@ -651,7 +652,7 @@ describe("openByokModal UI", () => {
 
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 502 }));
 		getEl("byok-validate-save").click();
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-save-unverified").hidden).toBe(false);
 		});
 
@@ -682,14 +683,14 @@ describe("openByokModal UI", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 
 		respond({ status: 401 });
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-status").textContent).toContain("didn't authenticate");
 		});
 
 		getEl("byok-validate-save").click();
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 		respond({ status: 401 });
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl("byok-status").textContent).toContain("didn't authenticate");
 		});
 	});

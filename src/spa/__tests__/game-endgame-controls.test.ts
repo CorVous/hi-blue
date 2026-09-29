@@ -13,6 +13,7 @@ import {
 	STATIC_OBJECTIVE_TYPES,
 } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
+import { waitUntilPasses } from "./fixtures/wait-until-passes";
 
 const generateDualContentPacks = vi.hoisted(() => vi.fn());
 
@@ -191,7 +192,9 @@ describe("showEndgame — a choice that outlives the endgame screen", () => {
 		);
 
 		button("#endgame-continue-btn").click();
-		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		await waitUntilPasses(() =>
+			expect(generateDualContentPacks).toHaveBeenCalled(),
+		);
 		vi.setSystemTime(new Date("2026-01-01T00:01:00.000Z"));
 		const otherTabSave = saveActiveSession(
 			{ ...game, isComplete: false },
@@ -201,7 +204,7 @@ describe("showEndgame — a choice that outlives the endgame screen", () => {
 		setHiddenEndgame();
 		releasePacks();
 
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(
 				document.querySelector<HTMLElement>("#persistence-warning")?.hidden,
 			).toBe(false),
@@ -238,7 +241,9 @@ describe("showEndgame — a choice that outlives the endgame screen", () => {
 		);
 
 		button("#endgame-continue-btn").click();
-		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		await waitUntilPasses(() =>
+			expect(generateDualContentPacks).toHaveBeenCalled(),
+		);
 		root().dataset.view = "sessions";
 		vi.setSystemTime(new Date("2026-01-01T00:01:00.000Z"));
 		const otherTabSave = saveActiveSession(
@@ -248,7 +253,9 @@ describe("showEndgame — a choice that outlives the endgame screen", () => {
 		if (!otherTabSave.ok) throw new Error("test: other tab could not save");
 		releasePacks();
 
-		await vi.waitFor(() => expect(releaseEndedGame).toHaveBeenCalledTimes(1));
+		await waitUntilPasses(() =>
+			expect(releaseEndedGame).toHaveBeenCalledTimes(1),
+		);
 		expect(root().dataset.view).toBe("sessions");
 	});
 
@@ -258,7 +265,9 @@ describe("showEndgame — a choice that outlives the endgame screen", () => {
 		show(endedGame(), UNSAVED);
 
 		button("#endgame-same-daemons-btn").click();
-		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		await waitUntilPasses(() =>
+			expect(generateDualContentPacks).toHaveBeenCalled(),
+		);
 		expect(button("#endgame-new-daemons-btn").disabled).toBe(true);
 		const provider = generateDualContentPacks.mock.calls[0]?.[3] as {
 			signal?: AbortSignal;

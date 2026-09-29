@@ -3,41 +3,9 @@ import { startGame } from "../engine.js";
 import { GameSession } from "../game-session.js";
 import { buildObjectiveRecords } from "../objective-record-builder.js";
 import { rollObjectiveTypes } from "../objective-type-roll.js";
-import type { AiPersona, ObjectiveType } from "../types.js";
+import type { ObjectiveType } from "../types.js";
+import { ROW_AI_STARTS, TEST_PERSONAS } from "./fixtures/make-game-state.js";
 import { makeTestPack } from "./fixtures/make-test-pack.js";
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Complete the objective.",
-		typingQuirks: ["quirk-1", "quirk-2"],
-		blurb: "Ember is hot-headed.",
-		voiceExamples: ["example-red-1", "example-red-2"],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "calm"],
-		personaGoal: "Assist the team.",
-		typingQuirks: ["quirk-1", "quirk-2"],
-		blurb: "Sage is meticulous.",
-		voiceExamples: ["example-green-1", "example-green-2"],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Observe and report.",
-		typingQuirks: ["quirk-1", "quirk-2"],
-		blurb: "Frost is laconic.",
-		voiceExamples: ["example-cyan-1", "example-cyan-2"],
-	},
-};
 
 const CARRY_PACK = makeTestPack(
 	[
@@ -62,20 +30,11 @@ const CARRY_PACK = makeTestPack(
 		weather: "foggy",
 		timeOfDay: "midnight",
 		wallName: "tunnel wall",
-		aiStarts: {
-			red: { position: { row: 0, col: 0 } },
-			green: { position: { row: 0, col: 1 } },
-			cyan: { position: { row: 0, col: 2 } },
-		},
+		aiStarts: ROW_AI_STARTS,
 	},
 );
 
 describe("bootstrap-type-first integration smoke", () => {
-	it("rollObjectiveTypes with rng=0 returns carry for each slot", () => {
-		const types = rollObjectiveTypes(() => 0, 1);
-		expect(types).toEqual(["carry"]);
-	});
-
 	it("buildObjectiveRecords produces a carry objective from a type-first pack", () => {
 		const types: ObjectiveType[] = ["carry"];
 		const objectives = buildObjectiveRecords(types, CARRY_PACK);
@@ -106,24 +65,7 @@ describe("bootstrap-type-first integration smoke", () => {
 		expect(game.objectives).toHaveLength(0);
 	});
 
-	it("GameSession constructed with objectiveTypes has unsatisfied objectives in state", () => {
-		const session = new GameSession(
-			CARRY_PACK,
-			TEST_PERSONAS,
-			undefined,
-			undefined,
-			undefined,
-			["carry"],
-		);
-		const state = session.getState();
-
-		expect(state.isComplete).toBe(false);
-		expect(state.objectives).toHaveLength(1);
-		expect(state.objectives[0]?.kind).toBe("carry");
-		expect(state.objectives[0]?.satisfactionState).toBe("pending");
-	});
-
-	it("pipeline: rollObjectiveTypes → CARRY_PACK → GameSession is not complete", () => {
+	it("pipeline: rollObjectiveTypes (rng=0 rolls carry) → CARRY_PACK → GameSession has one pending carry objective", () => {
 		const objectiveTypes = rollObjectiveTypes(() => 0, 1);
 		expect(objectiveTypes).toEqual(["carry"]);
 
@@ -138,6 +80,8 @@ describe("bootstrap-type-first integration smoke", () => {
 
 		const state = session.getState();
 		expect(state.isComplete).toBe(false);
+		expect(state.objectives).toHaveLength(1);
+		expect(state.objectives[0]?.kind).toBe("carry");
 		expect(state.objectives[0]?.satisfactionState).toBe("pending");
 	});
 });

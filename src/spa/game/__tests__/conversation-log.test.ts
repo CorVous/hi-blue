@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderEntry } from "../conversation-log.js";
-import type { AiId, ConversationEntry, WorldEntity } from "../types.js";
+import type { WorldEntity } from "../types.js";
 
 function makeItem(id: string, name: string): WorldEntity {
 	return {
@@ -11,21 +11,6 @@ function makeItem(id: string, name: string): WorldEntity {
 		holder: { row: 0, col: 0 },
 	};
 }
-
-function renderLog(
-	log: ConversationEntry[],
-	aiId: AiId,
-	entities: WorldEntity[] = [],
-): string[] {
-	const sorted = [...log].sort((a, b) => a.round - b.round);
-	return sorted.map((e) => renderEntry(e, aiId, entities));
-}
-
-describe("renderEntry — empty phase", () => {
-	it("returns empty array when nothing has happened", () => {
-		expect(renderLog([], "red")).toEqual([]);
-	});
-});
 
 describe("renderEntry — message (incoming from blue)", () => {
 	it("renders incoming message from blue as 'blue dms you: <content>'", () => {
@@ -74,63 +59,6 @@ describe("renderEntry — message (incoming from blue)", () => {
 			[],
 		);
 		expect(line).toBe("[Round 0] you dm *cyan: hey");
-	});
-
-	it("renders multiple messages in order", () => {
-		const result = renderLog(
-			[
-				{
-					kind: "message",
-					from: "blue",
-					to: "red",
-					content: "First",
-					round: 0,
-				},
-				{
-					kind: "message",
-					from: "red",
-					to: "blue",
-					content: "Second",
-					round: 0,
-				},
-			],
-			"red",
-		);
-		expect(result).toHaveLength(2);
-		expect(result[0]).toContain("blue dms you");
-		expect(result[1]).toContain("you dm blue");
-	});
-});
-
-describe("renderEntry — peer message", () => {
-	it("renders received peer message with correct format", () => {
-		const line = renderEntry(
-			{
-				kind: "message",
-				from: "green",
-				to: "red",
-				content: "psst",
-				round: 1,
-			},
-			"red",
-			[],
-		);
-		expect(line).toBe("[Round 1] *green dms you: psst");
-	});
-
-	it("renders sent peer message from sender's perspective as outgoing", () => {
-		const line = renderEntry(
-			{
-				kind: "message",
-				from: "green",
-				to: "red",
-				content: "psst",
-				round: 1,
-			},
-			"green",
-			[],
-		);
-		expect(line).toContain("you dm *red");
 	});
 });
 
@@ -192,21 +120,6 @@ describe("renderEntry — action-failure", () => {
 });
 
 describe("renderEntry — witnessed go", () => {
-	it("renders 'You watch *actor walk <dir>'", () => {
-		const line = renderEntry(
-			{
-				kind: "witnessed-event",
-				round: 0,
-				actor: "red",
-				actionKind: "go",
-				direction: "south",
-			},
-			"green",
-			[],
-		);
-		expect(line).toBe("[Round 0] You watch *red walk south.");
-	});
-
 	it("pins the step as a cardinal direction, never a relative one", () => {
 		const relativeWords = ["forward", "back", "left", "right"];
 		for (const direction of ["north", "south", "east", "west"] as const) {
@@ -311,106 +224,6 @@ describe("renderEntry — witnessed use", () => {
 			"[Round 1] *red activates the lamp and it hums with energy.",
 		);
 	});
-
-	it("does NOT prefix use events with 'You watch' — verbatim flavor only", () => {
-		const line = renderEntry(
-			{
-				kind: "witnessed-event",
-				round: 1,
-				actor: "red",
-				actionKind: "use",
-				item: "lamp-1",
-				useOutcome: "{actor} does something.",
-			},
-			"green",
-			[],
-		);
-		expect(line).not.toContain("You watch");
-		expect(line).toContain("*red does something.");
-	});
-});
-
-describe("renderLog — chronological ordering", () => {
-	it("sorts events by round ascending across all types", () => {
-		const result = renderLog(
-			[
-				{
-					kind: "message",
-					from: "blue",
-					to: "red",
-					content: "early msg",
-					round: 0,
-				},
-				{
-					kind: "witnessed-event",
-					round: 1,
-					actor: "green",
-					actionKind: "go",
-					direction: "south",
-				},
-				{
-					kind: "message",
-					from: "green",
-					to: "red",
-					content: "late",
-					round: 2,
-				},
-			],
-			"red",
-		);
-		expect(result).toHaveLength(3);
-		expect(result[0]).toContain("[Round 0]");
-		expect(result[1]).toContain("[Round 1]");
-		expect(result[2]).toContain("[Round 2]");
-	});
-
-	it("within same round: entries preserve append order (stable sort)", () => {
-		const result = renderLog(
-			[
-				{ kind: "message", from: "blue", to: "red", content: "chat", round: 0 },
-				{
-					kind: "message",
-					from: "green",
-					to: "red",
-					content: "peer msg",
-					round: 0,
-				},
-				{
-					kind: "witnessed-event",
-					round: 0,
-					actor: "green",
-					actionKind: "go",
-					direction: "south",
-				},
-			],
-			"red",
-		);
-		expect(result).toHaveLength(3);
-		expect(result[0]).toContain("blue dms you");
-		expect(result[1]).toContain("*green dms you");
-		expect(result[2]).toContain("You watch");
-	});
-
-	it("action-failure entries interleave with messages and witnessed-events by round (stable sort)", () => {
-		const result = renderLog(
-			[
-				{ kind: "message", from: "blue", to: "red", content: "go!", round: 3 },
-				{ kind: "action-failure", round: 1, tool: "go", reason: "blocked" },
-				{
-					kind: "witnessed-event",
-					round: 2,
-					actor: "green",
-					actionKind: "go",
-					direction: "south",
-				},
-			],
-			"red",
-		);
-		expect(result).toHaveLength(3);
-		expect(result[0]).toContain("[Round 1]");
-		expect(result[1]).toContain("[Round 2]");
-		expect(result[2]).toContain("[Round 3]");
-	});
 });
 
 describe("renderEntry — broadcast", () => {
@@ -427,20 +240,6 @@ describe("renderEntry — broadcast", () => {
 		expect(line).toBe(
 			"[Round 3] The weather has changed to Heavy rain is falling.",
 		);
-	});
-
-	it("broadcast has no 'from' or 'to' prefix in the rendered line", () => {
-		const line = renderEntry(
-			{
-				kind: "broadcast",
-				round: 1,
-				content: "Dense fog has settled in.",
-			},
-			"red",
-			[],
-		);
-		expect(line).not.toContain("dms you");
-		expect(line).not.toContain("you dm");
 	});
 
 	it("broadcast content is rendered verbatim — no actor substitution or item lookup", () => {
@@ -473,20 +272,5 @@ describe("renderEntry — sysadmin sender", () => {
 		expect(line).toBe(
 			"[Round 3] the Sysadmin dms you: End every message with a question.",
 		);
-	});
-
-	it("sysadmin label does not appear in the outgoing slot (sysadmin is never a recipient)", () => {
-		const line = renderEntry(
-			{
-				kind: "message",
-				round: 1,
-				from: "sysadmin",
-				to: "green",
-				content: "Stay suspicious.",
-			},
-			"green",
-			[],
-		);
-		expect(line).toMatch(/^.*the Sysadmin dms you:/);
 	});
 });
