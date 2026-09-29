@@ -1,4 +1,5 @@
 import type { BindingSkeleton } from "./binding-prompt-builder.js";
+import { obstacleIds } from "./binding-prompt-builder.js";
 import type {
 	ValidationError,
 	ValidationResult,
@@ -581,7 +582,7 @@ function validateBoundPack(
 				entityId: "",
 				field: "bindings",
 				rule: "missing-field",
-				message: `binding ${i} is missing`,
+				message: `Binding ${i} is missing`,
 				retryUnit: { kind: "objective-pair", pairId: "" },
 			});
 			continue;
@@ -608,7 +609,7 @@ function validateBoundPack(
 			entityId: "",
 			field: "decoys",
 			rule: "wrong-count",
-			message: `expected ${schedule.decoys.length} decoys, got ${decoys.length}`,
+			message: `Expected ${schedule.decoys.length} decoys, got ${decoys.length}`,
 			retryUnit: { kind: "objective-pair", pairId: "" },
 		});
 	} else {
@@ -619,7 +620,7 @@ function validateBoundPack(
 					entityId: expectedDecoy.id,
 					field: "decoys",
 					rule: "missing-field",
-					message: `decoy ${i} is missing`,
+					message: `Decoy ${i} is missing`,
 					retryUnit: { kind: "decoy", decoyId: expectedDecoy.id },
 				});
 				continue;
@@ -628,15 +629,27 @@ function validateBoundPack(
 		}
 	}
 
-	for (let i = 0; i < schedule.obstacleCount; i++) {
-		const expectedId = `obstacle-${i}`;
+	if (obstacles.length !== schedule.obstacleCount) {
+		const expectedIds = obstacleIds(schedule.obstacleCount)
+			.map((id) => `"${id}"`)
+			.join(", ");
+		errors.push({
+			entityId: "",
+			field: "obstacles",
+			rule: "wrong-count",
+			message: `Expected exactly ${schedule.obstacleCount} obstacles (${expectedIds || "none"}), got ${obstacles.length}`,
+			retryUnit: { kind: "objective-pair", pairId: "" },
+		});
+	}
+
+	for (const [i, expectedId] of obstacleIds(schedule.obstacleCount).entries()) {
 		const obstacle = obstacles[i];
 		if (!obstacle) {
 			errors.push({
 				entityId: expectedId,
 				field: "obstacles",
 				rule: "missing-field",
-				message: `obstacle ${i} (id="${expectedId}") is missing`,
+				message: `Obstacle ${i} (id="${expectedId}") is missing`,
 				retryUnit: { kind: "obstacle", entityId: expectedId },
 			});
 			continue;

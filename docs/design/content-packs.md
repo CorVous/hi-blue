@@ -108,7 +108,7 @@ When you change one, change `DUAL_CONTENT_PACK_SYSTEM_PROMPT` and
 | `missing-field` | A required string field is absent or empty, or a binding, decoy, obstacle or the top-level `phases`/`packA`/`packB` is missing. |
 | `binding-forbidden-field` | A field outside the binding's shape is present. Decoys may not carry `activationFlavor` or `post*` fields. |
 | `wrong-id` | The id differs from the minted one. The message includes the exact JSON shape, because the model most often drops the `id` from a sub-object. |
-| `wrong-count` | The pack does not have exactly two decoys. |
+| `wrong-count` | The pack does not have exactly two decoys, or does not have exactly the scheduled `m` obstacles. Extra obstacles are rejected too: an obstacle only one pack has would have no Pack A placement to copy. |
 | `actor-presence` | A carry object's `placementFlavor` lacks the literal `{actor}`. |
 | `actor-exclusion` | An obstacle's `shiftFlavor` contains `{actor}`. |
 | `verb-of-activation` | A use_space or use_item `examineDescription` has no use-cue keyword, or a decoy's has one. |

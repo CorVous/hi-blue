@@ -2,7 +2,10 @@ import type {
 	RawBinding,
 	RawBoundPack,
 } from "../spa/game/binding-aware-validator.js";
-import { buildDualBindingPrompt } from "../spa/game/binding-prompt-builder.js";
+import {
+	buildDualBindingPrompt,
+	obstacleIds,
+} from "../spa/game/binding-prompt-builder.js";
 import type {
 	ContentPackProvider,
 	DualBindingContentPackInput,
@@ -228,6 +231,7 @@ function placePhases(
 function rawBoundPackToContentPack(
 	rawPack: RawBoundPack,
 	objectiveTypes: ObjectiveType[],
+	obstacleCount: number,
 	weather: string,
 	timeOfDay: string,
 ): ContentPack {
@@ -352,9 +356,11 @@ function rawBoundPackToContentPack(
 		entities.push(entity);
 	}
 
-	for (const obs of rawPack.obstacles ?? []) {
+	for (const [i, obstacleId] of obstacleIds(obstacleCount).entries()) {
+		const obs = rawPack.obstacles?.[i];
+		if (!obs) continue;
 		entities.push({
-			id: obs.id ?? "obstacle-unknown",
+			id: obstacleId,
 			kind: "obstacle",
 			name: obs.name ?? "",
 			examineDescription: obs.examineDescription ?? "",
@@ -444,12 +450,14 @@ export async function generateDualContentPacks(
 	const unplacedPackA = rawBoundPackToContentPack(
 		phase.rawPackA,
 		objectiveTypes,
+		obstacleCount,
 		weatherA,
 		timeOfDayA,
 	);
 	const unplacedPackB = rawBoundPackToContentPack(
 		phase.rawPackB,
 		objectiveTypes,
+		obstacleCount,
 		weatherB,
 		timeOfDayB,
 	);

@@ -115,7 +115,9 @@ function makeRawBinding(
 	}
 }
 
-function makeDualMockProvider(): MockContentPackProvider {
+function makeDualMockProvider(
+	adjust: (rawPackB: RawBoundPack) => void = () => {},
+): MockContentPackProvider {
 	return new MockContentPackProvider(
 		(
 			input: DualBindingContentPackInput,
@@ -172,9 +174,11 @@ function makeDualMockProvider(): MockContentPackProvider {
 					};
 				};
 
+				const rawPackB = makeRawPackVariant(phase.settingB, "B");
+				adjust(rawPackB);
 				return {
 					rawPackA: makeRawPackVariant(phase.settingA, "A"),
-					rawPackB: makeRawPackVariant(phase.settingB, "B"),
+					rawPackB,
 				};
 			});
 			return { phases };
@@ -235,6 +239,29 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		for (const e of packB.entities) {
 			expect(e.holder).toEqual(holderByIdInPackA.get(e.id));
 		}
+	});
+
+	it("keeps only the scheduled obstacles when Pack B returns extras", async () => {
+		const rng = mulberry32Rng(99);
+		const provider = makeDualMockProvider((rawPackB) => {
+			rawPackB.obstacles?.push({
+				id: "obstacle-extra",
+				name: "Stray Boulder",
+				examineDescription: "A boulder nobody asked for.",
+				shiftFlavor: "The boulder settles.",
+			});
+		});
+
+		const { packA, packB } = await generateDualContentPacks(
+			rng,
+			SETTING_POOL_2,
+			ONE_OBSTACLE_CONFIG,
+			provider,
+			AI_IDS,
+		);
+
+		expect(obstacles(packB).map((o) => o.id)).toEqual(["obstacle-0"]);
+		expect(allEntityIds(packB)).toEqual(allEntityIds(packA));
 	});
 
 	it("makes exactly one LLM call for the dual packs", async () => {

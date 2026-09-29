@@ -56,6 +56,9 @@ A draw that breaks a rule is thrown away and redrawn. After
 Entities go into one array in canonical order. For each binding index, a
 carry pair emits its object then its space, `use_space` and `convergence` emit
 a space, and `use_item` emits an item. Decoys come next, then obstacles.
+Only the scheduled obstacle ids (`obstacle-0` … `obstacle-{m-1}`) are copied,
+so Pack B can never hold an obstacle that Pack A did not place; the validator
+already rejects a pack with any other number of obstacles.
 Placement writes holders back in place, so this stays the pack order.
 
 ## Personas (`persona-generator.ts`)

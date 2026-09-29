@@ -47,7 +47,7 @@ function mintDecoys(): DecoySkeleton[] {
 	return [{ id: "decoy-0" }, { id: "decoy-1" }];
 }
 
-function obstacleIds(count: number): string[] {
+export function obstacleIds(count: number): string[] {
 	return Array.from({ length: count }, (_, i) => `obstacle-${i}`);
 }
 

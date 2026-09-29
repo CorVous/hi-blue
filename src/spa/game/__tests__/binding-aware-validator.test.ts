@@ -526,3 +526,54 @@ describe("validateBoundDualContentPack — retry unit binding ids", () => {
 		}
 	});
 });
+
+describe("validateBoundDualContentPack — obstacle count", () => {
+	function makeObstacle(id: string) {
+		return {
+			id,
+			name: "rubble heap",
+			examineDescription: "A heap of broken stone.",
+			shiftFlavor: "The rubble settles with a dry clatter.",
+		};
+	}
+
+	it("rejects extra obstacles beyond the scheduled count", () => {
+		const response = makeGoodCarryPack();
+		const pack = {
+			...response.pack,
+			obstacles: [makeObstacle("obstacle-0"), makeObstacle("obstacle-1")],
+		};
+		const result = validateAsBothPacks(
+			{ pack },
+			makeSchedule({ ...makeCarrySchedule(), obstacleCount: 1 }),
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const err = result.errors.find(
+				(e) => e.field === "obstacles" && e.rule === "wrong-count",
+			);
+			expect(err?.message).toMatch(/exactly 1 obstacles/);
+			expect(err?.message).toMatch(/got 2/);
+		}
+	});
+
+	it("rejects obstacles when none are scheduled", () => {
+		const response = makeGoodCarryPack();
+		const pack = { ...response.pack, obstacles: [makeObstacle("obstacle-0")] };
+		const result = validateAsBothPacks({ pack }, makeCarrySchedule());
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.errors.some((e) => e.rule === "wrong-count")).toBe(true);
+		}
+	});
+
+	it("accepts exactly the scheduled obstacles", () => {
+		const response = makeGoodCarryPack();
+		const pack = { ...response.pack, obstacles: [makeObstacle("obstacle-0")] };
+		const result = validateAsBothPacks(
+			{ pack },
+			makeSchedule({ ...makeCarrySchedule(), obstacleCount: 1 }),
+		);
+		expect(result.ok).toBe(true);
+	});
+});
