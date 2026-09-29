@@ -1,5 +1,6 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
+	appendFileSync,
 	createReadStream,
 	createWriteStream,
 	existsSync,
@@ -25,7 +26,7 @@ function ensureFifo(p) {
 			unlinkSync(p);
 		} catch {}
 	}
-	execSync(`mkfifo "${p}"`);
+	execFileSync("mkfifo", [p]);
 }
 ensureFifo(IN);
 ensureFifo(OUT);
@@ -34,7 +35,7 @@ const log = (msg) => {
 	const line = `[${new Date().toISOString()}] ${msg}\n`;
 	process.stderr.write(line);
 	try {
-		execSync(`printf '%s' ${JSON.stringify(line)} >> ${LOG}`);
+		appendFileSync(LOG, line);
 	} catch {}
 };
 
@@ -368,13 +369,15 @@ async function runOnce() {
 		stream.on("error", reject);
 	});
 	const line = buf.trim();
-	if (!line) return;
+	if (!line) {
+		await writeResponse({ ok: false, error: "empty command" });
+		return;
+	}
 	let cmd;
 	try {
 		cmd = JSON.parse(line);
 	} catch {
-		const w = createWriteStream(OUT);
-		w.end(`${JSON.stringify({ ok: false, error: "bad json" })}\n`);
+		await writeResponse({ ok: false, error: "bad json" });
 		return;
 	}
 	log(`cmd: ${JSON.stringify(cmd).slice(0, 200)}`);
@@ -384,8 +387,12 @@ async function runOnce() {
 	} catch (e) {
 		resp = { ok: false, error: String(e?.message ?? e) };
 	}
+	await writeResponse(resp);
+}
+
+function writeResponse(resp) {
 	const w = createWriteStream(OUT);
-	await new Promise((resolve) => {
+	return new Promise((resolve) => {
 		w.end(`${JSON.stringify(resp)}\n`, "utf8", resolve);
 	});
 }

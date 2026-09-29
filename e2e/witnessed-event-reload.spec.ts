@@ -3,6 +3,7 @@ import {
 	activePackOf,
 	CARDINAL_DIRECTIONS,
 	type CardinalDirection,
+	collectPageErrors,
 	expectNoPageErrors,
 	type GridPosition,
 	getAiHandles,
@@ -204,8 +205,7 @@ async function reloadIntoRestoredSession(page: Page): Promise<void> {
 test("live go tool-call produces witnessed-event that survives reload and appears in witness system prompt", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page, { sse: ["stub reply"] });
 	await expect(page.locator("#composer")).toBeVisible();

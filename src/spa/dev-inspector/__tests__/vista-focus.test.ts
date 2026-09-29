@@ -487,6 +487,25 @@ describe("vista-focus", () => {
 			expect(focusBtn.textContent).toBe("[ focus vista ]");
 		});
 
+		it("re-rendering the inspector keeps the focused button active", () => {
+			renderInspector(document.body, { session });
+			const redBtn = (): HTMLButtonElement | null =>
+				document.querySelector<HTMLButtonElement>(
+					'.ai-panel[data-ai="red"] [data-field="focus-vista"]',
+				);
+			redBtn()?.click();
+			expect(activeFocusButtons()).toEqual(["red"]);
+
+			renderInspector(document.body, { session });
+
+			expect(getMapFocus()).toBe("red");
+			expect(activeFocusButtons()).toEqual(["red"]);
+			const containerEl = document.getElementById(
+				"dev-world-map",
+			) as HTMLElement;
+			expect(highlightedCells(containerEl, "red").size).toBeGreaterThan(0);
+		});
+
 		it("button click sets focus", () => {
 			const root = document.body;
 			renderInspector(root, { session });

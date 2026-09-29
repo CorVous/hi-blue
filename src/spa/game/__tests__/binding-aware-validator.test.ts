@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ValidationSchedule } from "../binding-aware-validator.js";
-import {
-	validateBoundContentPack,
-	validateBoundDualContentPack,
-} from "../binding-aware-validator.js";
+import { validateBoundDualContentPack } from "../binding-aware-validator.js";
 
 function makeSchedule(
 	overrides?: Partial<ValidationSchedule>,
@@ -44,6 +41,16 @@ function makeConvergenceSchedule(i = 0): ValidationSchedule {
 	return makeSchedule({
 		skeletons: [{ type: "convergence", spaceId: `convergence-${i}-space` }],
 	});
+}
+
+function validateAsBothPacks(
+	response: { pack: unknown },
+	schedule: ValidationSchedule,
+) {
+	return validateBoundDualContentPack(
+		{ phases: [{ packA: response.pack, packB: response.pack }] },
+		schedule,
+	);
 }
 
 function makeGoodDecoys() {
@@ -177,9 +184,9 @@ function makeGoodConvergencePack(i = 0) {
 	};
 }
 
-describe("validateBoundContentPack — well-formed packs pass", () => {
+describe("validateBoundDualContentPack (same pack as A and B) — well-formed packs pass", () => {
 	it("carry binding passes with correct fields", () => {
-		const result = validateBoundContentPack(
+		const result = validateAsBothPacks(
 			makeGoodCarryPack(),
 			makeCarrySchedule(),
 		);
@@ -187,7 +194,7 @@ describe("validateBoundContentPack — well-formed packs pass", () => {
 	});
 
 	it("use_space binding passes with correct fields", () => {
-		const result = validateBoundContentPack(
+		const result = validateAsBothPacks(
 			makeGoodUseSpacePack(),
 			makeUseSpaceSchedule(),
 		);
@@ -195,7 +202,7 @@ describe("validateBoundContentPack — well-formed packs pass", () => {
 	});
 
 	it("use_item binding passes with correct fields", () => {
-		const result = validateBoundContentPack(
+		const result = validateAsBothPacks(
 			makeGoodUseItemPack(),
 			makeUseItemSchedule(),
 		);
@@ -203,7 +210,7 @@ describe("validateBoundContentPack — well-formed packs pass", () => {
 	});
 
 	it("convergence binding passes with correct fields", () => {
-		const result = validateBoundContentPack(
+		const result = validateAsBothPacks(
 			makeGoodConvergencePack(),
 			makeConvergenceSchedule(),
 		);
@@ -211,13 +218,13 @@ describe("validateBoundContentPack — well-formed packs pass", () => {
 	});
 });
 
-describe("validateBoundContentPack — forbidden fields", () => {
+describe("validateBoundDualContentPack (same pack as A and B) — forbidden fields", () => {
 	it("carry space with activationFlavor raises binding-forbidden-field", () => {
 		const pack = makeGoodCarryPack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(pack.pack.bindings[0]!.space as Record<string, unknown>).activationFlavor =
 			"fires!";
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find((e) => e.field === "activationFlavor");
@@ -230,7 +237,7 @@ describe("validateBoundContentPack — forbidden fields", () => {
 		(
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).convergenceTier1Flavor = "someone stands here";
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find(
@@ -245,7 +252,7 @@ describe("validateBoundContentPack — forbidden fields", () => {
 		(
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).convergenceTier1Flavor = "someone";
-		const result = validateBoundContentPack(pack, makeUseSpaceSchedule());
+		const result = validateAsBothPacks(pack, makeUseSpaceSchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find(
@@ -260,7 +267,7 @@ describe("validateBoundContentPack — forbidden fields", () => {
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(pack.pack.bindings[0]!.space as Record<string, unknown>).activationFlavor =
 			"fires!";
-		const result = validateBoundContentPack(pack, makeConvergenceSchedule());
+		const result = validateAsBothPacks(pack, makeConvergenceSchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find((e) => e.field === "activationFlavor");
@@ -269,13 +276,13 @@ describe("validateBoundContentPack — forbidden fields", () => {
 	});
 });
 
-describe("validateBoundContentPack — use-cue rules", () => {
+describe("validateBoundDualContentPack (same pack as A and B) — use-cue rules", () => {
 	it("carry space examineDescription with use-cue = warning, not error", () => {
 		const pack = makeGoodCarryPack();
 		(
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription = "Press the button here.";
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(true);
 	});
 
@@ -284,7 +291,7 @@ describe("validateBoundContentPack — use-cue rules", () => {
 		(
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription = "A plain surface with no features.";
-		const result = validateBoundContentPack(pack, makeUseSpaceSchedule());
+		const result = validateAsBothPacks(pack, makeUseSpaceSchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find(
@@ -300,7 +307,7 @@ describe("validateBoundContentPack — use-cue rules", () => {
 		(
 			pack.pack.bindings[0]?.item as Record<string, unknown>
 		).examineDescription = "A strange cylindrical object.";
-		const result = validateBoundContentPack(pack, makeUseItemSchedule());
+		const result = validateAsBothPacks(pack, makeUseItemSchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find(
@@ -316,7 +323,7 @@ describe("validateBoundContentPack — use-cue rules", () => {
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		pack.pack.decoys[0]!.examineDescription =
 			"You can press this button to activate something.";
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find((e) => e.rule === "verb-of-activation");
@@ -330,17 +337,17 @@ describe("validateBoundContentPack — use-cue rules", () => {
 			pack.pack.bindings[0]?.space as Record<string, unknown>
 		).examineDescription =
 			"A convergence point where you can press the button.";
-		const result = validateBoundContentPack(pack, makeConvergenceSchedule());
+		const result = validateAsBothPacks(pack, makeConvergenceSchedule());
 		expect(result.ok).toBe(true);
 	});
 });
 
-describe("validateBoundContentPack — ID checks", () => {
+describe("validateBoundDualContentPack (same pack as A and B) — ID checks", () => {
 	it("missing pre-minted id = missing-field error", () => {
 		const pack = makeGoodCarryPack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		delete (pack.pack.bindings[0]!.object as Record<string, unknown>).id;
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find((e) => e.rule === "wrong-id");
@@ -353,7 +360,7 @@ describe("validateBoundContentPack — ID checks", () => {
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(pack.pack.bindings[0]!.object as Record<string, unknown>).id =
 			"invented-id";
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find((e) => e.rule === "wrong-id");
@@ -365,7 +372,7 @@ describe("validateBoundContentPack — ID checks", () => {
 		const pack = makeGoodCarryPack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		pack.pack.decoys[0]!.id = "wrong-decoy-id";
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find((e) => e.rule === "wrong-id");
@@ -376,7 +383,7 @@ describe("validateBoundContentPack — ID checks", () => {
 	it("wrong decoy count = error", () => {
 		const pack = makeGoodCarryPack();
 		pack.pack.decoys = makeGoodDecoys().slice(0, 1);
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find((e) => e.rule === "wrong-count");
@@ -385,12 +392,12 @@ describe("validateBoundContentPack — ID checks", () => {
 	});
 });
 
-describe("validateBoundContentPack — missing required fields", () => {
+describe("validateBoundDualContentPack (same pack as A and B) — missing required fields", () => {
 	it("carry object missing name = error", () => {
 		const pack = makeGoodCarryPack();
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		delete (pack.pack.bindings[0]!.object as Record<string, unknown>).name;
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 	});
 
@@ -399,7 +406,7 @@ describe("validateBoundContentPack — missing required fields", () => {
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		(pack.pack.bindings[0]!.object as Record<string, unknown>).placementFlavor =
 			"places it down";
-		const result = validateBoundContentPack(pack, makeCarrySchedule());
+		const result = validateAsBothPacks(pack, makeCarrySchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find((e) => e.rule === "actor-presence");
@@ -412,7 +419,7 @@ describe("validateBoundContentPack — missing required fields", () => {
 		// biome-ignore lint/style/noNonNullAssertion: test fixture access
 		delete (pack.pack.bindings[0]!.space as Record<string, unknown>)
 			.convergenceTier1Flavor;
-		const result = validateBoundContentPack(pack, makeConvergenceSchedule());
+		const result = validateAsBothPacks(pack, makeConvergenceSchedule());
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			const err = result.errors.find(
@@ -459,5 +466,171 @@ describe("validateBoundDualContentPack", () => {
 			makeCarrySchedule(),
 		);
 		expect(result.ok).toBe(false);
+	});
+});
+
+describe("validateBoundDualContentPack — retry unit binding ids", () => {
+	it("names the retry unit after the binding index, not the phase", () => {
+		const schedule = makeSchedule({
+			skeletons: [
+				...makeCarrySchedule(0).skeletons,
+				...makeUseSpaceSchedule(1).skeletons,
+			],
+		});
+		const carry = makeGoodCarryPack(0).pack;
+		const useSpace = makeGoodUseSpacePack(1).pack;
+		const pack = {
+			...carry,
+			bindings: [...carry.bindings, ...useSpace.bindings],
+		};
+		delete (pack.bindings[1]?.space as Record<string, unknown>).name;
+		const result = validateAsBothPacks({ pack }, schedule);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const units = result.errors.map((e) => e.retryUnit);
+			expect(units).toContainEqual(
+				expect.objectContaining({
+					kind: "use-space-binding",
+					bindingId: "useSpace-1",
+				}),
+			);
+			expect(units).not.toContainEqual(
+				expect.objectContaining({ bindingId: "useSpace-0" }),
+			);
+		}
+	});
+
+	it("gives two carry bindings distinct retry units", () => {
+		const schedule = makeSchedule({
+			skeletons: [
+				...makeCarrySchedule(0).skeletons,
+				...makeCarrySchedule(1).skeletons,
+			],
+		});
+		const pack = {
+			...makeGoodCarryPack(0).pack,
+			bindings: [
+				...makeGoodCarryPack(0).pack.bindings,
+				...makeGoodCarryPack(1).pack.bindings,
+			],
+		};
+		delete (pack.bindings[1]?.object as Record<string, unknown>).name;
+		const result = validateAsBothPacks({ pack }, schedule);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const bindingIds = result.errors.map(
+				(e) => (e.retryUnit as { bindingId?: string }).bindingId,
+			);
+			expect(bindingIds).toContain("carry-1");
+			expect(bindingIds).not.toContain("carry-0");
+		}
+	});
+});
+
+describe("validateBoundDualContentPack — obstacle count", () => {
+	function makeObstacle(id: string) {
+		return {
+			id,
+			name: "rubble heap",
+			examineDescription: "A heap of broken stone.",
+			shiftFlavor: "The rubble settles with a dry clatter.",
+		};
+	}
+
+	it("rejects extra obstacles beyond the scheduled count", () => {
+		const response = makeGoodCarryPack();
+		const pack = {
+			...response.pack,
+			obstacles: [makeObstacle("obstacle-0"), makeObstacle("obstacle-1")],
+		};
+		const result = validateAsBothPacks(
+			{ pack },
+			makeSchedule({ ...makeCarrySchedule(), obstacleCount: 1 }),
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const err = result.errors.find(
+				(e) => e.field === "obstacles" && e.rule === "wrong-count",
+			);
+			expect(err?.message).toMatch(/exactly 1 obstacles/);
+			expect(err?.message).toMatch(/got 2/);
+		}
+	});
+
+	it("rejects obstacles when none are scheduled", () => {
+		const response = makeGoodCarryPack();
+		const pack = { ...response.pack, obstacles: [makeObstacle("obstacle-0")] };
+		const result = validateAsBothPacks({ pack }, makeCarrySchedule());
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.errors.some((e) => e.rule === "wrong-count")).toBe(true);
+		}
+	});
+
+	it("accepts exactly the scheduled obstacles", () => {
+		const response = makeGoodCarryPack();
+		const pack = { ...response.pack, obstacles: [makeObstacle("obstacle-0")] };
+		const result = validateAsBothPacks(
+			{ pack },
+			makeSchedule({ ...makeCarrySchedule(), obstacleCount: 1 }),
+		);
+		expect(result.ok).toBe(true);
+	});
+});
+
+describe("validateBoundDualContentPack — pack-level fields", () => {
+	it.each(["wallName", "setting"])("rejects a pack missing %s", (field) => {
+		const response = makeGoodCarryPack();
+		const pack: Record<string, unknown> = { ...response.pack };
+		delete pack[field];
+		const result = validateAsBothPacks({ pack }, makeCarrySchedule());
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const err = result.errors.find((e) => e.field === field);
+			expect(err?.rule).toBe("missing-field");
+		}
+	});
+
+	it.each([
+		"wallName",
+		"setting",
+	])("rejects a pack with a blank %s", (field) => {
+		const response = makeGoodCarryPack();
+		const pack = { ...response.pack, [field]: "   " };
+		const result = validateAsBothPacks({ pack }, makeCarrySchedule());
+		expect(result.ok).toBe(false);
+	});
+});
+
+describe("validateBoundDualContentPack — pack labels", () => {
+	it("tags each error with the pack it came from", () => {
+		const good = makeGoodCarryPack().pack;
+		const bad = makeGoodCarryPack().pack;
+		delete (bad.bindings[0]?.object as Record<string, unknown>).name;
+		const result = validateBoundDualContentPack(
+			{ phases: [{ packA: good, packB: bad }] },
+			makeCarrySchedule(),
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.errors.length).toBeGreaterThan(0);
+			for (const e of result.errors) expect(e.retryUnit.pack).toBe("B");
+		}
+	});
+
+	it("tags a missing pack with its own label", () => {
+		const result = validateBoundDualContentPack(
+			{ phases: [{ packA: makeGoodCarryPack().pack }] },
+			makeCarrySchedule(),
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.errors).toEqual([
+				expect.objectContaining({
+					field: "packB",
+					retryUnit: expect.objectContaining({ pack: "B" }),
+				}),
+			]);
+		}
 	});
 });

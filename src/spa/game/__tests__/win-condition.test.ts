@@ -18,12 +18,10 @@ import {
 	checkPlacementFlavor,
 	checkWinCondition,
 	isCarryObjectiveSatisfied,
-	isUseItemObjectiveSatisfied,
-	isUseSpaceObjectiveSatisfied,
+	isObjectiveSatisfied,
 	outcomeOfCompletedGame,
 } from "../win-condition";
 import { TEST_PERSONAS } from "./fixtures/make-game-state";
-import { makeTestPack } from "./fixtures/make-test-pack";
 
 type Holder = WorldEntity["holder"];
 type SatisfactionState = Objective["satisfactionState"];
@@ -265,12 +263,14 @@ describe("checkWinCondition — multiple carry pairs", () => {
 
 describe.each<[string, (state: SatisfactionState) => boolean]>([
 	[
-		"isUseItemObjectiveSatisfied",
-		(state) => isUseItemObjectiveSatisfied(makeUseItemObjective(state)),
+		"isObjectiveSatisfied on a use_item objective",
+		(state) =>
+			isObjectiveSatisfied(makeUseItemObjective(state), { entities: [] }),
 	],
 	[
-		"isUseSpaceObjectiveSatisfied",
-		(state) => isUseSpaceObjectiveSatisfied(makeUseSpaceObjective(state)),
+		"isObjectiveSatisfied on a use_space objective",
+		(state) =>
+			isObjectiveSatisfied(makeUseSpaceObjective(state), { entities: [] }),
 	],
 ])("%s", (_predicate, check) => {
 	it.each(
@@ -389,8 +389,6 @@ describe("outcomeOfCompletedGame", () => {
 });
 
 describe("checkPlacementFlavor", () => {
-	const PACK = makeTestPack([], { setting: "test", wallName: "wall" });
-
 	function itemAction(
 		name: "put_down" | "use" | "pick_up",
 		itemId: string,
@@ -433,7 +431,7 @@ describe("checkPlacementFlavor", () => {
 		]),
 	)("%s", (_name, { action, flavor, expected }) => {
 		const world = gemOnAltar({ row: 2, col: 2 }, flavor);
-		expect(checkPlacementFlavor(action, PACK, world)).toBe(expected);
+		expect(checkPlacementFlavor(action, world)).toBe(expected);
 	});
 
 	it.each(
@@ -503,7 +501,7 @@ describe("checkPlacementFlavor", () => {
 			},
 		]),
 	)("returns null when %s", (_name, { action, world }) => {
-		expect(checkPlacementFlavor(action, PACK, world)).toBeNull();
+		expect(checkPlacementFlavor(action, world)).toBeNull();
 	});
 });
 

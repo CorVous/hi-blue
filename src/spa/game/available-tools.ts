@@ -42,13 +42,23 @@ export function pairedSpaceHoldingItem(
 	);
 }
 
-function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
+export function isUseSpace(game: GameState, entity: WorldEntity): boolean {
+	return (
+		entity.kind === "objective_space" &&
+		game.objectives.some(
+			(objective) =>
+				objective.kind === "use_space" && objective.spaceId === entity.id,
+		)
+	);
+}
+
+export function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
 	return entities.filter(
 		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
 	);
 }
 
-function obstaclePositions(entities: WorldEntity[]): GridPosition[] {
+export function obstaclePositions(entities: WorldEntity[]): GridPosition[] {
 	return entities
 		.filter((e) => e.kind === "obstacle")
 		.map((e) => {
@@ -94,12 +104,11 @@ function cloneToolWithEnums(
 	return cloned;
 }
 
-export function availableTools(
-	game: GameState,
+export function disabledToolsFor(
+	activeComplications: ActiveComplication[],
 	aiId: AiId,
-	activeComplications: ActiveComplication[] = [],
-): OpenAiTool[] {
-	const disabledTools = new Set<ToolName>(
+): Set<ToolName> {
+	return new Set<ToolName>(
 		activeComplications
 			.filter(
 				(c): c is Extract<ActiveComplication, { kind: "tool_disable" }> =>
@@ -107,10 +116,145 @@ export function availableTools(
 			)
 			.map((c) => c.tool),
 	);
+}
+
+export type ItemToolName = "pick_up" | "put_down" | "use";
+
+function isTargetable(entity: WorldEntity): boolean {
+	return (
+		entity.kind === "objective_object" ||
+		entity.kind === "interesting_object" ||
+		entity.kind === "objective_space"
+	);
+}
+
+function handleKey(handle: string): string {
+	return handle.trim().toLowerCase();
+}
+
+export function targetHandles(entities: WorldEntity[]): Map<string, string> {
+	const targetable = entities.filter(isTargetable);
+	const nameCounts = new Map<string, number>();
+	for (const e of targetable) {
+		const nameKey = handleKey(e.name);
+		nameCounts.set(nameKey, (nameCounts.get(nameKey) ?? 0) + 1);
+	}
+	const isShared = (name: string): boolean =>
+		(nameCounts.get(handleKey(name)) ?? 0) > 1;
+	const taken = new Set(
+		targetable
+			.map((e) => e.name.trim())
+			.filter((name) => !isShared(name))
+			.map(handleKey),
+	);
+	const lastOrdinal = new Map<string, number>();
+	const handles = new Map<string, string>();
+	for (const e of targetable) {
+		const name = e.name.trim();
+		if (!isShared(name)) {
+			handles.set(e.id, name);
+			continue;
+		}
+		const nameKey = handleKey(name);
+		let ordinal = lastOrdinal.get(nameKey) ?? 0;
+		let handle: string;
+		do {
+			ordinal++;
+			handle = `${name} #${ordinal}`;
+		} while (taken.has(handleKey(handle)));
+		lastOrdinal.set(nameKey, ordinal);
+		taken.add(handleKey(handle));
+		handles.set(e.id, handle);
+	}
+	return handles;
+}
+
+export function entityHandle(
+	entities: WorldEntity[],
+	entity: WorldEntity,
+): string {
+	return targetHandles(entities).get(entity.id) ?? entity.name.trim();
+}
+
+function toolTargetCandidates(
+	game: GameState,
+	aiId: AiId,
+	tool: ItemToolName,
+): WorldEntity[] {
 	const actorSpatial = game.personaSpatial[aiId];
-	const { world } = game;
-	const pickable = pickableEntities(world.entities);
-	const obstacles = obstaclePositions(world.entities);
+	const { entities } = game.world;
+	const pickable = pickableEntities(entities);
+	const held = pickable.filter((item) => item.holder === aiId);
+
+	switch (tool) {
+		case "pick_up":
+			if (!actorSpatial) return [];
+			return pickable.filter(
+				(item) =>
+					isGridPosition(item.holder) &&
+					withinInteractionRange(actorSpatial.position, item.holder) &&
+					!pairedSpaceHoldingItem(item, entities),
+			);
+		case "put_down":
+			return held;
+		case "use": {
+			if (!actorSpatial) return held;
+			const usableSpaces = entities.filter(
+				(e) =>
+					isUseSpace(game, e) &&
+					e.useAvailable !== false &&
+					isGridPosition(e.holder) &&
+					withinInteractionRange(actorSpatial.position, e.holder),
+			);
+			return [...held, ...usableSpaces];
+		}
+	}
+}
+
+function findByHandle(
+	candidates: WorldEntity[],
+	handles: Map<string, string>,
+	handle: string,
+): WorldEntity | undefined {
+	const exact = candidates.find((e) => handles.get(e.id) === handle);
+	if (exact) return exact;
+	const folded = handleKey(handle);
+	return candidates.find((e) => {
+		const candidateHandle = handles.get(e.id);
+		return (
+			candidateHandle !== undefined && handleKey(candidateHandle) === folded
+		);
+	});
+}
+
+export function resolveToolTarget(
+	game: GameState,
+	aiId: AiId,
+	tool: ItemToolName,
+	handle: string,
+): WorldEntity | undefined {
+	const { entities } = game.world;
+	const handles = targetHandles(entities);
+	return (
+		findByHandle(toolTargetCandidates(game, aiId, tool), handles, handle) ??
+		findByHandle(entities.filter(isTargetable), handles, handle) ??
+		entities.find((e) => e.id === handle)
+	);
+}
+
+function handlesOf(game: GameState, targets: WorldEntity[]): string[] {
+	const handles = targetHandles(game.world.entities);
+	return targets.map((e) => handles.get(e.id) ?? e.name.trim());
+}
+
+export function availableTools(
+	game: GameState,
+	aiId: AiId,
+	activeComplications: ActiveComplication[] = [],
+): OpenAiTool[] {
+	const disabledTools = disabledToolsFor(activeComplications, aiId);
+	const actorSpatial = game.personaSpatial[aiId];
+	const obstacles = obstaclePositions(game.world.entities);
 
 	const tools: OpenAiTool[] = [];
 
@@ -135,45 +279,11 @@ export function availableTools(
 		}
 	}
 
-	if (actorSpatial && !disabledTools.has("pick_up")) {
-		const reachableItems = pickable.filter(
-			(item) =>
-				isGridPosition(item.holder) &&
-				withinInteractionRange(actorSpatial.position, item.holder) &&
-				!pairedSpaceHoldingItem(item, world.entities),
-		);
-		if (reachableItems.length > 0) {
-			tools.push(
-				cloneToolWithEnums("pick_up", {
-					item: reachableItems.map((i) => i.id),
-				}),
-			);
-		}
-	}
-
-	const heldItems = pickable.filter((item) => item.holder === aiId);
-	if (!disabledTools.has("put_down") && heldItems.length > 0) {
-		const heldIds = heldItems.map((i) => i.id);
-		tools.push(cloneToolWithEnums("put_down", { item: heldIds }));
-	}
-	if (!disabledTools.has("use")) {
-		const heldIds = heldItems.map((i) => i.id);
-
-		let reachableSpaceIds: string[] = [];
-		if (actorSpatial) {
-			reachableSpaceIds = world.entities
-				.filter((e) => {
-					if (e.kind !== "objective_space") return false;
-					if (e.useAvailable === false) return false;
-					if (!isGridPosition(e.holder)) return false;
-					return withinInteractionRange(actorSpatial.position, e.holder);
-				})
-				.map((e) => e.id);
-		}
-
-		const useIds = [...heldIds, ...reachableSpaceIds];
-		if (useIds.length > 0) {
-			tools.push(cloneToolWithEnums("use", { item: useIds }));
+	for (const tool of ["pick_up", "put_down", "use"] as const) {
+		if (disabledTools.has(tool)) continue;
+		const targets = toolTargetCandidates(game, aiId, tool);
+		if (targets.length > 0) {
+			tools.push(cloneToolWithEnums(tool, { item: handlesOf(game, targets) }));
 		}
 	}
 

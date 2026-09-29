@@ -14,7 +14,7 @@ const sampleValidationError: ValidationError = {
 	field: "examineDescription",
 	rule: "verb-of-activation",
 	message: "Decoy decoy-0: must NOT contain use-cue keyword 'lever'",
-	retryUnit: { kind: "decoy", phaseIndex: 0, decoyId: "decoy-0" },
+	retryUnit: { kind: "decoy", decoyId: "decoy-0" },
 };
 
 describe("content-pack-attempts recorder", () => {

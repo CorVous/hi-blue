@@ -14,15 +14,73 @@ Each session is a set of localStorage keys under one prefix:
 | `hi-blue:sessions/<id>/meta.json` | `createdAt`, `lastSavedAt`, `epoch`, `round`, `personaOrder` |
 | `hi-blue:sessions/<id>/<aiId>.txt` (one per Daemon) | persona plus that Daemon's conversation log (messages, witnessed events and broadcasts inline) |
 | `hi-blue:sessions/<id>/engine.dat` | sealed engine state, XOR-obfuscated |
+| `hi-blue:sessions/<id>/saving` | present only while `saveActiveSession` is writing, or after it failed partway |
 | `hi-blue:active-session` | the active session id |
 | `hi-blue:archive/<id>/…` | the same three files for an archived session |
 | `hi-blue-game-state` | legacy single-key save (discarded at boot, see below) |
 
-- **`engine.dat` is the commit signal.** Every writer (`saveActiveSession`,
-  `dupSession`, `archiveSession`, `seedFromArchive`) writes it in this order:
-  meta, then daemons, then `engine.dat`. There is no rollback. If a write fails
-  partway, `engine.dat` is missing, and the load path reports the session as
-  `broken`.
+- **Writers commit in a fixed order.** Every writer (`saveActiveSession`,
+  `dupSession`, `archiveSession`, `seedFromArchive`) writes meta, then
+  daemons, then `engine.dat`. There is no rollback, so a failure partway must
+  never load as `ok`:
+  - **Re-saves use a saving marker.** `saveActiveSession` first writes
+    `sessions/<id>/saving`, then the three files, and removes the marker last.
+    A present marker means a save was interrupted, and the loader reports the
+    session as `broken` (without it, new meta and daemons beside the previous
+    `engine.dat` would load as `ok`). If a write fails before any data key
+    has been written (the marker write itself, or `meta.json` right after
+    it), nothing but the marker has been touched: the save removes the
+    marker (best effort), reports the error, and the previous save still
+    loads as `ok`. Once `meta.json` has been written, the marker stays and
+    the session loads as `broken`. `archiveSession`
+    refuses a source that carries the marker, or lacks `meta.json` or
+    `engine.dat`; `isSessionComplete` answers the same question without
+    throwing, so the endgame can check before it starts. Only `.txt` keys count as
+    daemon files, so the marker is never listed as one or copied by
+    `dupSession` or `archiveSession`.
+- **`saveActiveSession` can target a session other than the active one.**
+  Its `sessionId` option writes under that id instead of the active pointer.
+  The game route uses it for a round that finishes after the player loaded
+  another session, and for the endgame's new room, which is written under a
+  freshly minted id before the pointer moves to it. Without it the only way to
+  save was to repoint the active session first.
+- **Saves can refuse to overwrite a newer save (`expectedLastSavedAt`).**
+  Two tabs share one localStorage, so two tabs on the same session used to
+  clobber each other: each held its own `GameState` in memory and wrote it
+  blindly, and whichever saved last erased the other tab's rounds without a
+  sign. `saveActiveSession` now takes an optional `expectedLastSavedAt`,
+  the `meta.lastSavedAt` the caller's in-memory state was loaded or last
+  saved with. When the stored value differs (another tab saved, or the
+  session was removed), the save writes nothing and returns
+  `{ ok: false, reason: "stale" }`. A successful save returns the
+  `lastSavedAt` it wrote, so the caller can carry it into the next save.
+  A save that fails after `meta.json` was written also returns that
+  `lastSavedAt`, because the new value is already on disk: a caller that kept
+  the old one refused its own next save as `stale`, warned about another tab
+  that did not exist, reloaded, and left the torn session `broken`. Carrying
+  the written value lets the next save in the same tab go through, which
+  also clears the marker. Another tab's saves still change `lastSavedAt` to
+  something this tab never wrote, so cross-tab detection is unchanged.
+  This is optimistic concurrency on a timestamp with millisecond
+  resolution: two tabs saving in the same millisecond are not told apart,
+  which is rare enough to accept for a single-player game. Callers that
+  omit the option (the bootstrap's first save, the "same daemons" new room
+  under a fresh id) keep the old unconditional write. "Continue" passes the
+  ended game's `lastSavedAt`, because it overwrites the ended session in
+  place. `readSessionLastSavedAt`, `isSessionStorageKey` and
+  `isSessionSaveInProgress` let the game view watch another tab's writes;
+  see "Two tabs on one session" in `views.md`.
+- **`sessionChangedSince(id, lastSavedAt)`** is the same check for callers
+  that are about to archive or remove a session rather than save it (the
+  endgame's "new daemons" and "same daemons"). A removed session counts as
+  changed. An unreadable `meta.json` does not: the caller's own
+  `archiveSession` then fails with its own error, which says more than
+  "changed in another tab" would.
+  - **Fresh writes rely on `engine.dat`.** `dupSession` and `seedFromArchive`
+    always write to a freshly minted, unused id, and `archiveSession` clears
+    every key under `archive/<id>/` first so a reused id never merges two
+    games. In all three, a failure partway leaves `engine.dat` missing, and
+    the loader reports `broken`.
 - **Minted but never saved.** If neither `meta.json` nor `engine.dat` exists,
   the id was minted but never written. The loader reports `none`, so the
   dispatcher sends the player to start. The picker shows it as `broken`
@@ -37,17 +95,26 @@ Each session is a set of localStorage keys under one prefix:
 - **`clearActiveSession` vs `deactivateActiveSession`.** A broken session is
   deleted. A version-mismatch session only loses the active pointer. Its bytes
   stay, so the picker can link it to the archived build that still reads it.
-- **Session ids** are `0x` plus 4 upper-case hex digits (`mintSessionId`).
-  `mintSession` returns a new id without activating it.
+- **Session ids** are `0x` plus 4 upper-case hex digits (`mintSessionId`),
+  drawn uniformly from `0x0000` to `0xFFFF`. Minting re-rolls while the id
+  already has keys under `sessions/` or `archive/`, so a new game can never
+  land on top of an existing or archived one.
+  `mintSessionId` returns a new id without activating it.
   `mintAndActivateNewSession` also sets the pointer.
-- **Epoch.** It survives re-saves (read back from the existing `meta.json`).
-  `seedFromArchive` increments it. The version-mismatch picker row accepts the
-  pre-v6 `phase` meta field as the epoch.
+- **Epoch and `createdAt`.** Both survive re-saves (read back from the
+  existing `meta.json`). An explicit `createdAt` passed to
+  `saveActiveSession` still wins. `seedFromArchive` increments the epoch. The
+  version-mismatch picker row accepts the pre-v6 `phase` meta field as the
+  epoch.
 - **Archived meta** carries `readonly: true` and `lastPlayedAt`. Active
   sessions have neither field.
 - **`seedFromArchive`** deep-copies the archived conversation logs into a fresh
-  `GameState`, adds the broadcast "The sysadmin has created a new room.", and
-  writes a new session without activating it.
+  `GameState` through `continueLogsInNewRoom`, the same helper the endgame
+  Continue uses, so the new room starts at the archived round and never
+  shares a round number with the archived logs (see `game-round.md`, "Rounds
+  never repeat within a Session"). It adds the
+  broadcast "The sysadmin has created a new room." and writes a new session
+  without activating it.
 
 ## Codec (`session-codec.ts`)
 
@@ -56,6 +123,9 @@ Each session is a set of localStorage keys under one prefix:
   implementation-defined, so without it a restore could shuffle the panels.
   Saves written before this field existed fall back to daemon-file key order.
   A daemon file that `personaOrder` does not list is still restored.
+- **A daemon file must carry an object `persona`.** A `.txt` that parses as
+  JSON but has no `persona` object (a likely hand edit, ADR 0004) makes the
+  load `broken` instead of restoring a Daemon with no persona.
 - **`actionProfile` is spread in only when it is set.** Saves written with the
   feature off stay byte-identical to saves from before the field existed.
 - **`StoredSealedEngine` vs `SealedEngine`.** The payload read from disk types
@@ -78,6 +148,14 @@ Each session is a set of localStorage keys under one prefix:
   sessions get no `outcome`. A finished save is not cleared: the active pointer
   stays until the player picks an endgame choice, and the game view reopens the
   endgame screen when it restores a complete session.
+- **Per-round prompt carry-over is not persisted.** `GameSession.restore`
+  starts with empty `priorToolRoundtrip`, `priorDiskSnapshots` and
+  `priorDiskEntities`; they live only in memory and are not part of the save
+  format. After a reload, the first round has no `<whats_new>` diff or "X is
+  now …" transition lines for any Daemon, and message tool calls that failed in
+  the round before the reload are not replayed to the model. From the second
+  round on, everything is back to normal. Persisting them would change the
+  save format and need a schema bump.
 - `deserializeSession` takes the boundary as a parameter, defaulting to the
   live boundary. Tests can then check the gate against another cutoff.
 

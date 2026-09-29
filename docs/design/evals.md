@@ -2,10 +2,9 @@
 
 The harnesses under `evals/` drive the real game engine against a live model
 (`PINNED_MODEL` unless `EVAL_MODEL` overrides it) and write dated reports to `docs/evals/`.
-They are not part of CI, but `tsconfig.tools.json` typechecks them. Two scoring
-modules are unit-tested from `evals/__tests__/`
-(`free-text-drift-scoring.test.ts`, `relative-directions-scoring.test.ts`) so
-their heuristics cannot rot without anyone noticing. The scoring modules are pure: no I/O and no
+They are not part of CI, but `tsconfig.tools.json` typechecks them. The scoring
+modules and `env-knobs.ts` are unit-tested from `evals/__tests__/` so their
+heuristics cannot rot without anyone noticing. The scoring modules are pure: no I/O and no
 module-level fetch.
 
 ## Shared conventions
@@ -40,6 +39,15 @@ module-level fetch.
   behaviour being measured.
 - **`exactOptionalPropertyTypes`**: runners attach `costUsd` only when the API
   reported one, because an explicit `undefined` is rejected.
+- **A failed model call is not a silent turn.** When a request throws (HTTP
+  error, network, upstream error), the drift and action-variation runners
+  record the turn with an `error` field and empty text instead of scoring it.
+  Scoring drops errored turns from every rate, leak count, window and series,
+  the report shows how many there were, and the process exits 1 once the
+  report is written. Before this, a proxy outage looked like a daemon that
+  had stopped talking: the error text went through the leak regexes, the turn
+  counted as silent, and the run exited 0. The action-variation runner also
+  logs each failure as it happens.
 - **Counts sorted by hand.** `byDescendingCount` walks the keys instead of
   sorting `Object.entries` tuples, because under `noUncheckedIndexedAccess` the
   tuple elements are `number | undefined` and cannot be subtracted.
@@ -174,8 +182,20 @@ So:
   wrong direction or a description parsed as movement is not. No LLM judge is
   used; a human reading the transcripts is the qualitative gate.
 
+**Crashed scenarios.** A scenario that throws is recorded with `crashError` and
+an empty score. `aggregateScenarios` leaves it out of the totals and averages
+(an earlier version summed the crashed row's `-1` placeholders into the
+totals), lists it in its own "Crashed scenarios" row, and fails the run.
+
+**One movement reader.** `movementOf` is the only place that decides a turn's
+movement statement, for the scorer, the coherence verdict and the report's
+"Stated" column alike. A record whose `movementStatement` is `undefined` is
+re-parsed from its text; an explicit `null` means "no movement". The scorer
+once used `??`, which re-parsed on `null`, so it could count a mismatch that
+the per-turn verdict called `no-statement`.
+
 **Output.** `docs/evals/relative-directions-<date>.md`. The process exits 1 if
-any scenario fails.
+any scenario fails or crashes.
 
 ## daemon-action-variation (`pnpm eval:action-variation`)
 
@@ -259,11 +279,19 @@ included, provider pinned) but goes straight to OpenRouter.
 time of day for each side, 1–3 obstacles and `OBJECTIVE_TYPES_PER_PACK` (3)
 objective types, then runs the `OUTER_BUDGET` = 3 loop as production does:
 corrective feedback after a validation failure, and a clean restart after a
-hard error (network, empty content, JSON parse).
+hard error (network, empty content, JSON parse). A hard error on the last
+attempt ends the iteration as `thrown`, whatever kind it was, because
+production throws there too. Only a validation failure on the last attempt is
+`exhausted`. The runner once counted an empty response or a parse failure on
+the last attempt as `exhausted`, which blamed the validator for transport
+problems.
 
 **Needs.** `OPENROUTER_API_KEY`. Knobs: `EVAL_ITERATIONS` (default 10),
 `EVAL_PARALLEL` (default 1, the number of iterations in flight), `EVAL_MODEL`
-(default `PINNED_MODEL`), `EVAL_REASONING=off`.
+(default `PINNED_MODEL`), `EVAL_REASONING=off`. `EVAL_ITERATIONS` and
+`EVAL_PARALLEL` go through `positiveIntegerKnob` (`evals/env-knobs.ts`), which
+rejects anything but a whole number of at least 1. A `NaN` or `0` there used
+to start no workers, so the run finished at once and reported nothing.
 
 **Output.** A summary on stdout (first-try versus after-retry success,
 exhausted, thrown, histograms by rule and by retry unit, cost) and

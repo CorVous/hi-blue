@@ -19,7 +19,7 @@ Three interfaces isolate every LLM call so tests and evals never touch the netwo
 | `RoundLLMProvider` | `BrowserLLMProvider` (`browser-llm-provider.ts`) | `MockRoundLLMProvider` | `round-llm-provider.ts` |
 
 - The browser implementations are the only code that calls `llm-client.ts`. Mocks
-  record their inputs (`calls`, `dualCalls`) and return scripted results.
+  record their inputs (`calls`) and return scripted results.
   `MockRoundLLMProvider` cycles its scripted results in order. It accepts a bare
   string (just the text) or `{ toolCall }` (one tool call) as shorthand for a full
   `RoundTurnResult`.
@@ -30,11 +30,20 @@ Three interfaces isolate every LLM call so tests and evals never touch the netwo
   both the browser and the server-side proxy can import it without pulling in
   browser globals.
 - Both JSON-mode providers (content packs, synthesis) read `content` and fall back
-  to `reasoning` when `content` is empty. GLM-4.7, the model pinned before
+  to `reasoning` when `content` is empty. They share that step and the
+  `JSON.parse` in `parseJsonCompletion` (`json-completion.ts`), each passing
+  its own label and error class. GLM-4.7, the model pinned before
   DeepSeek V4.1 Flash, sometimes returned its whole answer in the reasoning
   channel, and the fallback costs nothing to keep.
 - `CapHitError` (the spend cap, HTTP 429) is never retried by any provider. It
-  surfaces straight away so the UI can show the cap screen.
+  surfaces straight away so the UI can show the cap screen. The same holds for
+  an `HttpStatusError` with status 400, 401, 402 or 403 (`isRetryPointless`):
+  a retry cannot fix a bad request, a bad key or an empty account, and each
+  retry only added its backoff before the player saw the error. Only the proxy's
+  own cap response (`type: rate_limit_exceeded`, `code` of `per-ip-daily` or
+  `global-daily`) becomes a `CapHitError`. Any other 429, such as a provider
+  rate limit the proxy passes through or one OpenRouter returns on the BYOK
+  path, is an ordinary error and is retried like one.
 - **Reasoning defaults.** Every provider defaults to `disableReasoning: false`,
   so the model thinks before it answers. On DeepSeek V4.1 Flash thinking costs
   about one second per daemon turn and fixes the problems seen without it:
@@ -55,9 +64,18 @@ Three interfaces isolate every LLM call so tests and evals never touch the netwo
   per-daemon footer status indicator. `first-token` fires only once a text
   delta arrives, so a stream that errors before its first chunk goes straight
   from `started` to `errored`.
-- Persona synthesis (`BrowserSynthesisProvider`) retries a failed call once.
-  Every persona must come back with exactly `VOICE_EXAMPLES_PER_PERSONA` voice
-  lines, and the ids must match the input exactly (none missing, none extra).
+- Both JSON-mode providers take an optional `signal` at construction and pass
+  it to every call. Once it is aborted they stop: no retry, and a backoff in
+  progress ends at once (`sleepUnlessAborted`).
+- Persona synthesis (`BrowserSynthesisProvider`) retries a failed call once,
+  after `SYNTHESIS_RETRY_BACKOFF_MS` (1 s). It retried at once before, which
+  sent the retry into the same provider rate limit or outage. A
+  `Retry-After` longer than the default is honoured, capped at 10 s
+  (`retryDelayMs`) so a large value cannot stall the loading screen.
+  Every persona must come back with a blurb that is not empty or whitespace
+  only, and with exactly `VOICE_EXAMPLES_PER_PERSONA` voice lines, and the ids
+  must match the input exactly (none missing, none extra). An empty blurb would
+  otherwise reach the Daemon's `<personality>` block as nothing.
 
 ## Type-first bindings
 
@@ -76,10 +94,12 @@ Generation is type-first ([ADR 0014](../adr/0014-type-first-objective-authoring.
    ids, so a renamed id would break the Objective.
 
 A **binding** is the tie between one minted entity (two for Carry) and the
-Objective type it serves (CONTEXT.md, "Objective binding"). The dual (A/B)
-variant (#302) asks one call for two packs. The ids, binding types and structure
-are the same in both, and only names and flavor differ. One shared
-`ValidationSchedule` checks both packs.
+Objective type it serves (CONTEXT.md, "Objective binding"). Generation is always
+dual (A/B, #302): one call asks for two packs. The ids, binding types and
+structure are the same in both, and only names and flavor differ. One shared
+`ValidationSchedule` checks both packs. The older single-pack path
+(`generateContentPacks`, `buildBindingPrompt`, `CONTENT_PACK_SYSTEM_PROMPT`,
+`validateBoundContentPack`) had no production caller and was deleted.
 
 ## Validation (`binding-aware-validator.ts`)
 
@@ -94,15 +114,15 @@ import the provider and the two modules do not form an import cycle.
 
 The field lists at the top of the module mirror the system prompt. Each binding
 has a `*_REQUIRED_FIELDS` list and, where it applies, a `*_FORBIDDEN_FIELDS` list.
-When you change one, change `CONTENT_PACK_SYSTEM_PROMPT`,
-`DUAL_CONTENT_PACK_SYSTEM_PROMPT` and `describeSkeletonInUserMessage` with it.
+When you change one, change `DUAL_CONTENT_PACK_SYSTEM_PROMPT` and
+`describeSkeletonInUserMessage` with it.
 
 | Rule | Checks |
 |---|---|
-| `missing-field` | A required string field is absent or empty, or a binding, decoy, obstacle or the top-level `pack`/`phases`/`packA`/`packB` is missing. |
+| `missing-field` | A required string field is absent or empty (including each pack's `setting` and `wallName`, which the generator copies straight onto the `ContentPack`), or a binding, decoy, obstacle or the top-level `phases`/`packA`/`packB` is missing. |
 | `binding-forbidden-field` | A field outside the binding's shape is present. Decoys may not carry `activationFlavor` or `post*` fields. |
 | `wrong-id` | The id differs from the minted one. The message includes the exact JSON shape, because the model most often drops the `id` from a sub-object. |
-| `wrong-count` | The pack does not have exactly two decoys. |
+| `wrong-count` | The pack does not have exactly two decoys, or does not have exactly the scheduled `m` obstacles. Extra obstacles are rejected too: an obstacle only one pack has would have no Pack A placement to copy. |
 | `actor-presence` | A carry object's `placementFlavor` lacks the literal `{actor}`. |
 | `actor-exclusion` | An obstacle's `shiftFlavor` contains `{actor}`. |
 | `verb-of-activation` | A use_space or use_item `examineDescription` has no use-cue keyword, or a decoy's has one. |
@@ -120,22 +140,26 @@ therefore needs a clue in its `examineDescription`:
 
 - **Carry.** The object's `examineDescription` must name its paired space
   (#253). The prompt demands this at MUST strength, but no validator enforces
-  it. The unused matcher `examineMentionsPairedSpace` (the full space name, or
+  it. The per-binding shape in the user message points at the `name` the model
+  writes for the binding's space, and says not to use the id: an earlier
+  wording quoted the space id ("reference the paired space 'carry-0-space' by
+  name"), which invited the model to write the id into player-visible prose. The unused matcher `examineMentionsPairedSpace` (the full space name, or
   failing that any non-stopword space-name token of four or more characters,
   #382) has been deleted. If enforcement is added later (#346), it can be
   recovered from the repository history.
-- **Use-Space and Use-Item.** `examineMentionsUseTell` matches whole words from
+- **Use-Space and Use-Item.** `findMatchedUseTellKeywords` matches whole words from
   `USE_TELL_KEYWORDS`, so "use" does not match inside "fuse". The list joins the
   Use-Space cue set (#335) and the extra Use-Item cues (#334: crank, handle, flip,
-  twist, wind). Keep it in sync with the cue lists written out in both system
-  prompts, including `DECOY_FORBIDDEN_WORDS`, the base forms a decoy must avoid.
+  twist, wind). Keep it in sync with the cue lists written out in the system
+  prompt, including `DECOY_FORBIDDEN_WORDS`, the base forms a decoy must avoid.
   The decoy line spells the words out, and says they are banned even in an
   innocent sense, because DeepSeek otherwise writes "handle" or "turn" into
   ordinary objects: in the 2026-09-28 content-pack eval, 3 of 10 packs failed
   their first attempt on a decoy `verb-of-activation`, and 0 of 10 once the list
   was written out. `USE_CUE_KEYWORD_HINTS` is the short subset quoted back in corrective
-  feedback. `findMatchedUseTellKeywords` names the exact word that broke a
-  decoy, so the model does not have to guess it from the prompt.
+  feedback. The validator treats any match as a use-cue; for a decoy it also
+  quotes the matched words back, so the model does not have to guess which one
+  broke the rule.
 - **Convergence (#336).** The tell is enforced by the prompt only. The prompts
   require the space to hint that shared occupancy matters, but no keyword
   validator checks it. A curated list (meet, gather, together…) was rejected. It
@@ -145,18 +169,23 @@ therefore needs a clue in its `examineDescription`:
 
 ## Retry strategy (`BrowserContentPackProvider`)
 
-Each generation makes up to `OUTER_ATTEMPT_BUDGET` (3) attempts. The dual path
-uses the same logic.
+Each generation makes up to `OUTER_ATTEMPT_BUDGET` (3) attempts.
 
 - **Validation failure.** The next attempt resends the system and user prompts,
   the previous raw JSON as an assistant turn, and a corrective user turn.
-  `buildCorrectiveFeedback` groups the errors by `retryUnit` ("For carry binding
-  carry-0: …"), so the model sees every problem with one entity in one place, and
-  it removes duplicate messages. The model is asked to repair the JSON in place
-  and keep the ids and any fields that passed.
-- **Hard error** (empty response, JSON parse failure, network). The provider
-  waits `BACKOFF_MS_BEFORE_RETRY[attempt]` and retries from a clean conversation:
-  the previous output and the feedback are both dropped.
+  `buildCorrectiveFeedback` groups the errors by `retryUnit` ("For packA carry
+  binding carry-0: …"), so the model sees every problem with one entity in one
+  place, and it removes duplicate messages. The validator tags every error from
+  a pack with that pack's label (`retryUnit.pack`, `"A"` or `"B"`) and the group
+  header names it with the JSON key (`packA`, `packB`). Both packs share ids, so
+  without the label the same mistake in A and B collapsed into one bullet and
+  the model could not tell which pack to fix. The model is asked to repair the
+  JSON in place and keep the ids and any fields that passed.
+- **Hard error** (empty response, JSON parse failure, network, a retryable
+  HTTP status). The provider waits `BACKOFF_MS_BEFORE_RETRY[attempt]` (or a
+  longer `Retry-After`, capped at 10 s) and retries from a clean conversation:
+  the previous output and the feedback are both dropped. The cap, 400, 401, 402,
+  403 and an aborted signal are rethrown at once.
 - If the last attempt fails, its error is rethrown. If every attempt fails
   validation, the provider throws `ContentPackError("…exhausted retry budget")`.
 
@@ -166,7 +195,10 @@ proposed. Retry units now only group the corrective feedback. The ADR also chose
 a fresh call over continuing the conversation; the code now continues the
 conversation. `RetryUnit` still lists `objective-pair`, which dates from the
 pre-binding validator. `objective-pair` with an empty `pairId` marks errors that
-belong to the whole pack.
+belong to the whole pack. A binding's retry unit is named after its binding
+index (`carry-0`, `useSpace-1`, …), the same `id` the prompt asks the model to
+echo on the binding, so two bindings never share one feedback group. Retry
+units carry no phase index: there is one phase, so it was always 0.
 
 ### Attempt log (`content-pack-attempts.ts`)
 
@@ -208,9 +240,23 @@ player clicks BEGIN.
   see the rejection.
 - `generateContentPacksOnlySplit` (#380) regenerates only the packs and reuses
   the resolved personas. Its `personasPromise` resolves immediately, so code
-  that chains on it works unchanged.
+  that chains on it works unchanged. It never rejects, so it needs no
+  `suppressUnhandledRejection`. Both split functions run the packs through the
+  same `generateContentPacks` helper.
+- `BootstrapOpts.signal` (and the `signal` option of
+  `generateContentPacksOnlySplit`) is handed to the default browser providers,
+  so aborting it cancels the in-flight request and any pending retry.
 - `buildSameDaemonsSession` implements the end-game "Same Daemons, New Room" and
-  "Continue" choices (#307).
+  "Continue" choices (#307), and the picker's `[ continue with new room ]`.
+  It gives up after `BOOTSTRAP_LOADING_TIMEOUT_MS` (300 s, the same budget as
+  the new-game bootstrap, which now lives here and is imported by
+  `game-bootstrap-flow.ts`): the timer aborts the provider's signal, which
+  cancels the in-flight request and any pending retry, and the build rejects
+  with `NewRoomTimeoutError` ("content-pack generation timed out") even if a
+  provider ignores the signal. Without it a hung request kept the picker row
+  and the endgame choices locked for good, since both only unlock when the
+  build settles. A caller can also pass its own `signal`; aborting it aborts
+  the build the same way.
 - `BootstrapOpts`:
   - `personasRng` and `contentPackRng` (spike #239) take precedence over `rng`.
     The two generators run concurrently, so each needs its own stream for a
@@ -237,6 +283,24 @@ session can be built or saved until the content packs arrive.
   only when no personas are cached.
 - `clearPendingBootstrap` runs once the game view has built and saved the
   session. After that, entering the game view takes the normal restore path.
+- **Each bootstrap owns an `AbortController`.** `startBootstrap` and
+  `restartContentPacks` pass its signal down, and installing a new entry
+  aborts the one it replaces. `clearPendingBootstrap` aborts the current one
+  (a no-op once it has succeeded), which covers abandon and a bootstrap
+  discarded because the session filled up meanwhile.
+  `failPendingBootstrap(entry, reason)` marks the entry `failed` and aborts it
+  with that reason; the game view calls it when the loading timeout fires.
+  The timeout used to leave the calls running, and the entry kept its
+  `pending` status, so a regenerate after a timeout during persona synthesis
+  (`restartContentPacks` falls back to `startBootstrap`) got the same stalled
+  entry back instead of a fresh one.
+- **Call meta for the current entry only.** A persona failure also rejects the
+  content packs (they wait for the persona ids), and both handlers used to
+  record a retry, so the dev strip counted one failure twice. `markFailed`
+  records the first failure only. An entry that is no longer current (cleared,
+  aborted, replaced) no longer writes `PendingCallMeta` when it settles, so a
+  bootstrap the player left behind cannot overwrite the strip of the one on
+  screen.
 - `PendingCallMeta` (call name, start time, retry count out of
   `PENDING_CALL_RETRY_MAX`, last error) is what the dev inspector's pending strip
   displays.
@@ -278,7 +342,9 @@ CONTEXT.md under **AiId** and **blue**.
   border, panel and mention highlight still show when Send is disabled, so a
   locked addressee still gets visual feedback.
 - `applyAddresseeChange` rewrites the first mention in place, keeping the cursor
-  on the same side of it. With no mention, it prepends `*name `.
+  on the same side of it. With no mention, it prepends `*name `. The mention
+  pattern captures only `[A-Za-z0-9]`, so trailing punctuation is never part of
+  the captured name and stays where it was after the rewrite.
 - `buildPersonaColorMap` reads the persona's `color` field, never the AiId, so
   changing the palette means changing only the persona records.
 

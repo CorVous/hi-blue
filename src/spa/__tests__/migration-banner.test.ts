@@ -1,15 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { awaitIgnoringRejection } from "./fixtures/await-ignoring-rejection";
 import { installLocalStorageStub } from "./fixtures/local-storage";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-vi.mock("../../content", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("../../content")>();
-	return {
-		...actual,
-		generatePersonas: async () => STATIC_PERSONAS,
-	};
-});
+vi.mock("../../content/persona-generator", () => ({
+	generatePersonas: async () => STATIC_PERSONAS,
+}));
 
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
@@ -86,14 +83,6 @@ function getMain(): HTMLElement {
 	const main = document.querySelector<HTMLElement>("main");
 	if (!main) throw new Error("main element not found");
 	return main;
-}
-
-async function awaitIgnoringRejection(
-	promise: Promise<unknown>,
-): Promise<void> {
-	try {
-		await promise;
-	} catch {}
 }
 
 describe("renderStart — legacy-save-discarded banner (via reason param)", () => {

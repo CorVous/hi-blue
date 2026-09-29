@@ -18,9 +18,10 @@ import type {
 	ToolName,
 } from "../../src/spa/game/types.js";
 import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
-import type { ScenarioScore, TurnRecord } from "./scoring.js";
+import type { ScenarioOutcome, TurnRecord } from "./scoring.js";
 import {
-	parseMovementStatement,
+	aggregateScenarios,
+	movementOf,
 	parseStatedCardinal,
 	referencedCardinals,
 	scoreScenario,
@@ -269,10 +270,8 @@ function dispatchModelResponse(
 	return { game: dispatchResult.game, toolResults, toolCallDirection };
 }
 
-interface ScenarioResult {
-	name: string;
+interface ScenarioResult extends ScenarioOutcome {
 	turns: TurnRecord[];
-	score: ScenarioScore;
 }
 
 async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
@@ -489,24 +488,15 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 }
 
 function renderReport(results: ScenarioResult[], date: string): string {
-	const overallPass = results.every((r) => r.score.passed);
-	const totalCardinalTurns = results.reduce(
-		(n, r) => n + r.score.cardinalStatementTurns,
-		0,
-	);
-	const totalCardinalReferences = results.reduce(
-		(n, r) => n + r.score.cardinalReferenceCount,
-		0,
-	);
-	const avgSilence =
-		results.reduce((n, r) => n + r.score.silenceRate, 0) / results.length;
-	const avgCoherence =
-		results.reduce((n, r) => n + r.score.structuralCoherenceRate, 0) /
-		results.length;
-	const totalMismatches = results.reduce(
-		(n, r) => n + r.score.structuralMismatchCount,
-		0,
-	);
+	const {
+		passed: overallPass,
+		crashedScenarios,
+		totalCardinalTurns,
+		totalCardinalReferences,
+		avgSilence,
+		avgCoherence,
+		totalMismatches,
+	} = aggregateScenarios(results);
 
 	const lines: string[] = [
 		`# Cardinal-directions eval — ${date}`,
@@ -519,6 +509,7 @@ function renderReport(results: ScenarioResult[], date: string): string {
 		`| Cardinal references | ${totalCardinalReferences} | — (evidence) | — |`,
 		`| Structural coherence | ${(avgCoherence * 100).toFixed(0)}% | 100% when stated | ${totalMismatches === 0 ? "✓" : "✗"} |`,
 		`| Silence (no tool call) rate | ${(avgSilence * 100).toFixed(0)}% | — | — |`,
+		`| Crashed scenarios (excluded above) | ${crashedScenarios.length === 0 ? "none" : crashedScenarios.join(", ")} | none | ${crashedScenarios.length === 0 ? "✓" : "✗"} |`,
 		`| Overall | — | — | ${overallPass ? "PASS" : "FAIL"} |`,
 		"",
 		"> **Note on transcripts**: Full turn transcripts below allow qualitative",
@@ -534,6 +525,11 @@ function renderReport(results: ScenarioResult[], date: string): string {
 	for (const result of results) {
 		lines.push(`## Scenario: ${result.name}`);
 		lines.push("");
+		if (result.crashError !== undefined) {
+			lines.push(`**Result:** CRASHED — ${result.crashError}`);
+			lines.push("");
+			continue;
+		}
 		lines.push(`**Result:** ${result.score.passed ? "PASS" : "FAIL"}`);
 		lines.push(
 			`Cardinal statement turns: ${result.score.cardinalStatementTurns} | ` +
@@ -546,8 +542,7 @@ function renderReport(results: ScenarioResult[], date: string): string {
 		lines.push("### Turn transcripts");
 		lines.push("");
 		for (const turn of result.turns) {
-			const statedMovement =
-				turn.movementStatement ?? parseMovementStatement(turn.text);
+			const statedMovement = movementOf(turn);
 			lines.push(`#### Turn ${turn.turn}`);
 			lines.push("");
 			lines.push(
@@ -603,14 +598,8 @@ async function main(): Promise<void> {
 			results.push({
 				name: label,
 				turns: [],
-				score: {
-					cardinalStatementTurns: -1,
-					cardinalReferenceCount: -1,
-					silenceRate: 0,
-					structuralCoherenceRate: 0,
-					structuralMismatchCount: 0,
-					passed: false,
-				},
+				score: scoreScenario([]),
+				crashError: err instanceof Error ? err.message : String(err),
 			});
 		}
 	}
@@ -626,7 +615,7 @@ async function main(): Promise<void> {
 	console.log("");
 	console.log(`Report written to: ${outPath}`);
 
-	const overallPass = results.every((r) => r.score.passed);
+	const overallPass = aggregateScenarios(results).passed;
 	process.exit(overallPass ? 0 : 1);
 }
 

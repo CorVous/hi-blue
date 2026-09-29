@@ -4,8 +4,6 @@ import type {
 	RawBoundPack,
 } from "../../spa/game/binding-aware-validator.js";
 import type {
-	BindingContentPackInput,
-	BindingContentPackProviderResult,
 	DualBindingContentPackInput,
 	DualBindingContentPackProviderResult,
 } from "../../spa/game/content-pack-provider.js";
@@ -45,7 +43,7 @@ const SETTING_POOL_2: readonly string[] = [
 const AI_IDS = ["red", "green", "cyan"];
 
 function makeRawBinding(
-	binding: BindingContentPackInput["phases"][number]["bindings"][number],
+	binding: DualBindingContentPackInput["phases"][number]["bindings"][number],
 	phaseIdx: number,
 	bindingIdx: number,
 ): RawBinding {
@@ -117,11 +115,10 @@ function makeRawBinding(
 	}
 }
 
-function makeDualMockProvider(): MockContentPackProvider {
+function makeDualMockProvider(
+	adjust: (rawPackB: RawBoundPack) => void = () => {},
+): MockContentPackProvider {
 	return new MockContentPackProvider(
-		(_input: BindingContentPackInput): BindingContentPackProviderResult => ({
-			phases: [],
-		}),
 		(
 			input: DualBindingContentPackInput,
 		): DualBindingContentPackProviderResult => {
@@ -177,9 +174,11 @@ function makeDualMockProvider(): MockContentPackProvider {
 					};
 				};
 
+				const rawPackB = makeRawPackVariant(phase.settingB, "B");
+				adjust(rawPackB);
 				return {
 					rawPackA: makeRawPackVariant(phase.settingA, "A"),
-					rawPackB: makeRawPackVariant(phase.settingB, "B"),
+					rawPackB,
 				};
 			});
 			return { phases };
@@ -242,6 +241,29 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 		}
 	});
 
+	it("keeps only the scheduled obstacles when Pack B returns extras", async () => {
+		const rng = mulberry32Rng(99);
+		const provider = makeDualMockProvider((rawPackB) => {
+			rawPackB.obstacles?.push({
+				id: "obstacle-extra",
+				name: "Stray Boulder",
+				examineDescription: "A boulder nobody asked for.",
+				shiftFlavor: "The boulder settles.",
+			});
+		});
+
+		const { packA, packB } = await generateDualContentPacks(
+			rng,
+			SETTING_POOL_2,
+			ONE_OBSTACLE_CONFIG,
+			provider,
+			AI_IDS,
+		);
+
+		expect(obstacles(packB).map((o) => o.id)).toEqual(["obstacle-0"]);
+		expect(allEntityIds(packB)).toEqual(allEntityIds(packA));
+	});
+
 	it("makes exactly one LLM call for the dual packs", async () => {
 		const rng = mulberry32Rng(99);
 		const provider = makeDualMockProvider();
@@ -254,8 +276,7 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 			AI_IDS,
 		);
 
-		expect(provider.dualCalls).toHaveLength(1);
-		expect(provider.calls).toHaveLength(0);
+		expect(provider.calls).toHaveLength(1);
 	});
 
 	it("throws when settings pool has fewer than 2 entries", async () => {

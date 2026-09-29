@@ -37,7 +37,7 @@ export interface RoundLLMProvider {
 	): Promise<RoundTurnResult>;
 }
 
-export type MockRoundResult =
+type MockRoundResult =
 	| string
 	| RoundTurnResult
 	| {

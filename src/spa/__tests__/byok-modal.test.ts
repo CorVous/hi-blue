@@ -3,6 +3,7 @@ import {
 	clearKey,
 	formatRelativeTime,
 	initByokModal,
+	KEY_VALIDATION_TIMEOUT_MS,
 	openByokModal,
 	readMeta,
 	validateOpenRouterKey,
@@ -82,6 +83,33 @@ describe("validateOpenRouterKey", () => {
 	});
 });
 
+describe("validateOpenRouterKey timeout", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("aborts a stalled request after the timeout and reports network-or-5xx", async () => {
+		vi.useFakeTimers();
+		const stalledFetch = vi.fn(
+			(_url: string, init: RequestInit) =>
+				new Promise<Response>((_resolve, reject) => {
+					init.signal?.addEventListener("abort", () =>
+						reject(new DOMException("aborted", "AbortError")),
+					);
+				}),
+		);
+		const pending = validateOpenRouterKey(
+			"sk-or-v1-testkey",
+			stalledFetch as unknown as typeof fetch,
+		);
+		await vi.advanceTimersByTimeAsync(KEY_VALIDATION_TIMEOUT_MS);
+		await expect(pending).resolves.toEqual({
+			kind: "network-or-5xx",
+			status: null,
+		});
+	});
+});
+
 describe("storage helpers", () => {
 	let store: Record<string, string>;
 
@@ -134,6 +162,83 @@ describe("storage helpers", () => {
 		clearKey();
 		expect(store.openrouter_key).toBeUndefined();
 		expect(store.openrouter_key_meta).toBeUndefined();
+	});
+});
+
+describe("storage helpers when storage refuses writes", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("writeKeyAndMeta reports failure and removes a half-written key", () => {
+		const store: Record<string, string> = {};
+		vi.stubGlobal("localStorage", {
+			getItem: (k: string) => store[k] ?? null,
+			setItem: (k: string, v: string) => {
+				if (k === "openrouter_key_meta") {
+					throw new DOMException("full", "QuotaExceededError");
+				}
+				store[k] = v;
+			},
+			removeItem: (k: string) => {
+				delete store[k];
+			},
+		});
+
+		const stored = writeKeyAndMeta("sk-or-v1-mykey", {
+			validatedAt: "",
+			status: "unverified",
+			keySuffix: "ykey",
+		});
+
+		expect(stored).toBe(false);
+		expect(store.openrouter_key).toBeUndefined();
+	});
+
+	it("writeKeyAndMeta restores the previously working key and meta when the new write fails", () => {
+		const previousMeta = JSON.stringify({
+			validatedAt: "2024-01-01T00:00:00.000Z",
+			status: "validated",
+			keySuffix: "orig",
+		});
+		const store: Record<string, string> = {
+			openrouter_key: "sk-or-v1-original",
+			openrouter_key_meta: previousMeta,
+		};
+		vi.stubGlobal("localStorage", {
+			getItem: (k: string) => store[k] ?? null,
+			setItem: (k: string, v: string) => {
+				if (k === "openrouter_key_meta" && v !== previousMeta) {
+					throw new DOMException("full", "QuotaExceededError");
+				}
+				store[k] = v;
+			},
+			removeItem: (k: string) => {
+				delete store[k];
+			},
+		});
+
+		const stored = writeKeyAndMeta("sk-or-v1-replacement", {
+			validatedAt: "",
+			status: "unverified",
+			keySuffix: "ment",
+		});
+
+		expect(stored).toBe(false);
+		expect(store.openrouter_key).toBe("sk-or-v1-original");
+		expect(store.openrouter_key_meta).toBe(previousMeta);
+	});
+
+	it("clearKey reports failure instead of throwing when storage is blocked", () => {
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => undefined,
+			removeItem: () => {
+				throw new DOMException("blocked", "SecurityError");
+			},
+		});
+
+		expect(clearKey()).toBe(false);
 	});
 });
 
@@ -352,6 +457,55 @@ describe("openByokModal UI", () => {
 		expect(getEl("byok-status").textContent).toBe("Key validated.");
 	});
 
+	it("a validated key that storage refuses says so instead of hanging on 'Validating…'", async () => {
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => {
+				throw new DOMException("full", "QuotaExceededError");
+			},
+			removeItem: () => undefined,
+		});
+		openByokModal();
+		initByokModal();
+
+		getEl<HTMLInputElement>("byok-key-input").value = "sk-or-v1-goodkey";
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				status: 200,
+				json: async () => ({ data: {} }),
+			}),
+		);
+
+		getEl("byok-validate-save").click();
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toContain(
+				"Couldn't store the key",
+			);
+		});
+		expect(closeSpy).not.toHaveBeenCalled();
+	});
+
+	it("Clear key keeps the dialog open and explains when storage is blocked", () => {
+		store.openrouter_key = "sk-or-v1-somekey";
+		openByokModal();
+		initByokModal();
+		vi.stubGlobal("localStorage", {
+			getItem: (k: string) => store[k] ?? null,
+			setItem: () => undefined,
+			removeItem: () => {
+				throw new DOMException("blocked", "SecurityError");
+			},
+		});
+
+		getEl("byok-clear").click();
+
+		expect(getEl("byok-status").textContent).toContain(
+			"Couldn't clear the key",
+		);
+		expect(closeSpy).not.toHaveBeenCalled();
+	});
+
 	it("401 → renders verbatim 401 copy, no storage write", async () => {
 		openByokModal();
 		initByokModal();
@@ -459,6 +613,121 @@ describe("openByokModal UI", () => {
 		expect(meta.status).toBe("validated");
 		expect(meta.validatedAt).not.toBe("");
 		expect(getEl("byok-status").textContent).toBe("Key validated.");
+	});
+
+	it("Save unverified after a failed Re-validate keeps the stored key, not the masked display text", async () => {
+		store.openrouter_key = "sk-or-v1-storedkey9876";
+		store.openrouter_key_meta = JSON.stringify({
+			validatedAt: "",
+			status: "unverified",
+			keySuffix: "9876",
+		});
+
+		openByokModal();
+		initByokModal();
+		expect(getEl<HTMLInputElement>("byok-key-input").value).toContain("••••");
+
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 503 }));
+		getEl("byok-revalidate").click();
+		await vi.waitFor(() => {
+			expect(getEl("byok-save-unverified").hidden).toBe(false);
+		});
+
+		getEl("byok-save-unverified").click();
+
+		expect(store.openrouter_key).toBe("sk-or-v1-storedkey9876");
+		// biome-ignore lint/style/noNonNullAssertion: test assertion
+		const meta = JSON.parse(store.openrouter_key_meta!);
+		expect(meta.keySuffix).toBe("9876");
+		expect(meta.status).toBe("unverified");
+	});
+
+	it("Save unverified saves the key that failed validation even if the input changed since", async () => {
+		openByokModal();
+		initByokModal();
+
+		const keyInput = getEl<HTMLInputElement>("byok-key-input");
+		keyInput.value = "sk-or-v1-validatedkey";
+
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 502 }));
+		getEl("byok-validate-save").click();
+		await vi.waitFor(() => {
+			expect(getEl("byok-save-unverified").hidden).toBe(false);
+		});
+
+		keyInput.value = "sk-or-v1-editedafter";
+		getEl("byok-save-unverified").click();
+
+		expect(store.openrouter_key).toBe("sk-or-v1-validatedkey");
+	});
+
+	it("a second Validate & save click while one is in flight does not validate again", async () => {
+		openByokModal();
+		initByokModal();
+
+		getEl<HTMLInputElement>("byok-key-input").value = "sk-or-v1-somekey";
+
+		let respond: (value: { status: number }) => void = () => undefined;
+		const fetchMock = vi.fn(
+			() =>
+				new Promise<{ status: number }>((resolve) => {
+					respond = resolve;
+				}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		getEl("byok-validate-save").click();
+		getEl("byok-validate-save").click();
+		getEl("byok-revalidate").click();
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		respond({ status: 401 });
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toContain("didn't authenticate");
+		});
+
+		getEl("byok-validate-save").click();
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		respond({ status: 401 });
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toContain("didn't authenticate");
+		});
+	});
+
+	it("a stalled validation times out, releases the lock, and ignored clicks say validation is in progress", async () => {
+		vi.useFakeTimers();
+		try {
+			openByokModal();
+			initByokModal();
+
+			getEl<HTMLInputElement>("byok-key-input").value = "sk-or-v1-somekey";
+
+			const fetchMock = vi.fn(
+				(_url: string, init: RequestInit) =>
+					new Promise<Response>((_resolve, reject) => {
+						init.signal?.addEventListener("abort", () =>
+							reject(new DOMException("aborted", "AbortError")),
+						);
+					}),
+			);
+			vi.stubGlobal("fetch", fetchMock);
+
+			getEl("byok-validate-save").click();
+			getEl("byok-validate-save").click();
+			expect(getEl("byok-status").textContent).toBe("Validation in progress…");
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+
+			await vi.advanceTimersByTimeAsync(KEY_VALIDATION_TIMEOUT_MS);
+			expect(getEl("byok-status").textContent).toContain(
+				"Couldn't reach OpenRouter",
+			);
+
+			getEl("byok-validate-save").click();
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			await vi.advanceTimersByTimeAsync(KEY_VALIDATION_TIMEOUT_MS);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("Clear key removes both localStorage entries with no confirm prompt", async () => {

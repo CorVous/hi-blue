@@ -3,13 +3,10 @@ import type {
 	AiId,
 	AiTurnAction,
 	CarryObjective,
-	ContentPack,
 	ConvergenceObjective,
 	GameState,
 	Objective,
 	PersonaSpatialState,
-	UseItemObjective,
-	UseSpaceObjective,
 	WorldState,
 } from "./types";
 
@@ -28,18 +25,6 @@ export function isCarryObjectiveSatisfied(
 	if (!isGridPosition(spaceEntity.holder)) return false;
 
 	return positionsEqual(objectEntity.holder, spaceEntity.holder);
-}
-
-export function isUseItemObjectiveSatisfied(
-	objective: UseItemObjective,
-): boolean {
-	return objective.satisfactionState === "satisfied";
-}
-
-export function isUseSpaceObjectiveSatisfied(
-	objective: UseSpaceObjective,
-): boolean {
-	return objective.satisfactionState === "satisfied";
 }
 
 export function checkConvergenceTier(
@@ -67,28 +52,23 @@ export function checkConvergenceTier(
 	return { tier: 2, spaceId };
 }
 
+export function isObjectiveSatisfied(
+	objective: Objective,
+	world: WorldState,
+): boolean {
+	if (objective.kind === "carry") {
+		return isCarryObjectiveSatisfied(objective, world);
+	}
+	return objective.satisfactionState === "satisfied";
+}
+
 export function checkWinCondition(
 	world: WorldState,
 	objectives: Objective[],
 ): boolean {
-	for (const objective of objectives) {
-		switch (objective.kind) {
-			case "carry":
-				if (!isCarryObjectiveSatisfied(objective, world)) return false;
-				break;
-			case "use_item":
-				if (!isUseItemObjectiveSatisfied(objective)) return false;
-				break;
-			case "use_space":
-				if (!isUseSpaceObjectiveSatisfied(objective)) return false;
-				break;
-			case "convergence":
-				if (objective.satisfactionState !== "satisfied") return false;
-				break;
-		}
-	}
-
-	return true;
+	return objectives.every((objective) =>
+		isObjectiveSatisfied(objective, world),
+	);
 }
 
 export function checkBudgetExhausted(
@@ -119,7 +99,6 @@ export function outcomeOfCompletedGame(
 
 export function checkPlacementFlavor(
 	action: AiTurnAction,
-	_contentPack: ContentPack,
 	world: WorldState,
 ): string | null {
 	const toolCall = action.toolCall;

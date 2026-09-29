@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { UpstreamErrorBodyError } from "../llm-errors.js";
 import type { ToolCallResult, UsageInfo } from "../streaming.js";
 import { parseSSEStream } from "../streaming.js";
 
@@ -380,5 +381,240 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.name).toBe("put_down");
+	});
+
+	it("parses a final event that ends without a blank line when the stream closes", async () => {
+		const deltas: string[] = [];
+		await parseSSEStream(
+			makeSSEStream([
+				`data: ${JSON.stringify({ choices: [{ delta: { content: "first" } }] })}\n\n`,
+				`data: ${JSON.stringify({ choices: [{ delta: { content: "last" } }] })}`,
+			]),
+			(text) => deltas.push(text),
+		);
+
+		expect(deltas).toEqual(["first", "last"]);
+	});
+
+	function toolCallChunks(finishReason: string | null): string[] {
+		return [
+			`data: ${JSON.stringify({
+				choices: [
+					{
+						delta: {
+							tool_calls: [
+								{
+									index: 0,
+									id: "call_1",
+									function: { name: "message", arguments: '{"to":' },
+								},
+							],
+						},
+					},
+				],
+			})}\n\n`,
+			`data: ${JSON.stringify({
+				choices: [
+					{
+						delta: {
+							tool_calls: [{ index: 0, function: { arguments: '"blue"}' } }],
+						},
+						finish_reason: finishReason,
+					},
+				],
+			})}\n\n`,
+		];
+	}
+
+	it("flushes accumulated tool calls when the stream closes after finish_reason stop without [DONE]", async () => {
+		const toolCalls: ToolCallResult[] = [];
+		await parseSSEStream(
+			makeSSEStream(toolCallChunks("stop")),
+			() => {},
+			undefined,
+			(call) => toolCalls.push(call),
+		);
+
+		expect(toolCalls).toEqual([
+			{ id: "call_1", name: "message", argumentsJson: '{"to":"blue"}' },
+		]);
+	});
+
+	it("drops accumulated tool calls when the stream closes without [DONE] or any finish_reason", async () => {
+		const toolCalls: ToolCallResult[] = [];
+		await parseSSEStream(
+			makeSSEStream(toolCallChunks(null)),
+			() => {},
+			undefined,
+			(call) => toolCalls.push(call),
+		);
+
+		expect(toolCalls).toEqual([]);
+	});
+
+	it("splits events delimited by CRLF, including a CR and LF that arrive in separate chunks", async () => {
+		const first = `data: ${JSON.stringify({ choices: [{ delta: { content: "crlf" } }] })}`;
+		const second = `data: ${JSON.stringify({ choices: [{ delta: { content: "split" } }] })}`;
+		const deltas: string[] = [];
+		await parseSSEStream(
+			makeSSEStream([
+				`${first}\r\n\r`,
+				`\n${second}\r\n\r\n`,
+				"data: [DONE]\r\n\r\n",
+			]),
+			(text) => deltas.push(text),
+		);
+
+		expect(deltas).toEqual(["crlf", "split"]);
+	});
+
+	it("splits events delimited by bare CR", async () => {
+		const deltas: string[] = [];
+		await parseSSEStream(
+			makeSSEStream([
+				`data: ${JSON.stringify({ choices: [{ delta: { content: "cr" } }] })}\r\r`,
+				"data: [DONE]\r\r",
+			]),
+			(text) => deltas.push(text),
+		);
+
+		expect(deltas).toEqual(["cr"]);
+	});
+});
+
+describe("parseSSEStream — mid-stream upstream errors", () => {
+	it("throws UpstreamErrorBodyError when an error object arrives before any content or tool call", async () => {
+		const sseData = [
+			`data: ${JSON.stringify({ choices: [{ delta: { reasoning: "hmm" } }] })}\n\n`,
+			`data: ${JSON.stringify({
+				error: { code: 502, message: "Provider disconnected" },
+				choices: [{ delta: { content: "" }, finish_reason: "error" }],
+			})}\n\n`,
+			`data: [DONE]\n\n`,
+		].join("");
+
+		const error = await parseSSEStream(
+			makeSSEStream([sseData]),
+			() => {},
+		).catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(UpstreamErrorBodyError);
+		expect((error as UpstreamErrorBodyError).upstreamMessage).toBe(
+			"Provider disconnected",
+		);
+		expect((error as UpstreamErrorBodyError).upstreamCode).toBe("502");
+	});
+
+	it("reports the usage carried by an error chunk before throwing", async () => {
+		const sseData = `data: ${JSON.stringify({
+			error: { code: 502, message: "Provider disconnected" },
+			choices: [{ delta: {}, finish_reason: "error" }],
+			usage: { cost: 0.0042, prompt_tokens: 900, completion_tokens: 0 },
+		})}\n\n`;
+
+		const usages: UsageInfo[] = [];
+		await expect(
+			parseSSEStream(
+				makeSSEStream([sseData]),
+				() => {},
+				undefined,
+				undefined,
+				(usage) => usages.push(usage),
+			),
+		).rejects.toBeInstanceOf(UpstreamErrorBodyError);
+
+		expect(usages).toHaveLength(1);
+		expect(usages[0]?.cost).toBe(0.0042);
+	});
+
+	it("ends the turn with the content received when an error object arrives after it", async () => {
+		const sseData = [
+			`data: ${JSON.stringify({ choices: [{ delta: { content: "Hel" } }] })}\n\n`,
+			`data: ${JSON.stringify({
+				error: { code: 502, message: "Provider disconnected" },
+				choices: [{ delta: { content: "" }, finish_reason: "error" }],
+				usage: { cost: 0.001 },
+			})}\n\n`,
+			`data: ${JSON.stringify({ choices: [{ delta: { content: "ignored" } }] })}\n\n`,
+			`data: [DONE]\n\n`,
+		].join("");
+
+		const deltas: string[] = [];
+		const usages: UsageInfo[] = [];
+		await parseSSEStream(
+			makeSSEStream([sseData]),
+			(text) => deltas.push(text),
+			undefined,
+			undefined,
+			(usage) => usages.push(usage),
+		);
+
+		expect(deltas).toEqual(["Hel"]);
+		expect(usages.map((usage) => usage.cost)).toEqual([0.001]);
+	});
+
+	it("flushes the tool calls received when an error object arrives after them", async () => {
+		const sseData = [
+			`data: ${JSON.stringify({
+				choices: [
+					{
+						delta: {
+							tool_calls: [
+								{
+									index: 0,
+									id: "call_1",
+									function: {
+										name: "message",
+										arguments: '{"to":"blue","content":"hi"}',
+									},
+								},
+							],
+						},
+					},
+				],
+			})}\n\n`,
+			`data: ${JSON.stringify({
+				error: { code: 502, message: "Provider disconnected" },
+				choices: [{ delta: {}, finish_reason: "error" }],
+			})}\n\n`,
+		].join("");
+
+		const calls: ToolCallResult[] = [];
+		await parseSSEStream(
+			makeSSEStream([sseData]),
+			() => {},
+			undefined,
+			(call) => calls.push(call),
+		);
+
+		expect(calls).toEqual([
+			{
+				id: "call_1",
+				name: "message",
+				argumentsJson: '{"to":"blue","content":"hi"}',
+			},
+		]);
+	});
+
+	it("does not throw for finish_reason error without an error object", async () => {
+		const sseData = `data: ${JSON.stringify({
+			choices: [{ delta: {}, finish_reason: "error" }],
+		})}\n\ndata: [DONE]\n\n`;
+
+		const deltas: string[] = [];
+		await parseSSEStream(makeSSEStream([sseData]), (text) => deltas.push(text));
+
+		expect(deltas).toEqual([]);
+	});
+
+	it("still drops malformed JSON chunks without throwing", async () => {
+		const sseData = `data: {not json\n\ndata: ${JSON.stringify({
+			choices: [{ delta: { content: "ok" } }],
+		})}\n\ndata: [DONE]\n\n`;
+
+		const deltas: string[] = [];
+		await parseSSEStream(makeSSEStream([sseData]), (text) => deltas.push(text));
+
+		expect(deltas).toEqual(["ok"]);
 	});
 });

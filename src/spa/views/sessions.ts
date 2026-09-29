@@ -2,6 +2,7 @@ import { paintBanner, paintTopInfo } from "../bbs-chrome.js";
 import { readStoredByokKey } from "../openrouter-key.js";
 import { lookupArchiveVersion } from "../persistence/archive-map.js";
 import {
+	captureActiveSession,
 	dupSession,
 	getActiveSessionId,
 	getArchivedSessionInfo,
@@ -10,7 +11,7 @@ import {
 	listSessions,
 	loadActiveSession,
 	loadArchivedSession,
-	mintSession,
+	mintSessionId,
 	rmArchivedSession,
 	rmSession,
 	seedFromArchive,
@@ -22,7 +23,7 @@ import {
 	renderReasonBanner,
 	VERSION_MISMATCH_MESSAGE,
 } from "./archived-build-link.js";
-import { dropListenersByCloning } from "./dom.js";
+import { dropListenersByCloning, setHidden } from "./dom.js";
 
 const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 	broken: "The active Session was unreadable and could not be loaded.",
@@ -30,19 +31,12 @@ const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 };
 
 function showOnly(doc: Document, visibleId: string): void {
-	const hide = [
-		"#start-screen",
-		"#panels",
-		"#composer",
-		"#endgame",
-		"#cap-hit",
-	];
-	for (const sel of hide) {
-		const el = doc.querySelector<HTMLElement>(sel);
-		if (el) el.hidden = true;
-	}
-	const target = doc.querySelector<HTMLElement>(visibleId);
-	if (target) target.hidden = false;
+	setHidden(
+		doc,
+		["#start-screen", "#panels", "#composer", "#endgame", "#cap-hit"],
+		true,
+	);
+	setHidden(doc, [visibleId], false);
 }
 
 function buildTreeLines(doc: Document, labels: string[]): HTMLElement {
@@ -87,9 +81,7 @@ function buildSpan(
 }
 
 function showGlobalChrome(doc: Document): void {
-	for (const selector of ["#stage > header", "#topinfo", "#banner"]) {
-		doc.querySelector<HTMLElement>(selector)?.removeAttribute("hidden");
-	}
+	setHidden(doc, ["#stage > header", "#topinfo", "#banner"], false);
 }
 
 type ActiveRow = { id: string; info: ReturnType<typeof getSessionInfo> };
@@ -141,23 +133,19 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 		});
 	}
 
-	const bannerEl = doc.querySelector<HTMLElement>("#sessions-banner");
-	if (bannerEl) {
-		const shown = renderReasonBanner(
-			doc,
-			bannerEl,
-			opts?.reason ?? null,
-			opts?.schemaVersion,
-			SESSIONS_BANNER_MESSAGES,
-		);
-		if (!shown) bannerEl.textContent = "";
-		bannerEl.hidden = !shown;
-	}
+	renderReasonBanner(
+		doc,
+		doc.querySelector<HTMLElement>("#sessions-banner"),
+		opts?.reason ?? null,
+		opts?.schemaVersion,
+		SESSIONS_BANNER_MESSAGES,
+	);
 
 	const listEl = doc.querySelector<HTMLElement>("#sessions-list");
 	if (!listEl) return;
 
 	const reRender = (): void => renderSessions(root, opts);
+	rerenderShownSessions = reRender;
 	const activeId = getActiveSessionId();
 
 	const activeRows: ActiveRow[] = listSessions().map((id) => ({
@@ -197,12 +185,15 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 		),
 		"no archived sessions.",
 	);
+	for (const archiveId of archiveContinues.keys()) {
+		paintArchiveContinue(doc, archiveId);
+	}
 
 	const newBtn = doc.querySelector<HTMLButtonElement>("#sessions-new");
 	if (newBtn) {
 		const newBtnWithoutListeners = dropListenersByCloning(newBtn);
 		newBtnWithoutListeners.addEventListener("click", () => {
-			const newId = mintSession();
+			const newId = mintSessionId();
 			setActiveSessionId(newId);
 			setPickerOpen(false);
 			renderApp(root);
@@ -336,39 +327,128 @@ function appendActiveOps(
 	opsEl.appendChild(dupBtn);
 }
 
+interface ArchiveContinue {
+	inFlight: boolean;
+	status: string;
+}
+
+const archiveContinues = new Map<string, ArchiveContinue>();
+
+let rerenderShownSessions: (() => void) | null = null;
+
+const SPINNING_UP_STATUS = "spinning up a new room…";
+
+function failureMessage(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
+}
+
+function findArchivedContinueControls(
+	doc: Document,
+	archiveId: string,
+): { button: HTMLButtonElement; statusEl: HTMLElement } | null {
+	for (const row of doc.querySelectorAll<HTMLElement>(
+		"#sessions-list .session-row",
+	)) {
+		if (row.dataset.sessionId !== archiveId) continue;
+		const button = row.querySelector<HTMLButtonElement>(
+			".session-continue-btn",
+		);
+		const statusEl = row.querySelector<HTMLElement>(".session-continue-status");
+		if (button && statusEl) return { button, statusEl };
+	}
+	return null;
+}
+
+function paintArchiveContinue(doc: Document, archiveId: string): void {
+	const controls = findArchivedContinueControls(doc, archiveId);
+	if (!controls) return;
+	const record = archiveContinues.get(archiveId);
+	controls.button.disabled = record?.inFlight ?? false;
+	controls.statusEl.textContent = record?.status ?? "";
+	controls.statusEl.hidden = !record?.status;
+}
+
+function settleArchiveContinue(
+	doc: Document,
+	archiveId: string,
+	status: string,
+): void {
+	archiveContinues.set(archiveId, { inFlight: false, status });
+	paintArchiveContinue(doc, archiveId);
+}
+
+async function continueArchiveInNewRoom(
+	root: HTMLElement,
+	archiveId: string,
+): Promise<void> {
+	const doc = root.ownerDocument;
+	if (archiveContinues.get(archiveId)?.inFlight) return;
+	const startedFrom = captureActiveSession();
+	archiveContinues.set(archiveId, {
+		inFlight: true,
+		status: SPINNING_UP_STATUS,
+	});
+	paintArchiveContinue(doc, archiveId);
+
+	const archiveResult = loadArchivedSession(archiveId);
+	if (archiveResult.kind !== "ok") {
+		settleArchiveContinue(
+			doc,
+			archiveId,
+			"could not continue: this archive could not be loaded",
+		);
+		return;
+	}
+
+	let newId: string;
+	try {
+		const { buildSameDaemonsSession } = await import("../game/bootstrap.js");
+		const newSession = await buildSameDaemonsSession(
+			archiveResult.state.personas,
+		);
+		newId = seedFromArchive(archiveId, newSession.getState());
+	} catch (err) {
+		settleArchiveContinue(
+			doc,
+			archiveId,
+			`could not spin up a new room: ${failureMessage(err)}`,
+		);
+		return;
+	}
+
+	const sessionsStillShown = root.dataset.view === "sessions";
+	const playerMovedOn = !startedFrom.stillActive() || !sessionsStillShown;
+	if (playerMovedOn) {
+		settleArchiveContinue(doc, archiveId, `new room ready as ${newId}`);
+		if (sessionsStillShown) rerenderShownSessions?.();
+		return;
+	}
+	archiveContinues.delete(archiveId);
+	setActiveSessionId(newId);
+	setPickerOpen(false);
+	renderApp(root);
+}
+
 function appendArchivedOps(
 	root: HTMLElement,
 	id: string,
 	opsEl: HTMLElement,
 ): void {
 	if (readStoredByokKey() === null) return;
+	const doc = root.ownerDocument;
 
-	const continueBtn = buildButton(
-		root.ownerDocument,
-		"[ continue with new room ]",
-	);
-	continueBtn.addEventListener("click", async () => {
-		continueBtn.disabled = true;
-		try {
-			const archiveResult = loadArchivedSession(id);
-			if (archiveResult.kind !== "ok") {
-				continueBtn.disabled = false;
-				return;
-			}
-			const { buildSameDaemonsSession } = await import("../game/bootstrap.js");
-			const newSession = await buildSameDaemonsSession(
-				archiveResult.state.personas,
-			);
-			const freshState = newSession.getState();
-			const newId = seedFromArchive(id, freshState);
-			setActiveSessionId(newId);
-			setPickerOpen(false);
-			renderApp(root);
-		} catch {
-			continueBtn.disabled = false;
-		}
+	const continueBtn = buildButton(doc, "[ continue with new room ]");
+	continueBtn.classList.add("session-continue-btn");
+	continueBtn.addEventListener("click", () => {
+		void continueArchiveInNewRoom(root, id);
 	});
 	opsEl.appendChild(continueBtn);
+
+	const statusEl = doc.createElement("output");
+	statusEl.className = "session-continue-status";
+	statusEl.setAttribute("aria-live", "polite");
+	statusEl.hidden = true;
+	opsEl.appendChild(statusEl);
 }
 
 function appendRmControls(

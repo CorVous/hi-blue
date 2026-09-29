@@ -45,7 +45,9 @@ On the 5×5 grid, in draw order:
   AI starts. They may share a cell with objective objects or spaces.
 - **Reachability:** every non-obstacle cell must be reachable (4-neighbour BFS)
   from every AI start. A wall of obstacles can otherwise strand a Daemon or an
-  objective.
+  objective. The BFS is `everyOpenCellReachable` in `src/spa/game/direction.ts`;
+  the complication engine uses it too, so an Obstacle Shift keeps the same
+  guarantee.
 
 A draw that breaks a rule is thrown away and redrawn. After
 `MAX_PLACEMENT_ATTEMPTS` (200) the generator throws, which almost always means
@@ -56,6 +58,9 @@ A draw that breaks a rule is thrown away and redrawn. After
 Entities go into one array in canonical order. For each binding index, a
 carry pair emits its object then its space, `use_space` and `convergence` emit
 a space, and `use_item` emits an item. Decoys come next, then obstacles.
+Only the scheduled obstacle ids (`obstacle-0` … `obstacle-{m-1}`) are copied,
+so Pack B can never hold an obstacle that Pack A did not place; the validator
+already rejects a pack with any other number of obstacles.
 Placement writes holders back in place, so this stays the pack order.
 
 ## Personas (`persona-generator.ts`)
@@ -65,6 +70,11 @@ Placement writes holders back in place, so this stays the pack order.
   to enumerating names in order. A degenerate test RNG (a constant stub) would
   otherwise collide forever.
 - Each persona gets two typing quirks, and one more on every roll of 6 on a d6.
+  Quirks are drawn without replacement, so a persona never lists the same
+  quirk twice, and the extra rolls stop once the pool is used up (a constant
+  test RNG that always rolls 6 would otherwise loop forever). Temperaments are
+  still drawn with replacement: a repeated temperament is intensification
+  (CONTEXT.md), a repeated quirk is only noise.
 - Without an LLM provider, blurbs and voice examples come from templates. The
   fallback voice examples are deliberately low quality: they exist to satisfy
   the type. The real value comes from LLM synthesis.
@@ -97,6 +107,10 @@ prompt.
 - Clauses describe concrete behaviour ("answers when blue addresses them by
   name"), not permissions. Step 6 showed that abstract "you may be quiet"
   wording reads as a uniform opt-out.
+- The outgoing and chatty clauses describe how often a Daemon messages, never
+  two messages in one turn. They used to say the Daemon addresses a peer and
+  blue "in the same turn", which contradicts ADR 0018's one message per turn
+  and invites a second `message` call that the coordinator rejects.
 - Off by default. `?engagementClauses=1` turns it on through
   `BootstrapOpts.engagementClauses`. With it off, output is byte-identical.
 

@@ -1,4 +1,5 @@
 import { startGame } from "./engine";
+import type { DiskEntityState } from "./prompt-builder";
 import { runRound } from "./round-coordinator";
 import type { RoundLLMProvider } from "./round-llm-provider";
 import type {
@@ -21,7 +22,7 @@ export class GameSession {
 	private priorToolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
 	private priorDiskSnapshots: Partial<Record<AiId, string>> = {};
 	private priorDiskEntities: Partial<
-		Record<AiId, Record<string, { inVista: boolean; satisfied: boolean }>>
+		Record<AiId, Record<string, DiskEntityState>>
 	> = {};
 
 	constructor(
@@ -74,7 +75,6 @@ export class GameSession {
 			diskSnapshots: newDiskSnapshots,
 			diskEntities: newDiskEntities,
 		} = await runRound(this.state, addressedAi, message, provider, {
-			rng: Math.random,
 			initiative,
 			priorToolRoundtrip: this.priorToolRoundtrip,
 			onAiDelta,

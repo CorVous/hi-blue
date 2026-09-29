@@ -39,6 +39,10 @@ Some consequences:
 - A migration only counts if it starts from the superseded version: a
   `migrateV8ToV9` would not cover a 9 → 10 bump. (No migration functions
   exist today; see persistence.md, "Session schema history".)
+- A migration only counts if it is declared, as `function migrateV<old>To...`
+  or `const migrateV<old>To... =`, in a non-test source file. A bare call to
+  the name, or a declaration inside `__tests__/`, `*.test.*` or `*.spec.*`,
+  migrates no real save, so it does not satisfy the gate.
 - The object-literal reader skips string contents and `//` and `/* */`
   comments while it counts braces, so braces inside them do not end the map
   early.
@@ -91,11 +95,29 @@ no comments; the reasons live in these design docs, the ADRs and
 - **How it finds comments.** Script and JSON files go through the TypeScript
   parser (`ts.getLeadingCommentRanges` / `getTrailingCommentRanges` on every
   node), so `//` inside a string or a URL is never mistaken for a comment.
-  Shell, CSS and HTML files use a pattern per language; a leading `#!` is kept.
+  The other languages get a small scanner each, kept deliberately simple:
+  - *Shell*: a `#` at the start of a word, outside single or double quotes,
+    starts a comment, so trailing ` # note` comments are caught while `$#`,
+    `${#arr[@]}` and `foo#bar` are not. Heredoc bodies (`<<EOF`, `<<-'EOF'`)
+    are skipped up to their terminator, because they are data (a Markdown
+    heading in a heredoc is not a comment). The same character scan finds
+    the heredoc starts, so a `<<EOF` inside quotes, a shift inside
+    arithmetic (`$((x<<y))`, `((x<<=1))`) and a here-string (`<<<`) do not
+    start one; with a regex over the whole line they did, and the rest of the
+    file was skipped as a heredoc body. Several heredocs started on one line
+    are skipped one after the other. A leading `#!` is kept.
+  - *CSS*: `/* */` outside string literals and unquoted `url(...)`, so a data
+    URL or a `content: "/*"` is not a comment.
+  - *HTML*: `<!-- -->` outside `<script>` elements. The contents of each
+    `<script>` go through the TypeScript scanner like a `.js` file, so a
+    `"<!--"` in a string is not flagged and a `//` comment is.
+  The tests in `scripts/__tests__/check-no-comments.test.ts` pin each of these
+  cases down.
 - **Kept directives** (`KEPT_DIRECTIVES`): `biome-ignore`, `@ts-expect-error`,
-  `@ts-ignore`, `/// <reference>`, `@vitest-environment`, `v8`/`c8` ignore
-  hints and `@__PURE__`. These change what a tool does, so they are code, not
-  commentary.
+  `@ts-ignore`, `/// <reference>`, `@vitest-environment` (line or block form,
+  since Vitest reads either), `v8`/`c8` ignore hints and `@__PURE__` (also
+  spelled `#__PURE__`, which esbuild and Rollup accept too). These change what
+  a tool does, so they are code, not commentary.
 - **`--fix`** removes every reported comment, and the whole line when the
   comment was alone on it.
 
@@ -113,8 +135,16 @@ no comments; the reasons live in these design docs, the ADRs and
   each build (including watch rebuilds) the plugin looks up the hashed output
   names in the esbuild metafile and writes `dist/index.html` with them. The
   build is the only place hashes get wired in.
+- **Template failures fail the build.** If the plugin cannot find the metafile
+  or the hashed outputs, or cannot write `dist/index.html`, it logs the reason
+  and, outside watch mode, sets a non-zero exit code; the version list is then
+  skipped. It used to only log, so `pnpm build` exited 0 with a stale or
+  missing `dist/index.html`. In watch mode it only logs, so one bad rebuild
+  does not end the watcher.
 - **`__DEV__`** is true exactly when `WORKER_BASE_URL` is the default
-  `http://localhost:8787` (`IS_DEV_BUILD`). Any other base URL, including the
+  `http://localhost:8787` (`IS_DEV_BUILD`). An empty `WORKER_BASE_URL` counts
+  as unset (`||`, not `??`): a blank variable in a shell or CI config would
+  otherwise bake `""` in as the API base. Any other base URL, including the
   LAN URL that `pnpm dev:lan` bakes in, produces a non-dev build with no dev
   inspector, debug footers or BYOK localhost shortcut (ADR 0013).
 - **Release constants.** `__RELEASE_VERSION__` is the version of a `v*` tag
@@ -123,19 +153,30 @@ no comments; the reasons live in these design docs, the ADRs and
   tag that is an ancestor of HEAD.
 - **Version list.** A one-shot build then runs `generate-version-list.mjs`. A
   failure there is logged as a warning and does not fail the build.
+- **`SPA_DIST_DIR`** moves the output (assets, `index.html` and the version
+  list) out of `dist/`. Only `scripts/__tests__/build-spa.test.ts` sets it,
+  to a temporary directory. The test used to build into `dist/`, and
+  `deleteStaleHashedAssets` empties `dist/assets/` before esbuild writes the
+  new bundles, so a `pnpm test` run alongside the Playwright server (which
+  serves `dist/`) made page loads fail with a 500 on the bundle and specs
+  time out on a page that never started.
 
 ## `generate-version-list.mjs`
 
-Writes `dist/v/index.html`, a page listing every `v*` tag from highest to
+Writes `dist/v/index.html` (`$SPA_DIST_DIR/v/index.html` when that is set), a page listing every `v*` tag from highest to
 lowest (`sort -V | tac`) with its commit date and a Beta badge for `-beta` tags.
 Errors are logged and swallowed so the SPA build never fails because of this
 page (ADR 0012 covers the versioned URLs it links to).
 
-## `repeat-vitest.mjs` / `repeat-playwright.mjs`
+## `repeat.mjs`
 
-Flake hunters: run the suite `iterations` times (the default is 20 for Vitest
-and 10 for Playwright; a leading numeric argument overrides it, and every other
-argument goes to the runner) and stop at the first failure. Ctrl-C reports the
+Flake hunter behind `pnpm test:repeat` (`repeat.mjs vitest`) and
+`pnpm smoke:repeat` (`repeat.mjs playwright`): run the suite `iterations`
+times (the default is 20 for Vitest and 10 for Playwright; a leading numeric
+argument overrides it, and every other argument goes to the runner) and stop at
+the first failure. A count below 1 is rejected rather than reporting a pass
+after zero runs. A run killed by a signal has a null status, so the one
+non-zero-status check covers it and names the signal. Ctrl-C reports the
 current iteration and exits with 130, the shell convention for SIGINT.
 
 ## `dev-lan.mjs`
@@ -168,6 +209,10 @@ playtest is therefore a non-dev build until the next plain `pnpm build`.
 per line from the `/tmp/playtest-in` FIFO, writing the reply to
 `/tmp/playtest-out`. `cmd.sh` opens the out FIFO for reading before it writes
 the command, so the daemon never writes into a pipe that nobody holds open.
+Every command gets a reply, an empty one and bad JSON included, because
+`cmd.sh` blocks until one arrives. The log is written with `appendFileSync`
+rather than through a shell, since log lines carry page text and a shell
+command built from them could run it.
 `PLAYTEST_IN` and `PLAYTEST_OUT` override the paths so several daemons can run
 side by side.
 

@@ -1,3 +1,4 @@
+import { entityHandle } from "./available-tools.js";
 import type { AiId, ConversationEntry, WorldEntity } from "./types.js";
 
 function substituteActor(raw: string, actorLabel: string): string {
@@ -6,7 +7,7 @@ function substituteActor(raw: string, actorLabel: string): string {
 
 function itemName(entities: WorldEntity[], itemId: string): string {
 	const entity = entities.find((e) => e.id === itemId);
-	return entity?.name ?? itemId;
+	return entity ? entityHandle(entities, entity) : itemId;
 }
 
 export function renderEntry(

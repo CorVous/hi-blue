@@ -888,6 +888,18 @@ main {
 	padding-left: calc(11ch + 10px);
 }
 
+.start-bootstrap-error:not([hidden]) {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 1ch;
+	margin-top: 6px;
+}
+
+.start-bootstrap-error .login-connect {
+	color: var(--err);
+}
+
 @media (max-width: 520px) {
 	.banner-login-full {
 		display: none;
@@ -1471,6 +1483,13 @@ main {
 .session-version-note {
 	color: var(--amber-dim);
 	font-size: 11px;
+}
+
+.session-continue-status {
+	flex-basis: 100%;
+	color: var(--amber-dim);
+	font-size: 11px;
+	overflow-wrap: anywhere;
 }
 
 .session-tree {

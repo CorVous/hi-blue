@@ -37,9 +37,15 @@ const KEPT_DIRECTIVES = [
 	/^\/\/\s*@ts-ignore\b/,
 	/^\/\/\/\s*<reference\b/,
 	/^\/\/\s*@vitest-environment\b/,
+	/^\/\*\*?\s*@vitest-environment\b/,
 	/^\/\*\s*(v8|c8) ignore\b/,
-	/^\/\*\s*@__PURE__\s*\*\/$/,
+	/^\/\*\s*[#@]__PURE__\s*\*\/$/,
 ];
+const CSS_COMMENT_OUTSIDE_STRINGS =
+	/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|url\([^)"']*\)|(\/\*[\s\S]*?\*\/)/g;
+const MARKUP_COMMENT_OR_SCRIPT =
+	/(<script\b[^>]*>)([\s\S]*?)<\/script\s*>|(<!--[\s\S]*?-->)/gi;
+const HEREDOC_START = /<<-?\s*(['"]?)\\?([A-Za-z_][A-Za-z0-9_]*)\1/y;
 
 function listFiles(directory) {
 	const found = [];
@@ -53,7 +59,10 @@ function listFiles(directory) {
 }
 
 function scriptCommentRanges(path, text) {
-	const extension = extname(path);
+	return commentRangesOfScriptKind(path, text, extname(path));
+}
+
+function commentRangesOfScriptKind(path, text, extension) {
 	const kind = JSON_EXTENSIONS.has(extension)
 		? ts.ScriptKind.JSON
 		: extension.startsWith(".t")
@@ -83,11 +92,99 @@ function scriptCommentRanges(path, text) {
 	return [...ranges.values()].sort((a, b) => a.start - b.start);
 }
 
-function patternCommentRanges(text, pattern, keepShebang) {
+function styleCommentRanges(text) {
 	const ranges = [];
-	for (const match of text.matchAll(pattern)) {
-		if (keepShebang && match.index === 0 && text.startsWith("#!")) continue;
+	for (const match of text.matchAll(CSS_COMMENT_OUTSIDE_STRINGS)) {
+		if (match[1] === undefined) continue;
 		ranges.push({ start: match.index, end: match.index + match[0].length });
+	}
+	return ranges;
+}
+
+function markupCommentRanges(path, text) {
+	const ranges = [];
+	for (const match of text.matchAll(MARKUP_COMMENT_OR_SCRIPT)) {
+		if (match[3] !== undefined) {
+			ranges.push({ start: match.index, end: match.index + match[0].length });
+			continue;
+		}
+		const contentStart = match.index + match[1].length;
+		for (const range of commentRangesOfScriptKind(path, match[2], ".js")) {
+			ranges.push({
+				start: contentStart + range.start,
+				end: contentStart + range.end,
+			});
+		}
+	}
+	return ranges;
+}
+
+function heredocAt(line, index) {
+	if (line.startsWith("<<<", index)) return null;
+	HEREDOC_START.lastIndex = index;
+	const match = HEREDOC_START.exec(line);
+	return match ? { terminator: match[2], length: match[0].length } : null;
+}
+
+function scanShellLine(line, state) {
+	let open = state.quote;
+	let arithmeticDepth = state.arithmeticDepth;
+	const heredocs = [];
+	const result = (commentAt) => ({
+		commentAt,
+		state: { quote: open, arithmeticDepth },
+		heredocs,
+	});
+	for (let i = 0; i < line.length; i++) {
+		const char = line[i];
+		if (open === "'") {
+			if (char === "'") open = null;
+		} else if (char === "\\") {
+			i += 1;
+		} else if (open === '"') {
+			if (char === '"') open = null;
+		} else if (char === "'" || char === '"') {
+			open = char;
+		} else if (line.startsWith("((", i)) {
+			arithmeticDepth += 1;
+			i += 1;
+		} else if (arithmeticDepth > 0 && line.startsWith("))", i)) {
+			arithmeticDepth -= 1;
+			i += 1;
+		} else if (line.startsWith("<<", i)) {
+			const heredoc = arithmeticDepth === 0 ? heredocAt(line, i) : null;
+			if (heredoc) heredocs.push(heredoc.terminator);
+			i += (heredoc?.length ?? 2) - 1;
+		} else if (char === "#" && (i === 0 || /\s/.test(line[i - 1]))) {
+			return result(i);
+		}
+	}
+	return result(-1);
+}
+
+function shellCommentRanges(text) {
+	const ranges = [];
+	let offset = 0;
+	let state = { quote: null, arithmeticDepth: 0 };
+	const pendingHeredocs = [];
+	for (const line of text.split("\n")) {
+		const lineStart = offset;
+		offset += line.length + 1;
+		if (pendingHeredocs.length > 0) {
+			if (line.replace(/^\t+/, "") === pendingHeredocs[0])
+				pendingHeredocs.shift();
+			continue;
+		}
+		if (lineStart === 0 && line.startsWith("#!")) continue;
+		const scan = scanShellLine(line, state);
+		state = scan.state;
+		pendingHeredocs.push(...scan.heredocs);
+		if (scan.commentAt !== -1) {
+			ranges.push({
+				start: lineStart + scan.commentAt,
+				end: lineStart + line.length,
+			});
+		}
 	}
 	return ranges;
 }
@@ -96,12 +193,9 @@ function commentRanges(path, text) {
 	const extension = extname(path);
 	if (SCRIPT_EXTENSIONS.has(extension) || JSON_EXTENSIONS.has(extension))
 		return scriptCommentRanges(path, text);
-	if (SHELL_EXTENSIONS.has(extension))
-		return patternCommentRanges(text, /^[ \t]*#.*$/gm, true);
-	if (STYLE_EXTENSIONS.has(extension))
-		return patternCommentRanges(text, /\/\*[\s\S]*?\*\//g, false);
-	if (MARKUP_EXTENSIONS.has(extension))
-		return patternCommentRanges(text, /<!--[\s\S]*?-->/g, false);
+	if (SHELL_EXTENSIONS.has(extension)) return shellCommentRanges(text);
+	if (STYLE_EXTENSIONS.has(extension)) return styleCommentRanges(text);
+	if (MARKUP_EXTENSIONS.has(extension)) return markupCommentRanges(path, text);
 	return null;
 }
 

@@ -8,7 +8,12 @@ rules and tradeoffs the code cannot state by itself.
 
 ## Routing (`worker.ts`)
 
-- `OPTIONS` and `POST` on `/v1/chat/completions` are the API. `/diagnostics`
+- `OPTIONS` and `POST` on `/v1/chat/completions` are the API. The allow-list
+  is parsed once per request on that path.
+- An exception escaping `handleChatCompletions` (a KV outage in the cost
+  guard, say) becomes a 502 `upstream_error` that still goes through
+  `withCorsHeaders`. Uncaught, the runtime answered a bare 500 with no CORS
+  headers, which the browser reports as an opaque network error. `/diagnostics`
   takes the endgame "Save the AIs to USB" report (#19). Every other request
   goes to the `ASSETS` binding.
 - There is no Worker-level 404. Unmatched paths go to `env.ASSETS.fetch` so the
@@ -16,7 +21,9 @@ rules and tradeoffs the code cannot state by itself.
   `dist/index.html` for client-side routes (#48). Non-POST verbs on the chat
   path fall through the same way.
 - `/diagnostics` only validates and logs the payload. The v1 taxonomy is
-  deliberately minimal; persisting to KV is left for a later iteration.
+  deliberately minimal; persisting to KV is left for a later iteration. The
+  logged summary is cut to 2,000 characters, since the endpoint is
+  unauthenticated and anyone can post to it.
 
 ### Asset cache headers (`withAssetCacheHeaders`)
 
@@ -43,7 +50,10 @@ rules and tradeoffs the code cannot state by itself.
   `AGENTS.md` "Local development" for `pnpm dev:local`.
 - `PER_IP_DAILY_MICRO_USD_MAX`, `GLOBAL_DAILY_MICRO_USD_MAX`,
   `PRE_CHARGE_MICRO_USD` are optional. `configFromEnv` falls back to $1.00 per
-  IP per day, $10.00 globally per day, and a $0.005 pre-charge. The defaults
+  IP per day, $10.00 globally per day, and a $0.005 pre-charge. A value that
+  is empty, not a finite number, or negative also falls back to its default
+  (`numOr`). Without that guard a typo becomes `NaN`, every `>` comparison
+  with `NaN` is false, and the cap silently stops denying anything. The defaults
   are integer literals (`1_000_000`, `10_000_000`, `5_000`) rather than
   products of `USD_TO_MICRO_USD`, because the counters are written to KV as
   `String(counter + preCharge)` and a fractional default would corrupt them.
@@ -58,8 +68,9 @@ rules and tradeoffs the code cannot state by itself.
 
 - `build.command` runs `pnpm build` before Wrangler bundles the Worker, on
   every `wrangler dev` and `wrangler deploy`, so `dist/` always exists when
-  the assets binding loads. `watch_dir: src/spa` re-runs it when SPA sources
-  change during `wrangler dev`.
+  the assets binding loads. `watch_dir: src` re-runs it when any source the
+  bundle imports changes during `wrangler dev`. The SPA also imports
+  `src/model.ts` and `src/content/`, which `src/spa` did not cover.
 - `assets.run_worker_first: true` makes the fetch handler run for every
   request: it serves the API routes itself and delegates the rest to the
   `ASSETS` binding. Running first is what lets `withAssetCacheHeaders` attach
@@ -85,9 +96,43 @@ rules and tradeoffs the code cannot state by itself.
 ## Chat completions pipeline (`openai-proxy.ts`)
 
 `handleChatCompletions` runs its steps in order: require the key, parse, validate,
-pre-charge, forward, then relay the whole or streamed response. Each failure
-after the pre-charge refunds it.
+pre-charge, forward, then relay the whole or streamed response. A failure
+before the upstream has produced anything (network error, non-2xx status,
+unreadable whole body) refunds the pre-charge. A stream that breaks part-way
+does not; see "Streaming settlement" below.
 
+- **`stream` must be a boolean when present.** Anything else is a 400 before
+  the pre-charge. The proxy decides between the whole and streamed relay with
+  `stream === true`, but forwards the caller's value unchanged, so a truthy
+  non-boolean such as `"true"` could make OpenRouter stream while the proxy
+  read the SSE text as one JSON body, found no usage, and refunded in full.
+- **Upstream status mapping.** A 4xx from OpenRouter (bad request, auth,
+  payment, provider rate limit) is passed through with its status, body and
+  `Retry-After`, so the client sees the real cause and can honour the retry
+  hint. A 5xx, or any other non-2xx, becomes a 502 `upstream_error`. A
+  network failure is also a 502, with a fixed message: the underlying error
+  is logged, not echoed, because it can name internal hosts. The SPA only
+  treats a 429 as the spend cap when its body carries the proxy's own
+  `rate_limit_exceeded` type and a `per-ip-daily` or `global-daily` code
+  (`parseCapHitFromResponse`), so a passed-through provider 429 is an
+  ordinary, retryable failure rather than the cap-hit screen.
+
+- **Forwarded fields are an allow-list** (`FORWARDED_BODY_FIELDS`). The proxy
+  pays for every request, so it sends OpenRouter only what the SPA uses and
+  the standard sampling knobs, and drops anything else (OpenRouter's
+  `models` fallback list, `transforms`, `plugins` such as web search), which
+  could otherwise route to a pricier model or add paid features on the
+  proxy's key. `model` and `provider` are then overwritten with the pinned
+  values. The list:
+  - sent by the SPA (`llm-client.ts`): `messages`, `stream`,
+    `stream_options`, `usage`, `tools`, `tool_choice`,
+    `parallel_tool_calls`, `reasoning`, `response_format`;
+  - standard sampling: `temperature`, `top_p`, `top_k`, `min_p`,
+    `max_tokens`, `max_completion_tokens`, `stop`, `seed`,
+    `frequency_penalty`, `presence_penalty`, `repetition_penalty`.
+
+  A new field the SPA starts sending must be added here, or the proxy drops it
+  silently while the BYOK path keeps it.
 - **Pricing lookup runs in parallel.** `getModelPricing` starts right after
   the pre-charge, alongside the upstream call, so reconciliation adds no
   latency. It is memoised per isolate, so after the first request it
@@ -103,13 +148,25 @@ after the pre-charge refunds it.
   the OpenAI shape (`prompt_tokens_details.cached_tokens`) or the Anthropic
   shape (`cache_read_input_tokens`) and logged as `[cache] ...`. They are
   never priced directly.
-- **Missing or unparseable usage means a full refund**, not keeping the
-  estimate.
+- **Missing or unparseable usage on a completed response means a full
+  refund**, not keeping the estimate. A body or SSE `data:` line that parses
+  to JSON but not to an object (`null`, a number, a string) counts as having
+  no usage; reading `.usage` off it would throw, turning the whole-response
+  path into a 500 with no CORS headers and no refund, and erroring the
+  stream.
 - **Streaming settlement uses `ctx.waitUntil`.** The response is teed through
-  a `TransformStream` that scans SSE `data:` lines for the usage chunk. Both
-  the end-of-stream reconcile and the refund on a mid-stream upstream failure
-  are handed to `ctx.waitUntil`, or the KV write can be lost once the
-  response finishes. A regression test covers the refund.
+  a `TransformStream` that scans SSE `data:` lines for the usage chunk, with
+  one streaming `TextDecoder` so a multi-byte character split across chunks
+  decodes correctly. Both the end-of-stream reconcile and the settlement of a
+  broken stream are handed to `ctx.waitUntil`, or the KV write can be lost
+  once the response finishes.
+- **A broken stream is never refunded.** When the pipe errors (the upstream
+  drops, or the client disconnects), OpenRouter has usually already billed
+  for the tokens generated so far. If the usage chunk was already seen, the
+  stream settles on it like a completed one. Otherwise the pre-charge is kept
+  as the estimate. Refunding here would let a client get generations for free
+  by aborting each request just before the end. Regression tests cover both
+  cases.
 
 ## Cost guard (`rate-guard.ts`)
 
@@ -121,14 +178,31 @@ day:
 | Per IP | `cost:ip:<YYYY-MM-DD>:<ip>` | $1.00 |
 | Global | `cost:global:<YYYY-MM-DD>` | $10.00 |
 
-- **Flow:** `preCharge` deducts a fixed estimate from both counters at
-  request start. `reconcile` refunds the unused part once the actual cost is
-  known. `refundFull` rolls the pre-charge back on failure.
+- **Flow:** `preCharge` adds a fixed estimate to both counters at request
+  start. `reconcile` then moves both counters by the signed difference
+  between the actual cost and the pre-charge, through `adjustCharge`: unused
+  pre-charge is refunded and any overage is added. `refundFull` is
+  `adjustCharge` by minus the pre-charge. Counters never go below zero.
 - **Strict ceiling:** a request is denied when `current + preCharge > cap`.
-  Landing exactly on the cap is allowed.
-- **Over-charge is kept.** When the actual cost exceeds the pre-charge the
-  counters are left alone. That is the accepted cost of defence; only
-  unused pre-charge is ever refunded.
+  Landing exactly on the cap is allowed. An overage can push a counter past
+  the cap; the next request is then denied.
+- **Overage is charged.** The caps are in dollars, so the counters must track
+  what was actually spent. If only the pre-charge were kept, each request
+  would count as at most $0.005 whatever it cost, and the caps would limit
+  request counts instead of spend.
+- **Per-IP key.** The `CF-Connecting-IP` value is keyed by
+  `ipRateLimitSubject`: IPv4 as-is, IPv6 by its /64 prefix (for example
+  `2001:db8:1:2::/64`), and an IPv4-mapped IPv6 address by its IPv4 part. A
+  single IPv6 host usually controls a whole /64, so keying the full address
+  would let one client rotate through fresh per-IP budgets.
+- **Corrupt counters deny.** A counter value in KV that is not a finite
+  number reads as infinite: `preCharge` denies with that counter's reason,
+  and `adjustCharge` never writes a non-finite value back, so the bad value
+  is not replaced by `NaN`. This fails closed, like the cold-start pricing
+  below; the cost is that the affected IP (or, for the global counter,
+  everyone) is denied until the 25-hour TTL expires or someone deletes the
+  key. The proxy itself never writes such a value, so this only guards
+  against manual edits.
 - **No atomic compare-and-swap.** Workers KV has none, so concurrent
   requests can briefly over- or under-count. This is accepted: the caps are
   a wallet guard, not billing.
@@ -146,6 +220,12 @@ day:
   decimal strings and are scaled to micro-USD per token. Per-token values may
   be fractional. `computeCostMicroUsd` always rounds a request total **up**, so
   the caps are never silently under-charged.
+- Each field (prompt, completion) takes the highest price across the pinned
+  endpoint's base row and its time-of-day `overrides`, so peak hours are never
+  under-charged. Only the base row has to parse. An override row missing a
+  field, or holding a non-numeric one, is skipped for that field: one partial
+  row used to turn the whole max into `NaN` and drop the proxy to cold-start
+  pricing.
 - The result is memoised per isolate for 24 hours, and the fetch times out
   after 3 s.
 - On fetch failure, stale cached pricing wins. On a cold start with no cache,

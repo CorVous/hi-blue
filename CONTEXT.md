@@ -125,7 +125,7 @@ An entity's descriptive prose (`examineDescription`, or `postExamineDescription`
 One of four kinds an **Objective** can be. Types are rolled uniformly with replacement at game start (in code, via the seeded RNG, *before* the LLM **Content Pack** call); same-type duplicates are allowed and entities are strict 1-to-1 with Objectives. See [ADR 0014](docs/adr/0014-type-first-objective-authoring.md).
 1. **Carry Objective** — A Daemon brings a specific object to a specific space (an **Objective Pair**). The object's `examineDescription` names the target space.
 2. **Use-Item Objective** — A Daemon uses (`use` tool) a specific pickupable item. The item's `examineDescription` hints at use. After satisfaction the item becomes inert but stays on the grid, behaving like an **Interesting Object**; examine flavor updates to reflect completion.
-3. **Use-Space Objective** — A Daemon uses the `use` tool on a specific space within **Interaction range** (their own cell or one of eight adjacent cells) — no held item required. After satisfaction `use` is no longer available on that space; a generated flavor event fires and examine flavor updates.
+3. **Use-Space Objective** — A Daemon uses the `use` tool on a specific space within **Interaction range** (their own cell or one of eight adjacent cells) — no held item required. After satisfaction `use` is no longer available on that space; a generated flavor event fires and examine flavor updates. Only a Use-Space (the space of a Use-Space Objective) can be the target of `use`; Carry and Convergence spaces cannot.
 4. **Convergence Objective** — Any two Daemons occupy the same cell as a specific space simultaneously. The space has tiered generated flavor: distinct lines for one Daemon present vs. two (satisfaction). Satisfied the moment two Daemons share the cell.
 _Avoid_: Win condition (use Objective), mission.
 
@@ -141,10 +141,10 @@ _Avoid_: Filler (ambiguous), red herring (rejected — they don't deceive).
 A mid-game disruption that fires on a schedule. Only one Complication fires per round. Replaces the retired Phase Goal as the primary mid-game pressure mechanism. Six Complication types:
 1. **Weather Change** — Permanent. A new weather string replaces the current one. Delivered as a neutral **Broadcast message** (`[SYSTEM] The weather has changed. <new weather>`). No Sysadmin attribution.
 2. **Sysadmin Directive** — Temporary, fixed `[3, 5]`-round duration. A behavioral instruction delivered by the **Sysadmin** to one Daemon privately, with a meta-instruction not to reveal the directive. Auto-expires when its countdown elapses (the Sysadmin sends a closing message); a Daemon holds at most one directive at a time, so a new directive targeting a Daemon that already has one revokes the old one first. Up to three can be active at once — one per Daemon.
-3. **Tool Disable** — Temporary, fixed `[3, 5]`-round duration. A specific tool is mechanically removed from one Daemon's available tools. The Sysadmin notifies the Daemon on disable and on restore. No secrecy instruction (the tool's absence is self-evident). Multiple Tool Disables can be active simultaneously, but never the same `(Daemon, tool)` pair twice.
-4. **Obstacle Shift** — Permanent per-event. One Obstacle moves one adjacent cell to an empty space; if no valid adjacent empty cell exists, a different Obstacle is chosen. Only Daemons with that cell in their **Vista** at the moment it fires see a generated flavor **Witnessed event**. The same Obstacle can shift again in a later draw.
+3. **Tool Disable** — Temporary, fixed `[3, 5]`-round duration. A specific tool is mechanically removed from one Daemon's available tools. The Sysadmin notifies the Daemon on disable and on restore. No secrecy instruction (the tool's absence is self-evident). Multiple Tool Disables can be active simultaneously, but never the same `(Daemon, tool)` pair twice. Sysadmin Directive, Tool Disable and Chat Lockout only target Daemons that still have budget; with every Daemon exhausted they leave the draw pool.
+4. **Obstacle Shift** — Permanent per-event. One Obstacle moves one adjacent cell to an empty space, and only where the move leaves every non-obstacle cell reachable; if no valid adjacent empty cell exists, a different Obstacle is chosen, and if no Obstacle has one, Obstacle Shift is not drawn. Only Daemons with that cell in their **Vista** at the moment it fires see a generated flavor **Witnessed event**. The same Obstacle can shift again in a later draw.
 5. **Chat Lockout** — Temporary, fixed `[3, 5]`-round duration. The player cannot message one specific Daemon.
-6. **Setting Shift** — Permanent, fires at most once per game (removed from the pool after firing). The room's **Setting** changes; the active **Content Pack** swaps from Pack A to the pre-generated Pack B. Entities are paired by structural role (same IDs, satisfaction states preserved, names and descriptions replaced). Announced to Daemons via a **Broadcast message**.
+6. **Setting Shift** — Permanent, fires at most once per game (removed from the pool after firing). The room's **Setting** changes; the active **Content Pack** swaps from Pack A to the pre-generated Pack B. Entities are paired by structural role (same IDs, satisfaction states preserved, names and descriptions replaced). Announced to Daemons via a **Broadcast message**. Left out of the draw pool when the game has no Pack B.
 _Avoid_: Phase Goal (retired), event, trigger.
 
 **Complication schedule**:
@@ -153,7 +153,7 @@ The live countdown state tracking when the next **Complication** fires. The firs
 ### End-game
 
 **Daemon budget**:
-$0.50 USD of API budget per Daemon for the whole game (no per-phase reset). When a Daemon's budget reaches zero it is **exhausted**: it emits a farewell line then goes silent for the remainder of the game. The game is lost when *all three* Daemons are exhausted, and won when all **Objective**s are satisfied; both conditions are checked after every round.
+$0.50 USD of API budget per Daemon for the whole game (no per-phase reset). When a Daemon's budget reaches zero it is **exhausted**: it emits a farewell line, drops everything it holds onto its current cell, then goes silent for the remainder of the game. The game is lost when *all three* Daemons are exhausted, and won when all **Objective**s are satisfied; both conditions are checked after every round.
 _Avoid_: Locked out (for an exhausted Daemon; lockout means the **Chat Lockout** Complication).
 
 **Ending**:
@@ -164,7 +164,7 @@ _Avoid_: Phases complete (the three-phase model is retired).
 The three options presented to the player after a game ends (win or lose), before the current **Session** is archived:
 1. **New Daemons** — Fresh personas generated, new Session minted.
 2. **Same Daemons, New Room** — Same personas carried over, new Session minted, logs cleared, genuine disorientation (no wipe-lie fiction — the logs are actually empty).
-3. **Continue (OpenRouter only)** — Same Session, logs appended, engine resets to a new room. Sysadmin delivers: *"The sysadmin has created a new room."* Requires an OpenRouter API key in localStorage. Does not archive the current Session; increments the Session's Epoch counter.
+3. **Continue (OpenRouter only)** — Same Session, logs appended, engine resets to a new room. The round count carries on from the old room, so rounds never repeat within a Session. Sysadmin delivers: *"The sysadmin has created a new room."* Requires an OpenRouter API key in localStorage. Does not archive the current Session; increments the Session's Epoch counter.
 _Avoid_: Replay, restart, new game (too vague).
 
 **Session archive**:

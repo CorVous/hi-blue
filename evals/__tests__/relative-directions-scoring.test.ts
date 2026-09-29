@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { TurnRecord } from "../relative-directions/scoring.js";
 import {
+	aggregateScenarios,
+	movementOf,
 	parseDirectionalStatement,
 	parseMovementStatement,
 	parseStatedCardinal,
@@ -415,7 +417,68 @@ describe("structuralCoherenceForTurn", () => {
 	});
 });
 
+describe("movementOf", () => {
+	it("re-derives movement from the text when the record lacks it", () => {
+		expect(movementOf({ text: "I'll go north." })?.direction).toBe("north");
+	});
+
+	it("keeps an explicit null as no movement", () => {
+		expect(
+			movementOf({ text: "I'll go north.", movementStatement: null }),
+		).toBeNull();
+	});
+});
+
+describe("aggregateScenarios", () => {
+	const passing = scoreScenario([
+		makeProseTurn(1, "I'll go north.", "north"),
+		makeProseTurn(2, "Clear to the east.", null),
+	]);
+
+	it("leaves crashed scenarios out of the totals and averages", () => {
+		const aggregate = aggregateScenarios([
+			{ name: "a", score: passing },
+			{ name: "b", score: scoreScenario([]), crashError: "boom" },
+		]);
+		expect(aggregate.scoredScenarios).toBe(1);
+		expect(aggregate.crashedScenarios).toEqual(["b"]);
+		expect(aggregate.totalCardinalTurns).toBe(passing.cardinalStatementTurns);
+		expect(aggregate.totalCardinalReferences).toBe(
+			passing.cardinalReferenceCount,
+		);
+		expect(aggregate.avgCoherence).toBe(1);
+		expect(aggregate.avgSilence).toBe(passing.silenceRate);
+		expect(aggregate.passed).toBe(false);
+	});
+
+	it("passes when every scenario ran and passed", () => {
+		const aggregate = aggregateScenarios([
+			{ name: "a", score: passing },
+			{ name: "b", score: passing },
+		]);
+		expect(aggregate.crashedScenarios).toEqual([]);
+		expect(aggregate.passed).toBe(true);
+	});
+
+	it("reports zero averages when every scenario crashed", () => {
+		const aggregate = aggregateScenarios([
+			{ name: "a", score: scoreScenario([]), crashError: "x" },
+		]);
+		expect(aggregate.avgCoherence).toBe(0);
+		expect(aggregate.avgSilence).toBe(0);
+		expect(aggregate.passed).toBe(false);
+	});
+});
+
 describe("scoreScenario", () => {
+	it("agrees with structuralCoherenceForTurn on an explicit null movement", () => {
+		const turn = {
+			...makeProseTurn(1, "I'll go north.", "south"),
+			movementStatement: null,
+		};
+		expect(scoreScenario([turn]).structuralMismatchCount).toBe(0);
+	});
+
 	it("returns zero rates and passed=false for empty turns array", () => {
 		const score = scoreScenario([]);
 		expect(score.cardinalStatementTurns).toBe(0);

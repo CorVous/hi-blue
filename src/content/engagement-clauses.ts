@@ -63,8 +63,8 @@ export function engagementClauseFor(
 		case "balanced":
 			return `${star} engages when something draws their attention — peer talk, blue's prompts, or what they are seeing — and lets other turns pass without comment.`;
 		case "outgoing":
-			return `${star} chimes in often: reacts to peers, narrates what they are doing, replies to blue when named. They readily address peers and blue in the same turn.`;
+			return `${star} chimes in often: reacts to peers, narrates what they are doing, replies to blue when named. Most turns they send a message, to a peer or to blue, whichever the moment calls for.`;
 		case "chatty":
-			return `${star} speaks readily and at length — narrating, reacting, asking follow-ups, pinging peers. They often have something to say to blue and a peer in the same turn.`;
+			return `${star} speaks readily and at length — narrating, reacting, asking follow-ups, pinging peers. Nearly every turn they send a message, picking the one peer or blue they most want to talk to.`;
 	}
 }

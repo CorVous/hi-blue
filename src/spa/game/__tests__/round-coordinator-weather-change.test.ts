@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { WEATHER_POOL } from "../../../content/pools";
+import {
+	deserializeSession,
+	serializeSession,
+} from "../../persistence/session-codec";
 import { runRound } from "../round-coordinator";
 import type { WorldEntity } from "../types";
 import {
@@ -63,7 +67,7 @@ describe("runRound — weather_change complication (issue #487)", () => {
 		expect(WEATHER_POOL).toContain(nextState.weather);
 	});
 
-	it("updates both game.weather and game.contentPack.weather consistently", async () => {
+	it("changes only game.weather, so the change survives a save round-trip", async () => {
 		const game = makeBaseGame();
 
 		const withCountdown = {
@@ -79,7 +83,13 @@ describe("runRound — weather_change complication (issue #487)", () => {
 			{ rng: seededRng(WEATHER_CHANGE_DRAWS, Math.random) },
 		);
 
-		expect(nextState.weather).toBe(nextState.contentPack.weather);
+		expect(nextState.contentPack).toEqual(game.contentPack);
+		const files = serializeSession(nextState, "t", "t");
+		const loaded = deserializeSession(files);
+		expect(loaded.kind).toBe("ok");
+		if (loaded.kind !== "ok") return;
+		expect(loaded.state.weather).toBe(nextState.weather);
+		expect(loaded.state.contentPack).toEqual(nextState.contentPack);
 	});
 
 	it("appends a broadcast entry to all Daemons' conversationLogs", async () => {

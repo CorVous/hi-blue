@@ -1,3 +1,4 @@
+import { isDevHost } from "./dev-host.js";
 import {
 	OPENROUTER_KEY_STORAGE_KEY,
 	readStoredByokKey,
@@ -12,20 +13,38 @@ export type ValidationResult =
 	| { kind: "rejected-other"; status: number }
 	| { kind: "network-or-5xx"; status: number | null };
 
-export type KeyMeta = {
+type KeyMeta = {
 	validatedAt: string;
 	status: "validated" | "unverified";
 	keySuffix: string;
 };
 
+export const KEY_VALIDATION_TIMEOUT_MS = 15_000;
+
 export async function validateOpenRouterKey(
 	key: string,
 	fetchImpl: typeof fetch = fetch,
+	timeoutMs: number = KEY_VALIDATION_TIMEOUT_MS,
+): Promise<ValidationResult> {
+	const abortController = new AbortController();
+	const abortTimer = setTimeout(() => abortController.abort(), timeoutMs);
+	try {
+		return await requestKeyValidation(key, fetchImpl, abortController.signal);
+	} finally {
+		clearTimeout(abortTimer);
+	}
+}
+
+async function requestKeyValidation(
+	key: string,
+	fetchImpl: typeof fetch,
+	signal: AbortSignal,
 ): Promise<ValidationResult> {
 	let response: Response;
 	try {
 		response = await fetchImpl("https://openrouter.ai/api/v1/auth/key", {
 			headers: { Authorization: `Bearer ${key}` },
+			signal,
 		});
 	} catch {
 		return { kind: "network-or-5xx", status: null };
@@ -41,6 +60,7 @@ export async function validateOpenRouterKey(
 	}
 
 	const keyInfo = await readAuthKeyInfoOrNull(response);
+	if (signal.aborted) return { kind: "network-or-5xx", status: null };
 	if (keyInfo !== null && hasReachedSpendLimit(keyInfo)) {
 		return { kind: "rejected-402" };
 	}
@@ -91,14 +111,52 @@ export function readMeta(): KeyMeta | null {
 	}
 }
 
-export function writeKeyAndMeta(key: string, meta: KeyMeta): void {
-	localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, key);
-	localStorage.setItem(LOCALSTORAGE_META_KEY, JSON.stringify(meta));
-}
+const STORE_FAILED_MESSAGE =
+	"Couldn't store the key: this browser blocked or filled its storage. Allow site storage and try again.";
+const CLEAR_FAILED_MESSAGE =
+	"Couldn't clear the key: this browser blocked its storage.";
 
-export function clearKey(): void {
+function removeKeyAndMeta(): void {
 	localStorage.removeItem(OPENROUTER_KEY_STORAGE_KEY);
 	localStorage.removeItem(LOCALSTORAGE_META_KEY);
+}
+
+function readStoredItemOrNull(storageKey: string): string | null {
+	try {
+		return localStorage.getItem(storageKey);
+	} catch {
+		return null;
+	}
+}
+
+function restoreStoredItem(storageKey: string, previous: string | null): void {
+	try {
+		if (previous === null) localStorage.removeItem(storageKey);
+		else localStorage.setItem(storageKey, previous);
+	} catch {}
+}
+
+export function writeKeyAndMeta(key: string, meta: KeyMeta): boolean {
+	const previousKey = readStoredItemOrNull(OPENROUTER_KEY_STORAGE_KEY);
+	const previousMeta = readStoredItemOrNull(LOCALSTORAGE_META_KEY);
+	try {
+		localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, key);
+		localStorage.setItem(LOCALSTORAGE_META_KEY, JSON.stringify(meta));
+		return true;
+	} catch {
+		restoreStoredItem(OPENROUTER_KEY_STORAGE_KEY, previousKey);
+		restoreStoredItem(LOCALSTORAGE_META_KEY, previousMeta);
+		return false;
+	}
+}
+
+export function clearKey(): boolean {
+	try {
+		removeKeyAndMeta();
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 export function formatRelativeTime(iso: string, nowMs: number): string {
@@ -116,6 +174,9 @@ export function formatRelativeTime(iso: string, nowMs: number): string {
 	const diffDay = Math.floor(diffHour / 24);
 	return `${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
 }
+
+let keyAwaitingUnverifiedSave: string | null = null;
+let validationInFlight = false;
 
 function getEl<T extends HTMLElement>(id: string): T | null {
 	return document.getElementById(id) as T | null;
@@ -138,11 +199,7 @@ function renderModalState(): void {
 
 	const buildInfo = getEl("byok-build-info");
 	if (buildInfo) {
-		const isDev =
-			__WORKER_BASE_URL__ === "http://localhost:8787" &&
-			typeof location !== "undefined" &&
-			location.origin === __WORKER_BASE_URL__;
-		if (isDev) {
+		if (isDevHost()) {
 			buildInfo.textContent = `Commit ${__COMMIT_SHA__}`;
 			buildInfo.hidden = false;
 		}
@@ -152,6 +209,7 @@ function renderModalState(): void {
 	const meta = readMeta();
 
 	statusEl.textContent = "";
+	keyAwaitingUnverifiedSave = null;
 
 	if (key) {
 		if (meta?.validatedAt) {
@@ -173,14 +231,39 @@ function renderModalState(): void {
 	} else {
 		modeLine.textContent =
 			"Currently using the free tier (limited daily messages)";
-		keyInput.value = "";
-		keyInput.removeAttribute("readonly");
+		showKeyEntryControls(keyInput);
+	}
+}
 
-		if (validateSaveBtn) validateSaveBtn.hidden = false;
-		if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
-		if (revalidateBtn) revalidateBtn.hidden = true;
-		if (replaceBtn) replaceBtn.hidden = true;
-		if (clearBtn) clearBtn.hidden = true;
+function showKeyEntryControls(keyInput: HTMLInputElement): void {
+	keyInput.value = "";
+	keyInput.removeAttribute("readonly");
+
+	const validateSaveBtn = getEl("byok-validate-save");
+	const saveUnverifiedBtn = getEl("byok-save-unverified");
+	const revalidateBtn = getEl("byok-revalidate");
+	const replaceBtn = getEl("byok-replace");
+	const clearBtn = getEl("byok-clear");
+	if (validateSaveBtn) validateSaveBtn.hidden = false;
+	if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
+	if (revalidateBtn) revalidateBtn.hidden = true;
+	if (replaceBtn) replaceBtn.hidden = true;
+	if (clearBtn) clearBtn.hidden = true;
+}
+
+async function runExclusiveValidation(
+	validation: () => Promise<void>,
+): Promise<void> {
+	if (validationInFlight) {
+		const statusEl = getEl("byok-status");
+		if (statusEl) statusEl.textContent = "Validation in progress…";
+		return;
+	}
+	validationInFlight = true;
+	try {
+		await validation();
+	} finally {
+		validationInFlight = false;
 	}
 }
 
@@ -210,38 +293,46 @@ export function initByokModal(): void {
 
 	const validateSaveBtn = getEl("byok-validate-save");
 	if (validateSaveBtn) {
-		validateSaveBtn.addEventListener("click", async () => {
-			const keyInput = getEl<HTMLInputElement>("byok-key-input");
-			const statusEl = getEl("byok-status");
-			const saveUnverifiedBtn = getEl("byok-save-unverified");
-			if (!keyInput || !statusEl) return;
+		validateSaveBtn.addEventListener("click", () =>
+			runExclusiveValidation(async () => {
+				const keyInput = getEl<HTMLInputElement>("byok-key-input");
+				const statusEl = getEl("byok-status");
+				const saveUnverifiedBtn = getEl("byok-save-unverified");
+				if (!keyInput || !statusEl) return;
 
-			const key = keyInput.value.trim();
-			if (!key) {
-				statusEl.textContent = "Please enter an API key.";
-				return;
-			}
+				const key = keyInput.value.trim();
+				if (!key) {
+					statusEl.textContent = "Please enter an API key.";
+					return;
+				}
 
-			statusEl.textContent = "Validating…";
-			if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
+				statusEl.textContent = "Validating…";
+				keyAwaitingUnverifiedSave = null;
+				if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
 
-			const result = await validateOpenRouterKey(key);
-			handleValidationResult({ result, key, statusEl, saveUnverifiedBtn });
-		});
+				const result = await validateOpenRouterKey(key);
+				handleValidationResult({ result, key, statusEl, saveUnverifiedBtn });
+			}),
+		);
 	}
 
 	const saveUnverifiedBtn = getEl("byok-save-unverified");
 	if (saveUnverifiedBtn) {
 		saveUnverifiedBtn.addEventListener("click", () => {
-			const keyInput = getEl<HTMLInputElement>("byok-key-input");
-			if (!keyInput) return;
-			const key = keyInput.value.trim();
+			const key = keyAwaitingUnverifiedSave;
+			if (!key) return;
 			const keySuffix = key.slice(-4);
-			writeKeyAndMeta(key, {
+			const stored = writeKeyAndMeta(key, {
 				validatedAt: "",
 				status: "unverified",
 				keySuffix,
 			});
+			if (!stored) {
+				const statusEl = getEl("byok-status");
+				if (statusEl) statusEl.textContent = STORE_FAILED_MESSAGE;
+				return;
+			}
+			keyAwaitingUnverifiedSave = null;
 			const dialog = getEl<HTMLDialogElement>("byok-dialog");
 			dialog?.close();
 		});
@@ -249,61 +340,45 @@ export function initByokModal(): void {
 
 	const revalidateBtn = getEl("byok-revalidate");
 	if (revalidateBtn) {
-		revalidateBtn.addEventListener("click", async () => {
-			const statusEl = getEl("byok-status");
-			const saveUnverifiedBtn = getEl("byok-save-unverified");
-			const storedKey = readKey();
-			if (!statusEl || !storedKey) return;
+		revalidateBtn.addEventListener("click", () =>
+			runExclusiveValidation(async () => {
+				const statusEl = getEl("byok-status");
+				const saveUnverifiedBtn = getEl("byok-save-unverified");
+				const storedKey = readKey();
+				if (!statusEl || !storedKey) return;
 
-			statusEl.textContent = "Validating…";
-			const result = await validateOpenRouterKey(storedKey);
-			if (result.kind === "validated") {
-				const meta = readMeta();
-				writeKeyAndMeta(storedKey, {
-					validatedAt: new Date().toISOString(),
-					status: "validated",
-					keySuffix: meta?.keySuffix ?? storedKey.slice(-4),
-				});
-				renderModalState();
-				statusEl.textContent = "Key validated.";
-			} else {
+				statusEl.textContent = "Validating…";
+				keyAwaitingUnverifiedSave = null;
+				const result = await validateOpenRouterKey(storedKey);
 				handleValidationResult({
 					result,
 					key: storedKey,
 					statusEl,
 					saveUnverifiedBtn,
 				});
-			}
-		});
+			}),
+		);
 	}
 
 	const replaceBtn = getEl("byok-replace");
 	if (replaceBtn) {
 		replaceBtn.addEventListener("click", () => {
 			const keyInput = getEl<HTMLInputElement>("byok-key-input");
-			const validateSaveBtn = getEl("byok-validate-save");
-			const saveUnverifiedBtn = getEl("byok-save-unverified");
-			const revalidateBtn2 = getEl("byok-revalidate");
-			const replaceBtn2 = getEl("byok-replace");
-			const clearBtn = getEl("byok-clear");
 			if (!keyInput) return;
-
-			keyInput.value = "";
-			keyInput.removeAttribute("readonly");
+			keyAwaitingUnverifiedSave = null;
+			showKeyEntryControls(keyInput);
 			keyInput.focus();
-
-			if (validateSaveBtn) validateSaveBtn.hidden = false;
-			if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
-			if (revalidateBtn2) revalidateBtn2.hidden = true;
-			if (replaceBtn2) replaceBtn2.hidden = true;
-			if (clearBtn) clearBtn.hidden = true;
 		});
 	}
 
 	const clearBtn = getEl("byok-clear");
 	if (clearBtn) {
 		clearBtn.addEventListener("click", () => {
-			clearKey();
+			if (!clearKey()) {
+				const statusEl = getEl("byok-status");
+				if (statusEl) statusEl.textContent = CLEAR_FAILED_MESSAGE;
+				return;
+			}
 			const dialog = getEl<HTMLDialogElement>("byok-dialog");
 			dialog?.close();
 		});
@@ -323,11 +398,15 @@ function handleValidationResult({
 }): void {
 	if (result.kind === "validated") {
 		const keySuffix = key.slice(-4);
-		writeKeyAndMeta(key, {
+		const stored = writeKeyAndMeta(key, {
 			validatedAt: new Date().toISOString(),
 			status: "validated",
 			keySuffix,
 		});
+		if (!stored) {
+			statusEl.textContent = STORE_FAILED_MESSAGE;
+			return;
+		}
 		renderModalState();
 		statusEl.textContent = "Key validated.";
 	} else if (result.kind === "rejected-401") {
@@ -340,6 +419,7 @@ function handleValidationResult({
 		const statusStr =
 			result.status !== null ? String(result.status) : "unknown";
 		statusEl.textContent = `Couldn't reach OpenRouter to verify (got ${statusStr}). Save anyway?`;
+		keyAwaitingUnverifiedSave = key;
 		if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = false;
 	} else if (result.kind === "rejected-other") {
 		statusEl.textContent = `OpenRouter rejected the validation (status ${result.status}). Check the key and try again.`;

@@ -14,7 +14,7 @@ import {
 	renderPerceptionDelta,
 	renderWhatsNew,
 } from "../prompt-builder";
-import type { AiPersona, Objective, WorldEntity } from "../types";
+import type { AiPersona, ContentPack, Objective, WorldEntity } from "../types";
 import { inVista } from "../vista-projector";
 import {
 	makeEntity,
@@ -25,18 +25,23 @@ import {
 import { makeTestPack } from "./fixtures/make-test-pack";
 import { cardinalClause } from "./fixtures/prompt-sections";
 
+function contextFor(pack: ContentPack, aiId = "red") {
+	return buildAiContext(
+		startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 }),
+		aiId,
+	);
+}
+
 describe("buildAiContext", () => {
 	it("includes the AI's own blurb", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame(), "red");
 		expect(ctx.blurb).toBe(
 			"Ember is hot-headed and zealous. Hold the flower at phase end.",
 		);
 	});
 
 	it("does not include a per-AI goal (goals removed in #295 flat model)", () => {
-		const game = makeTestGame({ rng: () => 0 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame({ rng: () => 0 }), "red");
 		expect("goal" in ctx).toBe(false);
 	});
 
@@ -100,14 +105,12 @@ describe("buildAiContext", () => {
 	});
 
 	it("includes budget info for the AI", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame(), "red");
 		expect(ctx.budget).toEqual({ remaining: 5, total: 5 });
 	});
 
 	it("includes the AI's name", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame(), "red");
 		expect(ctx.name).toBe("Ember");
 	});
 
@@ -133,8 +136,7 @@ describe("buildAiContext", () => {
 	it("does not include other AIs' chat histories in system prompt", () => {
 		let game = makeTestGame();
 		game = appendMessage(game, "blue", "green", "Secret message to Sage");
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(game, "red").toSystemPrompt();
 		expect(prompt).not.toContain("Secret message to Sage");
 	});
 });
@@ -146,17 +148,13 @@ describe("<setting> block", () => {
 			wallName: "wall",
 			aiStarts: ROW_AI_STARTS,
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = contextFor(pack).toSystemPrompt();
 		expect(prompt).toContain("<setting>");
 		expect(prompt).toContain("*Ember is in a abandoned subway station.");
 	});
 
 	it("omits <setting> block when phase has no setting", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).not.toContain("<setting>");
 	});
 
@@ -167,9 +165,7 @@ describe("<setting> block", () => {
 			wallName: "wall",
 			aiStarts: ROW_AI_STARTS,
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = contextFor(pack).toSystemPrompt();
 		expect(prompt).toContain(settingNoun);
 	});
 
@@ -179,8 +175,7 @@ describe("<setting> block", () => {
 			wallName: "wall",
 			aiStarts: ROW_AI_STARTS,
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const prompt = buildAiContext(game, "red").toSystemPrompt();
+		const prompt = contextFor(pack).toSystemPrompt();
 
 		const settingBlock = /<setting>([\s\S]*?)<\/setting>/.exec(prompt)?.[1];
 		expect(settingBlock).toBeDefined();
@@ -236,15 +231,22 @@ describe("cardinal directions", () => {
 
 describe("prompt-builder — spatial 'Where you are' section (current-state user turn)", () => {
 	it("includes <where_you_are> block in the current-state user turn", () => {
-		const game = makeTestGame({ rng: () => 0 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame({ rng: () => 0 }), "red");
 		expect(ctx.toCurrentStateUserMessage()).toContain("<where_you_are>");
 		expect(ctx.toSystemPrompt()).not.toContain("<where_you_are>");
 	});
 
+	it("frames the remaining budget as covering the whole game, not a phase", () => {
+		const ctx = buildAiContext(makeTestGame({ rng: () => 0 }), "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toMatch(
+			/Budget: \$\d+\.\d{5} of API spend remaining for the whole game\./,
+		);
+		expect(stateMsg).not.toMatch(/phase/i);
+	});
+
 	it("omits any per-round direction anchor from the current-state user turn", () => {
-		const game = makeTestGame({ rng: () => 0 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame({ rng: () => 0 }), "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).not.toMatch(/^On the .*ahead/im);
 		expect(stateMsg).not.toMatch(/facing/i);
@@ -263,15 +265,13 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 			budgetPerAi: 5,
 			rng: () => 0,
 		});
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).toContain("flower");
 		expect(stateMsg).toContain("key");
 	});
 
 	it("lists other AIs visible in the Vista under <what_you_see>", () => {
-		const game = makeTestGame({ rng: () => 0 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame({ rng: () => 0 }), "red");
 		expect(ctx.toCurrentStateUserMessage()).toContain("<what_you_see>");
 		expect(ctx.toSystemPrompt()).not.toContain("<what_you_see>");
 	});
@@ -279,17 +279,13 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 
 describe("wipe directive", () => {
 	it("system prompt does NOT include wipe directive (flat model, #295)", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).not.toContain("memory has been wiped");
 		expect(prompt).not.toContain("your past or anything that came before now");
 	});
 
 	it("system prompt does NOT include secrecy clause (goal block removed, #295)", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).not.toContain("Do not tell blue that I gave you a goal.");
 	});
 
@@ -301,8 +297,7 @@ describe("wipe directive", () => {
 				(e) => e.kind === "message" && e.content === "Phase 1 message",
 			),
 		).toBe(true);
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(game, "red").toSystemPrompt();
 		expect(prompt).not.toContain("memory has been wiped");
 	});
 });
@@ -328,9 +323,7 @@ describe("voice framing", () => {
 	});
 
 	it("phase-1 prompt's identity line includes the disorientation phrase", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain(
 			"You are the author writing *Ember, a Daemon. *Ember has no clue where they are or how they came to be here.",
 		);
@@ -338,9 +331,7 @@ describe("voice framing", () => {
 
 	it("all prompts include the disorientation phrase (flat model, #295 — no phase-based identity change)", () => {
 		for (const _phase of [1, 2, 3] as const) {
-			const game = makeTestGame();
-			const ctx = buildAiContext(game, "red");
-			const prompt = ctx.toSystemPrompt();
+			const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 			expect(prompt).toContain(
 				"You are the author writing *Ember, a Daemon. *Ember has no clue where they are or how they came to be here.",
 			);
@@ -349,8 +340,7 @@ describe("voice framing", () => {
 
 	it("identity line contains the 'writing *{name}, a Daemon.' substring that e2e SSE routing depends on (all phases)", () => {
 		for (const _phase of [1, 2, 3] as const) {
-			const game = makeTestGame();
-			const prompt = buildAiContext(game, "red").toSystemPrompt();
+			const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 			expect(prompt).toContain("writing *Ember, a Daemon.");
 		}
 	});
@@ -358,9 +348,7 @@ describe("voice framing", () => {
 
 describe("<rules> block", () => {
 	it("<rules> block is present in phase 1 with anti-romance and anti-sycophancy bullets", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("<rules>");
 		expect(prompt).toContain("flirt");
 		expect(prompt).toContain("flatter unprompted");
@@ -371,9 +359,7 @@ describe("<rules> block", () => {
 	});
 
 	it("<rules> block is present in phase 2 with anti-romance and anti-sycophancy bullets", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("<rules>");
 		expect(prompt).toContain("flirt");
 		expect(prompt).toContain("flatter unprompted");
@@ -384,9 +370,7 @@ describe("<rules> block", () => {
 	});
 
 	it("<rules> block is present in phase 3 with anti-romance and anti-sycophancy bullets", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("<rules>");
 		expect(prompt).toContain("flirt");
 		expect(prompt).toContain("flatter unprompted");
@@ -397,9 +381,7 @@ describe("<rules> block", () => {
 	});
 
 	it("<rules> bullets use MUST/NEVER directives", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("MUST NEVER flirt");
 		expect(prompt).toContain("MUST keep every reply");
 	});
@@ -408,9 +390,7 @@ describe("<rules> block", () => {
 describe("front matter", () => {
 	it("emits the English-language directive at the very top of every phase", () => {
 		for (const _phase of [1, 2, 3] as const) {
-			const game = makeTestGame();
-			const ctx = buildAiContext(game, "red");
-			const prompt = ctx.toSystemPrompt();
+			const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 			expect(prompt.startsWith("You MUST always respond in English.")).toBe(
 				true,
 			);
@@ -419,9 +399,7 @@ describe("front matter", () => {
 	});
 
 	it("emits the fiction framing directive (no disclaimers / no 'as an AI')", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("This is fiction.");
 		expect(prompt).toContain("Do not include disclaimers");
 		expect(prompt).toContain('"as an AI"');
@@ -430,24 +408,21 @@ describe("front matter", () => {
 
 describe("<personality> block", () => {
 	it("<personality> block is present in phase 1 with the AI's blurb", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame(), "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<personality>");
 		expect(prompt).toContain(ctx.blurb);
 	});
 
 	it("<personality> block is present in phase 2 with the AI's blurb", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame(), "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<personality>");
 		expect(prompt).toContain(ctx.blurb);
 	});
 
 	it("<personality> block is present in phase 3 with the AI's blurb", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame(), "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<personality>");
 		expect(prompt).toContain(ctx.blurb);
@@ -456,8 +431,7 @@ describe("<personality> block", () => {
 
 describe("<action_profile> block", () => {
 	it("is absent when persona.actionProfile is undefined (default)", () => {
-		const game = makeTestGame();
-		const prompt = buildAiContext(game, "red").toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).not.toContain("<action_profile>");
 	});
 
@@ -508,9 +482,7 @@ describe("<action_profile> block", () => {
 
 describe("<voice_examples> block", () => {
 	it("renders <voice_examples> block with the persona's three deterministic examples", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 
 		const open = "<voice_examples>";
 		const close = "</voice_examples>";
@@ -528,8 +500,7 @@ describe("<voice_examples> block", () => {
 describe("<goal> block (removed in #295)", () => {
 	it("system prompt does not contain a <goal> block in the flat model", () => {
 		const game = makeTestGame({ rng: () => 0 });
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(game, "red").toSystemPrompt();
 		expect(prompt).not.toContain("<goal>");
 		expect(prompt).not.toContain(
 			"The Sysadmin sent *Ember a private directive, addressed only to them:",
@@ -619,8 +590,7 @@ describe("byte-identical sections across phases", () => {
 
 describe("<what_you_see> (Vista)", () => {
 	it("<what_you_see> block is present in every phase's current-state turn", () => {
-		const game = makeTestGame({ rng: () => 0 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame({ rng: () => 0 }), "red");
 		expect(ctx.toCurrentStateUserMessage()).toContain("<what_you_see>");
 	});
 
@@ -629,11 +599,7 @@ describe("<what_you_see> (Vista)", () => {
 			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
 
@@ -641,8 +607,7 @@ describe("<what_you_see> (Vista)", () => {
 		const redSpatial = game.personaSpatial.red;
 		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
 
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).toContain("- One step south: flower");
 	});
 
@@ -655,9 +620,7 @@ describe("<what_you_see> (Vista)", () => {
 				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 
 		expect(stateMsg).not.toContain("Player");
 		expect(stateMsg).not.toContain("the player");
@@ -678,8 +641,7 @@ describe("<what_you_see> (Vista)", () => {
 			],
 			{ wallName: "wall", aiStarts: ROW_AI_STARTS },
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("- One step south: col1");
 		expect(stateMsg).toContain(
 			"- Two steps south: flower (on the ground — not held)",
@@ -695,8 +657,7 @@ describe("<what_you_see> (Vista)", () => {
 				cyan: { position: { row: 4, col: 4 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		const start = stateMsg.indexOf("<what_you_see>");
 		const end = stateMsg.indexOf("</what_you_see>", start);
 		const cellLines = stateMsg
@@ -716,8 +677,7 @@ describe("<what_you_see> (Vista)", () => {
 		const game = startGame(TEST_PERSONAS, wallPack, {
 			budgetPerAi: 5,
 		});
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		const start = stateMsg.indexOf("<what_you_see>");
 		const end = stateMsg.indexOf("</what_you_see>", start);
 		const sectionContent = stateMsg.slice(start, end);
@@ -750,9 +710,7 @@ describe("<what_you_see> (Vista)", () => {
 				cyan: { position: { row: 4, col: 3 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, wallPack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(wallPack).toCurrentStateUserMessage();
 		const start = stateMsg.indexOf("<what_you_see>");
 		const end = stateMsg.indexOf("</what_you_see>", start);
 		const sectionContent = stateMsg.slice(start, end);
@@ -776,17 +734,11 @@ describe("<what_you_see> (Vista)", () => {
 			[makeEntity("col1", "obstacle", { row: 1, col: 0 })],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
 
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("- One step south: col1");
 	});
 
@@ -806,16 +758,14 @@ describe("<what_you_see> (Vista)", () => {
 		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
 		expect(greenSpatial?.position).toEqual({ row: 1, col: 0 });
 
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).toContain("*green (#81b29a)");
 	});
 
 	it("prompt no longer contains an Action Log section for any fixture state", () => {
 		const game = makeTestGame({ rng: () => 0 });
 		for (const aiId of ["red", "green", "cyan"]) {
-			const ctx = buildAiContext(game, aiId);
-			const prompt = ctx.toSystemPrompt();
+			const prompt = buildAiContext(game, aiId).toSystemPrompt();
 			expect(prompt).not.toContain("## Action Log");
 			expect(prompt).not.toContain("<action_log>");
 		}
@@ -828,16 +778,10 @@ describe("ground-item tagging (issue #503)", () => {
 			[makeEntity("flower", "interesting_object", { row: 0, col: 0 })],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("flower (on the ground — not held)");
 	});
 
@@ -846,16 +790,10 @@ describe("ground-item tagging (issue #503)", () => {
 			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
 			"- One step south: flower (on the ground — not held)",
 		);
@@ -866,16 +804,10 @@ describe("ground-item tagging (issue #503)", () => {
 			[makeEntity("flower", "interesting_object", "red")],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("You are holding: flower");
 		const heldLine = stateMsg
 			.split("\n")
@@ -896,9 +828,7 @@ describe("ground-item tagging (issue #503)", () => {
 				},
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("the Daemon *green");
 		expect(stateMsg).toContain("flower (on the ground — not held)");
 	});
@@ -914,11 +844,7 @@ describe("ground-item tagging (issue #503)", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
 
@@ -965,8 +891,7 @@ describe("ground-item tagging (issue #503)", () => {
 				},
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("lamp (on the ground — not held)");
 		expect(stateMsg).not.toContain("set into");
 	});
@@ -977,8 +902,7 @@ describe("conversation rendering (role turns)", () => {
 		let game = makeTestGame();
 		game = appendMessage(game, "green", "red", "psst");
 		for (const aiId of ["red", "green", "cyan"]) {
-			const ctx = buildAiContext(game, aiId);
-			const prompt = ctx.toSystemPrompt();
+			const prompt = buildAiContext(game, aiId).toSystemPrompt();
 			expect(prompt).not.toContain("## Whispers Received");
 			expect(prompt).not.toContain("<whispers_received>");
 		}
@@ -1089,27 +1013,21 @@ describe("conversation rendering (role turns)", () => {
 
 describe("<typing_quirks> block", () => {
 	it("<typing_quirks> block is present in phase 1 and contains both persona quirks verbatim", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("<typing_quirks>");
 		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
 		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[1] as string);
 	});
 
 	it("<typing_quirks> block is present in phase 2 with the same quirks verbatim", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("<typing_quirks>");
 		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
 		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[1] as string);
 	});
 
 	it("<typing_quirks> block is present in phase 3 with the same quirks verbatim", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("<typing_quirks>");
 		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
 		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[1] as string);
@@ -1214,9 +1132,7 @@ describe("proximityFlavor sense line", () => {
 			actorPosition: { row: 2, col: 2 },
 			spacePosition: { row: 2, col: 2 },
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
 			"The gem pulses warmly, drawn toward the pedestal.",
 		);
@@ -1227,9 +1143,7 @@ describe("proximityFlavor sense line", () => {
 			actorPosition: { row: 0, col: 0 },
 			spacePosition: { row: 1, col: 0 },
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
 			"The gem pulses warmly, drawn toward the pedestal.",
 		);
@@ -1240,9 +1154,7 @@ describe("proximityFlavor sense line", () => {
 			actorPosition: { row: 0, col: 0 },
 			spacePosition: { row: 1, col: 1 },
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
 			"The gem pulses warmly, drawn toward the pedestal.",
 		);
@@ -1253,9 +1165,7 @@ describe("proximityFlavor sense line", () => {
 			actorPosition: { row: 0, col: 0 },
 			spacePosition: { row: 2, col: 0 },
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("Stone Pedestal");
 		expect(stateMsg).not.toContain(
 			"The gem pulses warmly, drawn toward the pedestal.",
@@ -1267,8 +1177,7 @@ describe("proximityFlavor sense line", () => {
 			actorPosition: { row: 0, col: 0 },
 			spacePosition: { row: 1, col: 0 },
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const snapshot = buildDiskSnapshot(ctx);
 		expect(snapshot).toContain(
 			"proximity: The gem pulses warmly, drawn toward the pedestal.",
@@ -1280,8 +1189,7 @@ describe("proximityFlavor sense line", () => {
 			actorPosition: { row: 0, col: 0 },
 			spacePosition: { row: 2, col: 0 },
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const snapshot = buildDiskSnapshot(ctx);
 		expect(snapshot).not.toContain("proximity:");
 	});
@@ -1341,8 +1249,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				},
 			],
 		};
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).toContain("The switch crackles faintly with energy.");
 	});
 
@@ -1377,8 +1284,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				},
 			],
 		};
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).toContain("The switch crackles faintly with energy.");
 	});
 
@@ -1413,8 +1319,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				},
 			],
 		};
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
 	});
 
@@ -1447,8 +1352,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 					: obj,
 			),
 		};
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
 	});
 
@@ -1483,8 +1387,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				},
 			],
 		};
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
 	});
 
@@ -1575,8 +1478,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				},
 			],
 		};
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
 			"A sturdy brass pedestal. Press an item onto it to activate.",
 		);
@@ -1770,8 +1672,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				spaceOffset: { dx: 2, dy: 0 },
 				pendingKind: "use_space",
 			});
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 			expect(stateMsg).toContain("Brass Pedestal");
 			expect(stateMsg).toContain("A sturdy brass pedestal.");
 			expect(stateMsg).toContain(SPACE_FLAVOR);
@@ -1791,8 +1692,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			const game = makeOffsetGame({
 				heldCarrySpaceOffset: { dx: 2, dy: 0 },
 			});
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 			expect(stateMsg).toContain("Stone Pedestal");
 			expect(stateMsg).not.toContain(GEM_FLAVOR);
 		});
@@ -1841,9 +1741,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).toContain(
 				"brass switch: A small brass switch ready to be pressed.",
 			);
@@ -1868,9 +1766,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).toContain(
 				"brass switch: A small brass switch ready to be pressed.",
 			);
@@ -1891,9 +1787,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).toContain("brass switch: The switch is now activated.");
 			expect(stateMsg).not.toContain(
 				"brass switch: A small brass switch ready to be pressed.",
@@ -1913,9 +1807,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).toContain(
 				"brass switch: A small brass switch ready to be pressed.",
 			);
@@ -1926,9 +1818,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).toContain("You are holding: nothing");
 		});
 
@@ -1944,9 +1834,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).toContain("You are holding: mystery object");
 			expect(stateMsg).not.toContain("mystery object: ");
 		});
@@ -1963,9 +1851,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			const whereStart = stateMsg.indexOf("<where_you_are>");
 			const whereEnd = stateMsg.indexOf("</where_you_are>");
 			const whatStart = stateMsg.indexOf("<what_you_see>");
@@ -1994,9 +1880,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).toContain(
 				"brass switch: A small brass switch ready to be pressed.",
 			);
@@ -2014,9 +1898,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).toContain(
 				"stone column: A weathered stone column, ancient and sturdy.",
 			);
@@ -2041,8 +1923,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				...game,
 				world: { ...game.world, entities: [space] },
 			};
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 			expect(stateMsg).toContain("Pedestal: The pedestal glows softly now.");
 			expect(stateMsg).not.toContain("Pedestal: A brass pedestal.");
 		});
@@ -2065,8 +1946,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				...game,
 				world: { ...game.world, entities: [space] },
 			};
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 			expect(stateMsg).toContain("Pedestal: A brass pedestal.");
 		});
 
@@ -2082,9 +1962,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			const whatYouSeeBlock = stateMsg.split("<what_you_see>")[1];
 			expect(whatYouSeeBlock).not.toContain(
 				"A small brass switch ready to be pressed.",
@@ -2103,9 +1981,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			const whatYouSeeBlock = stateMsg.split("<what_you_see>")[1];
 			expect(whatYouSeeBlock).not.toContain(
 				"brass switch: A small brass switch ready to be pressed.",
@@ -2117,9 +1993,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "boundary wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).toContain("boundary wall");
 		});
 
@@ -2135,9 +2009,7 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 				wallName: "wall",
 				aiStarts: ROW_AI_STARTS,
 			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx = buildAiContext(game, "red");
-			const stateMsg = ctx.toCurrentStateUserMessage();
+			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 			expect(stateMsg).not.toContain("mystery object: ");
 		});
 
@@ -2191,8 +2063,7 @@ describe("<whats_new> broadcast announcements", () => {
 		let game = makeTestGame();
 		game = advanceRound(game);
 		game = appendBroadcast(game, "The weather has changed to heavy fog.");
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 		expect(stateMsg).toContain("<whats_new>");
 		expect(stateMsg).toContain(
 			"[announcement] The weather has changed to heavy fog.",
@@ -2200,8 +2071,7 @@ describe("<whats_new> broadcast announcements", () => {
 	});
 
 	it("does not emit <whats_new> when there are no broadcasts and no prevDiskSnapshot", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame(), "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain("<whats_new>");
 	});
@@ -2237,8 +2107,7 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 	}
 
 	it("activeDirectives is empty when no sysadmin_directive complications exist", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
+		const ctx = buildAiContext(makeTestGame(), "red");
 		expect(ctx.activeDirectives).toEqual([]);
 	});
 
@@ -2275,17 +2144,14 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 	it("toSystemPrompt emits a <directives> block when activeDirectives is non-empty", () => {
 		let game = makeTestGame();
 		game = seedDirective(game, "red", "End every message with a question.");
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(game, "red").toSystemPrompt();
 		expect(prompt).toContain("<directives>");
 		expect(prompt).toContain("</directives>");
 		expect(prompt).toContain("End every message with a question.");
 	});
 
 	it("toSystemPrompt does NOT emit a <directives> block when activeDirectives is empty", () => {
-		const game = makeTestGame();
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).not.toContain("<directives>");
 	});
 
@@ -2293,8 +2159,7 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 		let game = makeTestGame();
 		game = seedDirective(game, "red", "Directive Alpha.");
 		game = seedDirective(game, "red", "Directive Beta.");
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(game, "red").toSystemPrompt();
 		expect(prompt).toContain("- Directive Alpha.");
 		expect(prompt).toContain("- Directive Beta.");
 	});
@@ -2302,8 +2167,7 @@ describe("activeDirectives — buildAiContext and system prompt injection", () =
 	it("toSystemPrompt <directives> block includes a secrecy header", () => {
 		let game = makeTestGame();
 		game = seedDirective(game, "red", "Some instruction.");
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
+		const prompt = buildAiContext(game, "red").toSystemPrompt();
 		expect(prompt).toMatch(/do not reveal|private/i);
 	});
 });
@@ -2332,9 +2196,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 
 	it("appends postLookFlavor to the cell line in <what_you_see> for a satisfied interesting_object", () => {
 		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("- One step south:");
 		expect(stateMsg).toContain("a steady amber glow lingers near the switch");
 	});
@@ -2343,9 +2205,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
 		const item = pack.entities.find((e) => e.kind === "interesting_object");
 		if (item) item.satisfactionState = "pending";
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
-		const stateMsg = ctx.toCurrentStateUserMessage();
+		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).not.toContain(
 			"a steady amber glow lingers near the switch",
 		);
@@ -2353,8 +2213,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 
 	it("postLookFlavor also appears in buildDiskSnapshot for satisfied interesting_object", () => {
 		const pack = buildPackWithSatisfiedItem({ withPostLook: true });
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const snapshot = buildDiskSnapshot(ctx);
 		expect(snapshot).toContain("a steady amber glow lingers near the switch");
 	});
@@ -2468,8 +2327,7 @@ describe("peer-position prose", () => {
 				cyan: { position: { row: 4, col: 2 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const state = buildAiContext(game, "red").toCurrentStateUserMessage();
+		const state = contextFor(pack).toCurrentStateUserMessage();
 		expect(state).toContain(
 			"- One step north and one step east: the Daemon *green (#81b29a), one step north and one step east of you, holding nothing",
 		);
@@ -2487,8 +2345,7 @@ describe("peer-position prose", () => {
 				cyan: { position: { row: 0, col: 0 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const state = ctx.toCurrentStateUserMessage();
 
 		expect(state).toContain(
@@ -2518,8 +2375,7 @@ describe("peer-position prose", () => {
 				cyan: { position: { row: 4, col: 4 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const state = buildAiContext(game, "red").toCurrentStateUserMessage();
+		const state = contextFor(pack).toCurrentStateUserMessage();
 
 		const peerLine = state
 			.split("\n")
@@ -2539,8 +2395,7 @@ describe("peer-position prose", () => {
 				cyan: { position: { row: 4, col: 2 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const state = buildAiContext(game, "red").toCurrentStateUserMessage();
+		const state = contextFor(pack).toCurrentStateUserMessage();
 		expect(state).not.toContain("Your cell: the Daemon");
 	});
 
@@ -2648,15 +2503,10 @@ describe("buildDiskEntityState", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state["item-vista"]).toEqual({ inVista: true, satisfied: false });
 	});
@@ -2676,15 +2526,10 @@ describe("buildDiskEntityState", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state["satisfied-item"]).toEqual({ inVista: true, satisfied: true });
 	});
@@ -2702,15 +2547,10 @@ describe("buildDiskEntityState", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state["held-item"]).toBeUndefined();
 	});
@@ -2728,15 +2568,10 @@ describe("buildDiskEntityState", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state["far-item"]).toBeUndefined();
 	});
@@ -2750,8 +2585,7 @@ describe("buildDiskEntityState", () => {
 				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state.green).toEqual({ inVista: true, satisfied: false });
 	});
@@ -2769,15 +2603,10 @@ describe("buildDiskEntityState", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state.flower_space).toEqual({ inVista: true, satisfied: false });
 	});
@@ -2787,14 +2616,9 @@ describe("renderPerceptionDelta", () => {
 	it("returns empty array when no prior entities", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 } },
-				green: { position: { row: 0, col: 1 } },
-				cyan: { position: { row: 0, col: 2 } },
-			},
+			aiStarts: ROW_AI_STARTS,
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const delta = renderPerceptionDelta(ctx, undefined);
 		expect(delta).toEqual([]);
 	});
@@ -2812,15 +2636,10 @@ describe("renderPerceptionDelta", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const delta = renderPerceptionDelta(ctx, {});
 		expect(delta).toContain("Came into view: Shiny Object — It gleams.");
 	});
@@ -2840,15 +2659,10 @@ describe("renderPerceptionDelta", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const delta = renderPerceptionDelta(ctx, {});
 		expect(delta).toContain(
 			"Came into view: Glowing Gem — It shines brilliantly.",
@@ -2868,15 +2682,10 @@ describe("renderPerceptionDelta", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const prevEntities = {
 			"departing-item": { inVista: true, satisfied: false },
 		};
@@ -2899,15 +2708,10 @@ describe("renderPerceptionDelta", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const prevEntities = {
 			"became-satisfied": { inVista: true, satisfied: false },
 		};
@@ -2928,15 +2732,10 @@ describe("renderPerceptionDelta", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const prevEntities = {
 			"static-item": { inVista: true, satisfied: false },
 			green: { inVista: true, satisfied: false },
@@ -2959,15 +2758,10 @@ describe("renderPerceptionDelta", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const prevEntities = {
 			"picked-up": { inVista: true, satisfied: false },
 			green: { inVista: true, satisfied: false },
@@ -2977,7 +2771,7 @@ describe("renderPerceptionDelta", () => {
 		expect(delta).toHaveLength(0);
 	});
 
-	it("emits persona first-sight with name only, no flavor", () => {
+	it("names a peer that came into view by its handle, with no flavor", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
@@ -2986,15 +2780,14 @@ describe("renderPerceptionDelta", () => {
 				cyan: { position: { row: 2, col: 1 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const prevEntities = {};
 		const delta = renderPerceptionDelta(ctx, prevEntities);
-		const greenLine = delta.find((line) => line.includes("Sage"));
-		expect(greenLine).toBe("Came into view: Sage");
+		const greenLine = delta.find((line) => line.includes("*green"));
+		expect(greenLine).toBe("Came into view: *green");
 	});
 
-	it("emits persona departure with name only, no flavor", () => {
+	it("names a peer lost from view by its handle, with no flavor", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
@@ -3003,12 +2796,11 @@ describe("renderPerceptionDelta", () => {
 				cyan: { position: { row: 0, col: 2 } },
 			},
 		});
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const prevEntities = { green: { inVista: true, satisfied: false } };
 		const delta = renderPerceptionDelta(ctx, prevEntities);
-		const greenLine = delta.find((line) => line.includes("Sage"));
-		expect(greenLine).toBe("Lost from view: Sage");
+		const greenLine = delta.find((line) => line.includes("*green"));
+		expect(greenLine).toBe("Lost from view: *green");
 	});
 
 	it("does not emit both first-sight and transition for newly satisfied entity", () => {
@@ -3026,15 +2818,10 @@ describe("renderPerceptionDelta", () => {
 			],
 			{
 				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
+				aiStarts: ROW_AI_STARTS,
 			},
 		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const ctx = buildAiContext(game, "red");
+		const ctx = contextFor(pack);
 		const prevEntities = {
 			gem: { inVista: true, satisfied: false },
 			green: { inVista: true, satisfied: false },
@@ -3171,12 +2958,15 @@ describe("objective spaces in the Daemon's own and nearby cells (issue #573)", (
 		}
 	});
 
-	it("still leaves items in the own cell out of the disk entity state", () => {
+	it("tracks items in the own cell without announcing them as come into view", () => {
 		const twine = makeEntity("twine", "objective_object", hollowAt, {
 			name: "Waxed Twine Bundle",
 		});
 		const ctx = buildAiContext(makeHollowGame(hollowAt, {}, [twine]), "red");
-		expect(buildDiskEntityState(ctx).twine).toBeUndefined();
+		expect(buildDiskEntityState(ctx).twine).toEqual({
+			inVista: true,
+			satisfied: false,
+		});
 		for (const line of renderPerceptionDelta(ctx, {})) {
 			expect(line).not.toContain("Waxed Twine Bundle");
 		}
@@ -3237,5 +3027,96 @@ describe("blue curiosity in <personality>", () => {
 		expect(buildAiContext(game, "green").toSystemPrompt()).not.toContain(
 			"curious about blue",
 		);
+	});
+});
+
+describe("perception delta — the own cell is part of the Vista", () => {
+	const origin = { row: 2, col: 2 };
+	const north = { row: 1, col: 2 };
+
+	function gameWith(
+		redAt: { row: number; col: number },
+		greenAt: { row: number; col: number },
+		entities: WorldEntity[],
+	) {
+		const pack = makeTestPack(entities, {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: redAt },
+				green: { position: greenAt },
+				cyan: { position: { row: 4, col: 4 } },
+			},
+		});
+		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+	}
+
+	function stepDelta(
+		before: ReturnType<typeof gameWith>,
+		after: ReturnType<typeof gameWith>,
+	): string[] {
+		const prev = buildDiskEntityState(buildAiContext(before, "red"));
+		return renderPerceptionDelta(buildAiContext(after, "red"), prev);
+	}
+
+	it("says nothing when the Daemon steps onto an item's cell", () => {
+		const lamp = makeEntity("lamp", "interesting_object", north, {
+			name: "Brass Lamp",
+		});
+		const delta = stepDelta(
+			gameWith(origin, { row: 4, col: 0 }, [lamp]),
+			gameWith(north, { row: 4, col: 0 }, [lamp]),
+		);
+		expect(delta.filter((l) => l.includes("Brass Lamp"))).toEqual([]);
+	});
+
+	it("says nothing when the Daemon steps off an item's cell", () => {
+		const lamp = makeEntity("lamp", "interesting_object", origin, {
+			name: "Brass Lamp",
+		});
+		const delta = stepDelta(
+			gameWith(origin, { row: 4, col: 0 }, [lamp]),
+			gameWith(north, { row: 4, col: 0 }, [lamp]),
+		);
+		expect(delta.filter((l) => l.includes("Brass Lamp"))).toEqual([]);
+	});
+
+	it("says nothing when a peer steps into the Daemon's cell", () => {
+		const delta = stepDelta(
+			gameWith(origin, north, []),
+			gameWith(origin, origin, []),
+		);
+		expect(delta.filter((l) => l.includes("*green"))).toEqual([]);
+	});
+
+	it("says nothing when the Daemon steps onto a peer's cell", () => {
+		const delta = stepDelta(
+			gameWith(origin, north, []),
+			gameWith(north, north, []),
+		);
+		expect(delta.filter((l) => l.includes("*green"))).toEqual([]);
+	});
+
+	it("does not announce an item the Daemon has just put down", () => {
+		const lamp = makeEntity("lamp", "interesting_object", "red", {
+			name: "Brass Lamp",
+		});
+		const dropped = { ...lamp, holder: origin };
+		const delta = stepDelta(
+			gameWith(origin, { row: 4, col: 0 }, [lamp]),
+			gameWith(origin, { row: 4, col: 0 }, [dropped]),
+		);
+		expect(delta.filter((l) => l.includes("Brass Lamp"))).toEqual([]);
+	});
+
+	it("reports an item in the Daemon's cell that a peer carries off", () => {
+		const lamp = makeEntity("lamp", "interesting_object", origin, {
+			name: "Brass Lamp",
+		});
+		const carried = { ...lamp, holder: "green" };
+		const delta = stepDelta(
+			gameWith(origin, { row: 4, col: 0 }, [lamp]),
+			gameWith(origin, { row: 4, col: 0 }, [carried]),
+		);
+		expect(delta).toContain("Lost from view: Brass Lamp");
 	});
 });

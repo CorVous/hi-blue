@@ -233,8 +233,21 @@ describe("parseToolCallArguments", () => {
 		expect(pickUp?.function.description).toMatch(/before.*use|must pick_up/i);
 	});
 
-	it("use description states the item must be held to use it", () => {
+	it("use description covers a held item or a reachable place", () => {
 		const use = TOOL_DEFINITIONS.find((t) => t.function.name === "use");
-		expect(use?.function.description).toMatch(/must be holding/i);
+		const description = use?.function.description ?? "";
+		expect(description).toMatch(/item you are holding/i);
+		expect(description).toMatch(/activate a place/i);
+		expect(description).toMatch(/must be picked up first/i);
+		expect(description).not.toMatch(/must be holding/i);
+	});
+
+	it("item arguments ask for the name the Daemon sees, not an id", () => {
+		for (const tool of ["pick_up", "put_down", "use"]) {
+			const def = TOOL_DEFINITIONS.find((t) => t.function.name === tool);
+			const item = def?.function.parameters.properties.item;
+			expect(item?.description, tool).toMatch(/name/i);
+			expect(item?.description, tool).not.toMatch(/\bid\b/i);
+		}
 	});
 });

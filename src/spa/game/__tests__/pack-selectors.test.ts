@@ -4,7 +4,6 @@ import {
 	carryObjectById,
 	carryPairs,
 	interestingObjects,
-	objectiveSpaces,
 	obstacles,
 } from "../pack-selectors.js";
 import type { ContentPack, WorldEntity } from "../types.js";
@@ -238,80 +237,6 @@ describe("boundSpaces", () => {
 	});
 });
 
-describe("objectiveSpaces", () => {
-	it("returns empty array for empty pack", () => {
-		expect(objectiveSpaces(makePack())).toEqual([]);
-	});
-
-	it("returns paired spaces only when there are no bound spaces", () => {
-		const entities = [...makeCarryPairEntities(0), ...makeCarryPairEntities(1)];
-		const pack = makePack({ entities });
-		const result = objectiveSpaces(pack);
-		expect(result.map((e) => e.id)).toEqual(["space-0", "space-1"]);
-	});
-
-	it("returns bound spaces only when there are no carry pairs", () => {
-		const bs0 = makeBoundSpace(0);
-		const bs1 = makeBoundSpace(1);
-		const pack = makePack({ entities: [bs0, bs1] });
-		const result = objectiveSpaces(pack);
-		expect(result.map((e) => e.id)).toEqual(["bound-space-0", "bound-space-1"]);
-	});
-
-	it("returns paired spaces before bound spaces in a mixed pack", () => {
-		const pack = makePack({
-			entities: [
-				...makeCarryPairEntities(0),
-				...makeCarryPairEntities(1),
-				makeBoundSpace(0),
-				makeBoundSpace(1),
-			],
-		});
-		const result = objectiveSpaces(pack);
-		expect(result.map((e) => e.id)).toEqual([
-			"space-0",
-			"space-1",
-			"bound-space-0",
-			"bound-space-1",
-		]);
-	});
-
-	it("preserves carry-pair order and bound-space order", () => {
-		const pack = makePack({
-			entities: [
-				...makeCarryPairEntities(2),
-				...makeCarryPairEntities(0),
-				...makeCarryPairEntities(1),
-				makeBoundSpace(5),
-				makeBoundSpace(3),
-			],
-		});
-		const result = objectiveSpaces(pack);
-		expect(result.map((e) => e.id)).toEqual([
-			"space-2",
-			"space-0",
-			"space-1",
-			"bound-space-5",
-			"bound-space-3",
-		]);
-	});
-
-	it("does not include interesting_objects or obstacles", () => {
-		const pack = makePack({
-			entities: [
-				...makeCarryPairEntities(0),
-				makeInterestingObject(0),
-				makeBoundSpace(0),
-				makeObstacle(0),
-			],
-		});
-		const result = objectiveSpaces(pack);
-		for (const e of result) {
-			expect(e.kind).toBe("objective_space");
-		}
-	});
-});
-
 describe("carryObjectById", () => {
 	it("returns undefined for an empty pack", () => {
 		expect(carryObjectById("anything", makePack())).toBeUndefined();
@@ -394,14 +319,6 @@ describe("all selectors on a fully-populated mixed pack", () => {
 		expect(obstacles(pack).map((e) => e.id)).toEqual([
 			"obstacle-0",
 			"obstacle-1",
-		]);
-	});
-
-	it("objectiveSpaces returns paired-then-bound", () => {
-		expect(objectiveSpaces(pack).map((e) => e.id)).toEqual([
-			"space-0",
-			"space-1",
-			"bound-space-0",
 		]);
 	});
 });

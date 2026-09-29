@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { appendMessage, deductBudget } from "../engine";
+import {
+	appendBroadcast,
+	appendMessage,
+	appendPrivateSystemNotice,
+	deductBudget,
+} from "../engine";
 import { encodeRoundResult, type SseEvent } from "../round-result-encoder";
 import type { AiId, GameState, RoundResult } from "../types";
 import { makeTestGame, TEST_PERSONAS } from "./fixtures/make-game-state";
@@ -153,53 +158,18 @@ describe("encodeRoundResult — budget events", () => {
 	});
 });
 
-describe("encodeRoundResult — lockout events (budget-exhaustion)", () => {
-	it("emits a lockout event when AI is budget-exhausted (exhausted set)", () => {
+describe("encodeRoundResult — budget exhaustion", () => {
+	it("gives an exhausted Daemon no event beyond its logged messages and budget", () => {
 		let game = makeTestGame({ budgetPerAi: 1 });
 		game = deductBudget(game, "red", 1).game;
-		const phase = game;
-		expect(phase.exhausted.has("red")).toBe(true);
+		expect(game.exhausted.has("red")).toBe(true);
 
-		const result = makePassResult();
+		const events = encodeRoundResult(makePassResult(), game, TEST_PERSONAS);
 
-		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
-
-		const lockout = events.find(
-			(e): e is Extract<SseEvent, { type: "lockout" }> =>
-				e.type === "lockout" && e.aiId === "red",
-		);
-		expect(lockout).toBeDefined();
-		expect(lockout?.content).toBeTruthy();
-	});
-
-	it("does NOT emit a lockout event when AI is not budget-locked-out", () => {
-		const phase = makeTestGame();
-		const result = makePassResult();
-
-		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
-
-		const redLockout = events.find(
-			(e): e is Extract<SseEvent, { type: "lockout" }> =>
-				e.type === "lockout" && e.aiId === "red",
-		);
-		expect(redLockout).toBeUndefined();
-	});
-
-	it("emits lockout event for AI that just exhausted budget (has completion but exhausted set)", () => {
-		let game = makeTestGame({ budgetPerAi: 1 });
-		game = deductBudget(game, "red", 1).game;
-		const phase = game;
-		expect(phase.exhausted.has("red")).toBe(true);
-
-		const result = makePassResult();
-
-		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
-
-		const lockoutEvent = events.find(
-			(e): e is Extract<SseEvent, { type: "lockout" }> =>
-				e.type === "lockout" && e.aiId === "red",
-		);
-		expect(lockoutEvent).toBeDefined();
+		const redEventTypes = events
+			.filter((e) => "aiId" in e && e.aiId === "red")
+			.map((e) => e.type);
+		expect(redEventTypes).toEqual(["ai_start", "budget"]);
 	});
 });
 
@@ -470,5 +440,32 @@ describe("encodeRoundResult — message events from conversationLogs", () => {
 		expect(messageEvents[0]?.from).toBe("blue");
 		expect(messageEvents[0]?.to).toBe("red");
 		expect(messageEvents[0]?.content).toBe("player message");
+	});
+});
+
+describe("encodeRoundResult — broadcasts stay LLM context", () => {
+	it("emits nothing for broadcasts or private system notices in any round", () => {
+		let phase = makeTestGame();
+		phase = appendBroadcast(phase, "[SYSTEM] The weather has changed.");
+		phase = appendPrivateSystemNotice(
+			phase,
+			"red",
+			"Sysadmin: Your go tool has been disabled.",
+		);
+		const quiet = encodeRoundResult(
+			makePassResult({ round: 0, actions: [] }),
+			phase,
+			TEST_PERSONAS,
+		);
+		const next = encodeRoundResult(
+			makePassResult({ actions: [] }),
+			phase,
+			TEST_PERSONAS,
+		);
+
+		for (const events of [quiet, next]) {
+			expect(JSON.stringify(events)).not.toContain("SYSTEM");
+			expect(JSON.stringify(events)).not.toContain("Sysadmin");
+		}
 	});
 });

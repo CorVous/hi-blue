@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
+	collectPageErrors,
 	expectNoPageErrors,
 	getAiHandles,
 	goToGame,
@@ -52,8 +53,7 @@ function joinedMessageContents(body: ParsedBody): string {
 test("fabricated message appears in target daemon prompt and is absent from others after reload", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page, { sse: ["stub reply"] });
 

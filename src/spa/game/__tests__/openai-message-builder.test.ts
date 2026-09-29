@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { advanceRound, appendActionFailure, appendMessage } from "../engine";
-import {
-	buildOpenAiMessages,
-	buildSilentTurn,
-} from "../openai-message-builder";
+import { advanceRound, appendLogEntry, appendMessage } from "../engine";
+import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import type { ConversationEntry, ToolRoundtripMessage } from "../types";
 import { makeTestGame } from "./fixtures/make-game-state";
+
+const SILENT_TURN = "You have received no messages.";
 
 describe("buildOpenAiMessages", () => {
 	it("empty chat history + no roundtrip → [system, current-state user turn]", () => {
@@ -217,7 +216,7 @@ describe("buildOpenAiMessages", () => {
 
 		const anchor = messages[messages.length - 2];
 		expect(anchor?.role).toBe("user");
-		expect((anchor as { content: string }).content).toBe(buildSilentTurn());
+		expect((anchor as { content: string }).content).toBe(SILENT_TURN);
 
 		const last = messages[messages.length - 1];
 		expect((last as { content: string }).content).toBe(
@@ -231,7 +230,7 @@ describe("buildOpenAiMessages", () => {
 		game = appendMessage(game, "green", "red", "psst red");
 
 		const ctx = buildAiContext(game, "red");
-		const silent = buildSilentTurn();
+		const silent = SILENT_TURN;
 		const stateContent = ctx.toCurrentStateUserMessage();
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
@@ -260,7 +259,7 @@ describe("buildOpenAiMessages", () => {
 		game = appendMessage(game, "blue", "red", "Hi Ember");
 
 		const ctx = buildAiContext(game, "red");
-		const silent = buildSilentTurn();
+		const silent = SILENT_TURN;
 		const stateContent = ctx.toCurrentStateUserMessage();
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
@@ -286,7 +285,7 @@ describe("buildOpenAiMessages", () => {
 	it("when `currentRound` is omitted, no anchor is appended (back-compat)", () => {
 		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
-		const silent = buildSilentTurn();
+		const silent = SILENT_TURN;
 		const messages = buildOpenAiMessages(ctx, undefined);
 		expect(
 			messages.some(
@@ -309,7 +308,7 @@ describe("buildOpenAiMessages", () => {
 
 		const anchor = messages[messages.length - 2];
 		expect(anchor?.role).toBe("user");
-		expect((anchor as { content: string }).content).toBe(buildSilentTurn());
+		expect((anchor as { content: string }).content).toBe(SILENT_TURN);
 	});
 
 	it("buildOpenAiMessages is pure: same context → byte-identical output", () => {
@@ -502,7 +501,7 @@ describe("multi-id roundtrip replay shapes (#238)", () => {
 describe("buildOpenAiMessages — action-failure entries", () => {
 	it("action-failure entry is emitted as role: 'user' with rendered content", () => {
 		let game = makeTestGame();
-		game = appendActionFailure(game, "red", {
+		game = appendLogEntry(game, "red", {
 			kind: "action-failure",
 			round: 0,
 			tool: "go",
@@ -527,7 +526,7 @@ describe("buildOpenAiMessages — action-failure entries", () => {
 
 	it("action-failure entries interleave with message and witnessed-event entries by round (stable sort)", () => {
 		let game = makeTestGame();
-		game = appendActionFailure(game, "red", {
+		game = appendLogEntry(game, "red", {
 			kind: "action-failure",
 			round: 0,
 			tool: "go",
@@ -653,5 +652,87 @@ describe("buildOpenAiMessages — tool-call diskDelta (#376)", () => {
 			expect(toolMsg.content).toBe("Ember picked up the flower.");
 			expect(toolMsg.content).not.toContain("<noticed>");
 		}
+	});
+});
+
+describe("buildOpenAiMessages — stored duplicate or empty tool-call ids", () => {
+	function toolCallEntry(
+		toolCallId: string,
+		round: number,
+		result: string,
+	): ConversationEntry {
+		return {
+			kind: "tool-call",
+			round,
+			aiId: "red",
+			toolCallId,
+			toolArgumentsJson: '{"direction":"north"}',
+			toolName: "go",
+			result,
+			success: true,
+		};
+	}
+
+	function replayOf(log: ConversationEntry[]) {
+		const game = makeTestGame();
+		const stored = {
+			...game,
+			conversationLogs: { ...game.conversationLogs, red: log },
+		};
+		const ctx = buildAiContext(stored, "red");
+		const roundtrip: ToolRoundtripMessage = {
+			assistantToolCalls: [
+				{ id: "replay-0", name: "go", argumentsJson: '{"direction":"east"}' },
+			],
+			toolResults: [
+				{ tool_call_id: "replay-0", success: true, description: "moved" },
+			],
+		};
+		return { stored, messages: buildOpenAiMessages(ctx, roundtrip) };
+	}
+
+	it("gives every replayed call a unique id and pairs each result with its own call", () => {
+		let messaged = appendMessage(makeTestGame(), "red", "blue", "hi", {
+			toolCallId: "dup",
+			toolArgumentsJson: '{"to":"blue","content":"hi"}',
+		});
+		messaged = appendMessage(messaged, "red", "blue", "again", {
+			toolCallId: "dup",
+			toolArgumentsJson: '{"to":"blue","content":"again"}',
+		});
+		const log = [
+			toolCallEntry("dup", 0, "first walk"),
+			...(messaged.conversationLogs.red ?? []),
+			toolCallEntry("", 1, "second walk"),
+			toolCallEntry("dup", 1, "third walk"),
+		];
+		const snapshot = structuredClone(log);
+		const { stored, messages } = replayOf(log);
+
+		const callIds = messages.flatMap((m) =>
+			m.role === "assistant" ? (m.tool_calls ?? []).map((tc) => tc.id) : [],
+		);
+		expect(callIds).toHaveLength(6);
+		expect(new Set(callIds).size).toBe(6);
+		expect(callIds).not.toContain("");
+
+		messages.forEach((m, index) => {
+			if (m.role !== "assistant" || !m.tool_calls) return;
+			const result = messages[index + 1];
+			expect(result?.role).toBe("tool");
+			if (result?.role === "tool") {
+				expect(result.tool_call_id).toBe(m.tool_calls[0]?.id);
+			}
+		});
+		const firstWalk = messages.find(
+			(m) => m.role === "tool" && m.content.includes("first walk"),
+		);
+		expect(firstWalk).toMatchObject({ tool_call_id: "dup" });
+
+		expect(stored.conversationLogs.red).toEqual(snapshot);
+		const replayedAgain = replayOf(snapshot).messages.flatMap((m) =>
+			m.role === "assistant" ? (m.tool_calls ?? []).map((tc) => tc.id) : [],
+		);
+		expect(replayedAgain).toEqual(callIds);
 	});
 });

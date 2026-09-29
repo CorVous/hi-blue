@@ -5,7 +5,7 @@ import {
 	makeLocalStorageStub,
 } from "../../__tests__/fixtures/local-storage";
 import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
-import { startGame } from "../../game/engine.js";
+import { appendBroadcast, startGame } from "../../game/engine.js";
 import type { AiPersona, GameState } from "../../game/types.js";
 import { lookupArchiveVersion } from "../archive-map.js";
 import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
@@ -21,6 +21,8 @@ import {
 	getArchivedSessionInfo,
 	getSessionInfo,
 	hasLegacySave,
+	isSessionComplete,
+	isSessionSaveInProgress,
 	LEGACY_KEY,
 	listArchivedSessions,
 	listSessions,
@@ -28,13 +30,14 @@ import {
 	loadArchivedSession,
 	loadSession,
 	mintAndActivateNewSession,
-	mintSession,
 	mintSessionId,
+	readSessionLastSavedAt,
 	rmArchivedSession,
 	rmSession,
 	SESSIONS_PREFIX,
 	saveActiveSession,
 	seedFromArchive,
+	sessionChangedSince,
 	setActiveSessionId,
 } from "../session-storage.js";
 
@@ -85,9 +88,69 @@ function makeFreshGame(): GameState {
 }
 
 describe("mintSessionId", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it("matches /^0x[0-9A-F]{4}$/", () => {
 		const id = mintSessionId();
 		expect(id).toMatch(/^0x[0-9A-F]{4}$/);
+	});
+
+	it("can mint 0xFFFF at the top of the range", () => {
+		installLocalStorageStub();
+		vi.spyOn(Math, "random").mockReturnValue(0.99999999);
+		expect(mintSessionId()).toBe("0xFFFF");
+	});
+
+	it("re-rolls while the id is taken under sessions/ or archive/", () => {
+		installLocalStorageStub({
+			[`${SESSIONS_PREFIX}0x0000/meta.json`]: "{}",
+			[`${ARCHIVE_PREFIX}0x0001/engine.dat`]: "x",
+		});
+		vi.spyOn(Math, "random")
+			.mockReturnValueOnce(0)
+			.mockReturnValueOnce(1 / 0x10000)
+			.mockReturnValueOnce(2 / 0x10000);
+		expect(mintSessionId()).toBe("0x0002");
+	});
+
+	it("dupSession and seedFromArchive never reuse an existing id", async () => {
+		installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		await archiveSession(id);
+		const takenValue = Number.parseInt(id.slice(2), 16) / 0x10000;
+		const freeValue =
+			((Number.parseInt(id.slice(2), 16) + 1) % 0x10000) / 0x10000;
+		const random = vi.spyOn(Math, "random");
+
+		random.mockReturnValueOnce(takenValue).mockReturnValueOnce(freeValue);
+		const dupId = dupSession(id);
+		expect(dupId).not.toBe(id);
+
+		random.mockReturnValueOnce(takenValue).mockReturnValueOnce(freeValue);
+		rmSession(dupId);
+		const seededId = seedFromArchive(id, makeFreshGame());
+		expect(seededId).not.toBe(id);
+		expect(loadArchivedSession(id).kind).toBe("ok");
+	});
+
+	it("seedFromArchive starts the new room at the archived round and files the unplayed round's entries under the last played round", async () => {
+		installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		const played = appendBroadcast(
+			{ ...makeFreshGame(), round: 4 },
+			"The old room hums.",
+		);
+		saveActiveSession(played);
+		await archiveSession(id);
+
+		const seeded = loadSession(seedFromArchive(id, makeFreshGame()));
+		if (seeded.kind !== "ok") throw new Error("seeded session did not load");
+		expect(seeded.state.round).toBe(4);
+		const redLog = seeded.state.conversationLogs.red ?? [];
+		expect(redLog.map((entry) => entry.round)).toEqual([3, 4]);
 	});
 });
 
@@ -132,14 +195,17 @@ describe("saveActiveSession", () => {
 		vi.restoreAllMocks();
 	});
 
-	it("writes five keys in strict order: meta → 3 daemons → engine", () => {
+	it("writes the saving marker, then meta → 3 daemons → engine, then removes the marker", () => {
 		const stub = installLocalStorageStub();
-		mintAndActivateNewSession();
+		const id = mintAndActivateNewSession();
 		const game = makeFreshGame();
 		saveActiveSession(game);
 
 		const calls = stub.setItem.mock.calls.map((c) => c[0] as string);
-		const dataCalls = calls.filter((k) => k !== ACTIVE_KEY);
+		const markerKey = `${SESSIONS_PREFIX}${id}/saving`;
+		expect(calls.filter((k) => k !== ACTIVE_KEY)[0]).toBe(markerKey);
+		expect(stub.removeItem).toHaveBeenLastCalledWith(markerKey);
+		const dataCalls = calls.filter((k) => k !== ACTIVE_KEY && k !== markerKey);
 
 		expect(dataCalls[0]).toMatch(/meta\.json$/);
 
@@ -154,14 +220,16 @@ describe("saveActiveSession", () => {
 		}
 	});
 
-	it("engine.dat is written LAST (commit signal)", () => {
+	it("engine.dat is the last data file written", () => {
 		const stub = installLocalStorageStub();
 		mintAndActivateNewSession();
 		const game = makeFreshGame();
 		saveActiveSession(game);
 
 		const calls = stub.setItem.mock.calls.map((c) => c[0] as string);
-		const dataCalls = calls.filter((k) => k !== ACTIVE_KEY);
+		const dataCalls = calls.filter(
+			(k) => k !== ACTIVE_KEY && !k.endsWith("/saving"),
+		);
 		expect(dataCalls[dataCalls.length - 1]).toMatch(/engine\.dat$/);
 	});
 
@@ -187,6 +255,163 @@ describe("saveActiveSession", () => {
 		const result = saveActiveSession(game);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.reason).toBe("quota");
+	});
+
+	it.each([
+		".txt",
+		"engine.dat",
+	])("a re-save that fails writing %s leaves the session broken, not the old engine", (failingSuffix) => {
+		const stub = installLocalStorageStub();
+		mintAndActivateNewSession();
+		expect(saveActiveSession(makeFreshGame()).ok).toBe(true);
+		expect(loadActiveSession().kind).toBe("ok");
+
+		stub.setItem.mockImplementation((key: string, value: string) => {
+			if (key.endsWith(failingSuffix)) {
+				throw new DOMException("quota", "QuotaExceededError");
+			}
+			stub._store[key] = value;
+		});
+		const result = saveActiveSession(makeFreshGame());
+		expect(result).toMatchObject({ ok: false, reason: "quota" });
+		expect(loadActiveSession().kind).toBe("broken");
+	});
+
+	it.each([
+		".txt",
+		"engine.dat",
+	])("a save that fails writing %s reports the lastSavedAt it wrote, so the next save is not stale", (failingSuffix) => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		const first = saveActiveSession(makeFreshGame());
+		if (!first.ok) throw new Error("first save failed");
+
+		const failingStore = stub.setItem.getMockImplementation();
+		stub.setItem.mockImplementation((key: string, value: string) => {
+			if (key.endsWith(failingSuffix)) {
+				throw new DOMException("quota", "QuotaExceededError");
+			}
+			stub._store[key] = value;
+		});
+		vi.useFakeTimers({ now: Date.parse(first.lastSavedAt) + 1000 });
+		const failed = saveActiveSession(makeFreshGame(), {
+			expectedLastSavedAt: first.lastSavedAt,
+		});
+		vi.useRealTimers();
+		expect(failed.lastSavedAt).not.toBe(first.lastSavedAt);
+		expect(failed.ok).toBe(false);
+		expect(failed.lastSavedAt).toBe(readSessionLastSavedAt(id));
+		if (failingStore) stub.setItem.mockImplementation(failingStore);
+
+		const next = saveActiveSession(makeFreshGame(), {
+			expectedLastSavedAt: failed.lastSavedAt ?? first.lastSavedAt,
+		});
+		expect(next.ok).toBe(true);
+		expect(isSessionSaveInProgress(id)).toBe(false);
+		expect(loadActiveSession().kind).toBe("ok");
+
+		stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] = JSON.stringify({
+			...JSON.parse(stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] ?? "{}"),
+			lastSavedAt: "2099-01-01T00:00:00.000Z",
+		});
+		expect(
+			saveActiveSession(makeFreshGame(), {
+				expectedLastSavedAt: next.ok ? next.lastSavedAt : "",
+			}),
+		).toEqual({ ok: false, reason: "stale" });
+	});
+
+	it("a re-save that fails writing meta.json removes the marker and leaves the old save ok", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		const game = makeFreshGame();
+		expect(saveActiveSession(game).ok).toBe(true);
+		const before = { ...stub._store };
+
+		stub.setItem.mockImplementation((key: string, value: string) => {
+			if (key.endsWith("meta.json")) {
+				throw new DOMException("quota", "QuotaExceededError");
+			}
+			stub._store[key] = value;
+		});
+		const result = saveActiveSession(game);
+		expect(result).toEqual({ ok: false, reason: "quota" });
+		expect(stub._store[`${SESSIONS_PREFIX}${id}/saving`]).toBeUndefined();
+		expect(stub._store).toEqual(before);
+		expect(loadActiveSession().kind).toBe("ok");
+		expect(getSessionInfo(id).kind).toBe("ok");
+	});
+
+	it("a re-save that fails writing the saving marker leaves the old save ok", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		const game = makeFreshGame();
+		expect(saveActiveSession(game).ok).toBe(true);
+		const before = { ...stub._store };
+
+		stub.setItem.mockImplementation((key: string, value: string) => {
+			if (key.endsWith("/saving")) {
+				throw new DOMException("quota", "QuotaExceededError");
+			}
+			stub._store[key] = value;
+		});
+		const result = saveActiveSession(game);
+		expect(result).toEqual({ ok: false, reason: "quota" });
+		expect(stub._store).toEqual(before);
+		const loaded = loadActiveSession();
+		expect(loaded.kind).toBe("ok");
+		expect(getSessionInfo(id).kind).toBe("ok");
+	});
+
+	it("removes the saving marker after a successful save", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		expect(stub._store[`${SESSIONS_PREFIX}${id}/saving`]).toBeUndefined();
+	});
+
+	it("the saving marker is not listed as a daemon file nor copied by dup or archive", async () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const dupId = dupSession(id);
+		await archiveSession(id);
+		stub._store[`${SESSIONS_PREFIX}${id}/saving`] = "x";
+
+		const info = getSessionInfo(id);
+		expect(info.kind).toBe("broken");
+		expect(info.daemonFiles.map((f) => f.name)).toEqual([
+			"cyan.txt",
+			"green.txt",
+			"red.txt",
+		]);
+		expect(listSessions().sort()).toEqual([id, dupId].sort());
+		expect(stub._store[`${SESSIONS_PREFIX}${dupId}/saving`]).toBeUndefined();
+		expect(stub._store[`${ARCHIVE_PREFIX}${id}/saving`]).toBeUndefined();
+		await expect(archiveSession(id)).rejects.toThrow(/incomplete/);
+	});
+
+	it("isSessionComplete is false exactly when archiveSession would refuse the session", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		expect(isSessionComplete(id)).toBe(false);
+		saveActiveSession(makeFreshGame());
+		expect(isSessionComplete(id)).toBe(true);
+		stub._store[`${SESSIONS_PREFIX}${id}/saving`] = "x";
+		expect(isSessionComplete(id)).toBe(false);
+	});
+
+	it("preserves createdAt from the existing meta.json on re-save", () => {
+		installLocalStorageStub();
+		mintAndActivateNewSession();
+		const game = makeFreshGame();
+		saveActiveSession(game, { createdAt: "2024-01-01T00:00:00.000Z" });
+		saveActiveSession(game);
+		const loaded = loadActiveSession();
+		expect(loaded.kind).toBe("ok");
+		if (loaded.kind === "ok") {
+			expect(loaded.createdAt).toBe("2024-01-01T00:00:00.000Z");
+		}
 	});
 
 	it("returns ok: false reason: unavailable on SecurityError", () => {
@@ -364,6 +589,121 @@ describe("consecutive saves", () => {
 	});
 });
 
+describe("saveActiveSession expectedLastSavedAt", () => {
+	beforeEach(() => {
+		installLocalStorageStub();
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+	});
+
+	it("saves and reports the new lastSavedAt when the stored save is the expected one", () => {
+		const id = mintAndActivateNewSession();
+		vi.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
+		const first = saveActiveSession(makeFreshGame());
+		if (!first.ok) throw new Error("first save failed");
+		vi.setSystemTime(new Date("2025-01-01T00:00:01.000Z"));
+
+		const second = saveActiveSession(makeFreshGame(), {
+			expectedLastSavedAt: first.lastSavedAt,
+		});
+
+		expect(second).toEqual({
+			ok: true,
+			lastSavedAt: "2025-01-01T00:00:01.000Z",
+		});
+		expect(readSessionLastSavedAt(id)).toBe("2025-01-01T00:00:01.000Z");
+	});
+
+	it("refuses with reason stale and leaves storage untouched when another writer saved since", () => {
+		const id = mintAndActivateNewSession();
+		vi.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
+		const loadedWith = saveActiveSession(makeFreshGame());
+		if (!loadedWith.ok) throw new Error("first save failed");
+		vi.setSystemTime(new Date("2025-01-01T00:00:05.000Z"));
+		saveActiveSession(makeFreshGame());
+		const metaBefore = localStorage.getItem(
+			`${SESSIONS_PREFIX}${id}/meta.json`,
+		);
+		vi.setSystemTime(new Date("2025-01-01T00:00:09.000Z"));
+
+		const result = saveActiveSession(makeFreshGame(), {
+			expectedLastSavedAt: loadedWith.lastSavedAt,
+		});
+
+		expect(result).toEqual({ ok: false, reason: "stale" });
+		expect(localStorage.getItem(`${SESSIONS_PREFIX}${id}/meta.json`)).toBe(
+			metaBefore,
+		);
+		expect(isSessionSaveInProgress(id)).toBe(false);
+	});
+
+	it("refuses with reason stale when the session was removed since", () => {
+		const id = mintAndActivateNewSession();
+		const loadedWith = saveActiveSession(makeFreshGame());
+		if (!loadedWith.ok) throw new Error("first save failed");
+		rmSession(id);
+
+		const result = saveActiveSession(makeFreshGame(), {
+			sessionId: id,
+			expectedLastSavedAt: loadedWith.lastSavedAt,
+		});
+
+		expect(result).toEqual({ ok: false, reason: "stale" });
+		expect(listSessions()).not.toContain(id);
+	});
+});
+
+describe("sessionChangedSince", () => {
+	beforeEach(() => {
+		installLocalStorageStub();
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+	});
+
+	it("is false while the stored save is the one the caller holds", () => {
+		const id = mintAndActivateNewSession();
+		const saved = saveActiveSession(makeFreshGame());
+		if (!saved.ok) throw new Error("save failed");
+
+		expect(sessionChangedSince(id, saved.lastSavedAt)).toBe(false);
+	});
+
+	it("is true once another save lands", () => {
+		const id = mintAndActivateNewSession();
+		vi.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
+		const saved = saveActiveSession(makeFreshGame());
+		if (!saved.ok) throw new Error("save failed");
+		vi.setSystemTime(new Date("2025-01-01T00:00:05.000Z"));
+		saveActiveSession(makeFreshGame());
+
+		expect(sessionChangedSince(id, saved.lastSavedAt)).toBe(true);
+	});
+
+	it("is true once the session is removed", () => {
+		const id = mintAndActivateNewSession();
+		const saved = saveActiveSession(makeFreshGame());
+		if (!saved.ok) throw new Error("save failed");
+		rmSession(id);
+
+		expect(sessionChangedSince(id, saved.lastSavedAt)).toBe(true);
+	});
+
+	it("leaves an unreadable meta.json to the caller's own storage calls", () => {
+		const id = mintAndActivateNewSession();
+		const saved = saveActiveSession(makeFreshGame());
+		if (!saved.ok) throw new Error("save failed");
+		localStorage.setItem(`${SESSIONS_PREFIX}${id}/meta.json`, "{not json");
+
+		expect(sessionChangedSince(id, saved.lastSavedAt)).toBe(false);
+	});
+});
+
 describe("listSessions", () => {
 	beforeEach(() => {
 		installLocalStorageStub();
@@ -465,7 +805,7 @@ describe("loadSession", () => {
 	});
 });
 
-describe("mintSession", () => {
+describe("mintSessionId activation", () => {
 	beforeEach(() => {
 		installLocalStorageStub();
 	});
@@ -475,13 +815,13 @@ describe("mintSession", () => {
 
 	it("returns /^0x[0-9A-F]{4}$/ format", () => {
 		installLocalStorageStub();
-		const id = mintSession();
+		const id = mintSessionId();
 		expect(id).toMatch(/^0x[0-9A-F]{4}$/);
 	});
 
 	it("does NOT set the active pointer", () => {
 		installLocalStorageStub();
-		mintSession();
+		mintSessionId();
 		expect(getActiveSessionId()).toBeNull();
 	});
 });
@@ -710,6 +1050,31 @@ describe("archiveSession", () => {
 			(k) => k.startsWith(dstPrefix) && k.endsWith(".txt"),
 		);
 		expect(daemonKeys.length).toBeGreaterThan(0);
+	});
+
+	it("replaces an existing archive under the same id instead of merging", async () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const dstPrefix = `${ARCHIVE_PREFIX}${id}/`;
+		stub._store[`${dstPrefix}stale.txt`] = JSON.stringify({
+			aiId: "stale",
+			persona: TEST_PERSONAS.red,
+			conversationLog: [],
+		});
+
+		await archiveSession(id);
+
+		expect(stub._store[`${dstPrefix}stale.txt`]).toBeUndefined();
+		const archived = loadArchivedSession(id);
+		expect(archived.kind).toBe("ok");
+		if (archived.kind === "ok") {
+			expect(Object.keys(archived.state.personas).sort()).toEqual([
+				"cyan",
+				"green",
+				"red",
+			]);
+		}
 	});
 
 	it("engine.dat is written LAST in archive namespace", async () => {
@@ -1044,6 +1409,18 @@ describe("epoch in active sessions", () => {
 			stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] ?? "{}",
 		);
 		expect(reloadedMeta.epoch).toBe(7);
+	});
+
+	it("advanceEpoch saves the session under the next epoch", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		saveActiveSession(makeFreshGame(), { advanceEpoch: true });
+
+		const meta = JSON.parse(
+			stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] ?? "{}",
+		);
+		expect(meta.epoch).toBe(2);
 	});
 });
 

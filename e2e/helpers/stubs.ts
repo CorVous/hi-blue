@@ -6,6 +6,11 @@ import {
 } from "./engine-blob.js";
 import type { AiHandles } from "./handles.js";
 import { getAiHandles } from "./handles.js";
+import {
+	ACTIVE_SESSION_KEY,
+	SESSIONS_PREFIX,
+	sessionFileKey,
+} from "./sessions.js";
 import type { GridPosition } from "./vista-geometry.js";
 import { isGridPosition } from "./vista-geometry.js";
 
@@ -83,13 +88,12 @@ export function isRequestForDaemon(
 
 export function classifyJsonRequest(
 	body: ParsedBody,
-): "synthesis" | "dual-content-pack" | "content-pack" | "unknown" {
+): "synthesis" | "dual-content-pack" | "unknown" {
 	const userMsg = userMessageContent(body);
 	if (userMsg.startsWith("Synthesize blurbs for these personas:"))
 		return "synthesis";
 	if (userMsg.startsWith("Generate a dual A/B content pack for:"))
 		return "dual-content-pack";
-	if (userMsg.startsWith("Generate a content pack for:")) return "content-pack";
 	return "unknown";
 }
 
@@ -124,36 +128,12 @@ type BindingSpec = {
 	index: number;
 };
 
-type BindingContentPackSpec = {
-	setting: string;
-	bindings: BindingSpec[];
-	obstacleCount: number;
-};
-
 type DualBindingContentPackSpec = {
 	settingA: string;
 	settingB: string;
 	bindings: BindingSpec[];
 	obstacleCount: number;
 };
-
-function parseBindingContentPackSpec(userMsg: string): BindingContentPackSpec {
-	const settingMatch = /setting="([^"]*)"/.exec(userMsg);
-	const setting = settingMatch?.[1] ?? "stub-setting";
-
-	const bindingMatches = [
-		...userMsg.matchAll(/Binding\s+(\d+)\s+\(([^)]+)\):/g),
-	];
-	const bindings: BindingSpec[] = bindingMatches.map((m) => ({
-		index: Number(m[1]),
-		type: m[2] as BindingSpec["type"],
-	}));
-
-	const obstacleIds = [...userMsg.matchAll(/obstacle id="([^"]+)"/g)];
-	const obstacleCount = obstacleIds.length;
-
-	return { setting, bindings, obstacleCount };
-}
 
 function parseDualBindingContentPackSpec(
 	userMsg: string,
@@ -289,13 +269,6 @@ function buildBoundPack(
 	};
 }
 
-function buildBoundContentPackResponseBody(body: ParsedBody): string {
-	const spec = parseBindingContentPackSpec(userMessageContent(body));
-	const pack = buildBoundPack(spec.setting, spec.bindings, spec.obstacleCount);
-	const content = JSON.stringify({ pack });
-	return JSON.stringify({ choices: [{ message: { content } }] });
-}
-
 function buildBoundDualContentPackResponseBody(body: ParsedBody): string {
 	const spec = parseDualBindingContentPackSpec(userMessageContent(body));
 	const packA = buildBoundPack(
@@ -332,9 +305,7 @@ async function tryFulfillJsonMode(
 			? buildSynthesisResponseBody(body, blurbFor)
 			: kind === "dual-content-pack"
 				? buildBoundDualContentPackResponseBody(body)
-				: kind === "content-pack"
-					? buildBoundContentPackResponseBody(body)
-					: null;
+				: null;
 	if (responseBody === null) {
 		throw new Error(
 			`stubs.ts: unrecognised JSON-mode /v1/chat/completions caller. ` +
@@ -414,6 +385,39 @@ export async function stubChatCompletions(
 	});
 }
 
+export interface HeldChatCompletions {
+	release(): void;
+	requestCount(): number;
+}
+
+export async function holdChatCompletions(
+	page: Page,
+	matches: (body: ParsedBody) => boolean,
+	{ holdFirst = Number.POSITIVE_INFINITY }: { holdFirst?: number } = {},
+): Promise<HeldChatCompletions> {
+	let requests = 0;
+	let release: () => void = () => undefined;
+	const released = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	await page.route("**/v1/chat/completions", async (route, request) => {
+		if (matches(parseRequestBody(request))) {
+			requests++;
+			if (requests <= holdFirst) await released;
+		}
+		await route.fallback();
+	});
+	return { release: () => release(), requestCount: () => requests };
+}
+
+export function isDualContentPackRequest(body: ParsedBody): boolean {
+	return classifyJsonRequest(body) === "dual-content-pack";
+}
+
+export function isGameplayRequest(body: ParsedBody): boolean {
+	return !isJsonModeRequest(body);
+}
+
 export type GoToGameOptions = {
 	sse?: string[] | WordsFactory;
 	synthesis?: SynthesisStubOptions;
@@ -440,6 +444,18 @@ export async function goToGame(
 	});
 	await expect(page.locator("#composer")).toBeVisible();
 	return getAiHandles(page);
+}
+
+export async function reachEndgame(page: Page): Promise<AiHandles> {
+	const handles = await goToGame(page, {
+		url: "/?winImmediately=1",
+		sse: ["hello"],
+	});
+	await page.fill("#prompt", `*${handles.names[0]} hello`);
+	await expect(page.locator("#send")).toBeEnabled();
+	await page.click("#send");
+	await expect(page.locator("#endgame")).toBeVisible({ timeout: 15_000 });
+	return handles;
 }
 
 function withSkipDialup(url: string): string {
@@ -511,7 +527,6 @@ export interface SealedContentPack {
 	setting: string;
 	wallName: string;
 	entities?: SealedEntity[];
-	obstacles?: Array<{ holder: GridPosition | null }>;
 }
 
 export interface SealedEngine {
@@ -522,6 +537,7 @@ export interface SealedEngine {
 	contentPacksB: SealedContentPack[];
 	activePackId: "A" | "B";
 	weather?: string;
+	complicationSchedule?: { countdown: number; settingShiftFired: boolean };
 }
 
 export interface SealedConversationEntry {
@@ -553,28 +569,25 @@ export function activePackOf(
 }
 
 export function obstacleCellsOf(pack: SealedContentPack): GridPosition[] {
-	const fromEntities = (pack.entities ?? [])
+	return (pack.entities ?? [])
 		.filter((entity) => entity.kind === "obstacle")
 		.map((entity) => entity.holder)
-		.filter(isGridPosition);
-	if (fromEntities.length > 0) return fromEntities;
-	return (pack.obstacles ?? [])
-		.map((obstacle) => obstacle.holder)
 		.filter(isGridPosition);
 }
 
 export async function readActiveSessionEngine(
 	page: Page,
 ): Promise<{ sessionId: string; sealed: SealedEngine }> {
-	const raw = await page.evaluate(() => {
-		const sessionId = localStorage.getItem("hi-blue:active-session");
-		if (sessionId === null) return null;
-		const blob = localStorage.getItem(
-			`hi-blue:sessions/${sessionId}/engine.dat`,
-		);
-		if (blob === null) return null;
-		return { sessionId, blob };
-	});
+	const raw = await page.evaluate(
+		({ activeKey, prefix }) => {
+			const sessionId = localStorage.getItem(activeKey);
+			if (sessionId === null) return null;
+			const blob = localStorage.getItem(`${prefix}${sessionId}/engine.dat`);
+			if (blob === null) return null;
+			return { sessionId, blob };
+		},
+		{ activeKey: ACTIVE_SESSION_KEY, prefix: SESSIONS_PREFIX },
+	);
 	if (raw === null) {
 		throw new Error("e2e: no active session engine.dat in localStorage");
 	}
@@ -594,8 +607,28 @@ export async function writeActiveSessionEngine(
 		({ key, blob }: { key: string; blob: string }) => {
 			localStorage.setItem(key, blob);
 		},
-		{ key: `hi-blue:sessions/${sessionId}/engine.dat`, blob: value },
+		{ key: sessionFileKey(sessionId, "engine.dat"), blob: value },
 	);
+}
+
+export const COMPLICATION_COUNTDOWN_BEYOND_ANY_SPEC = 100;
+
+export async function setComplicationCountdown(
+	page: Page,
+	countdown: number,
+): Promise<void> {
+	const { sessionId, sealed } = await readActiveSessionEngine(page);
+	await writeActiveSessionEngine(page, sessionId, {
+		...sealed,
+		complicationSchedule: {
+			countdown,
+			settingShiftFired:
+				sealed.complicationSchedule?.settingShiftFired ?? false,
+		},
+	});
+	await page.reload();
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
+	await expect(page.locator("#composer")).toBeVisible();
 }
 
 export async function readDaemonFile(
@@ -605,7 +638,7 @@ export async function readDaemonFile(
 ): Promise<SealedDaemonFile> {
 	const raw = await page.evaluate(
 		(key: string) => localStorage.getItem(key),
-		`hi-blue:sessions/${sessionId}/${aiId}.txt`,
+		sessionFileKey(sessionId, `${aiId}.txt`),
 	);
 	if (raw === null)
 		throw new Error(`e2e: ${aiId}.txt not found in localStorage`);
@@ -617,23 +650,26 @@ export async function readActiveSessionFiles(page: Page): Promise<{
 	daemons: Record<string, string>;
 	engineJson: string;
 }> {
-	const raw = await page.evaluate(() => {
-		const sessionId = localStorage.getItem("hi-blue:active-session") ?? "";
-		const prefix = `hi-blue:sessions/${sessionId}/`;
-		const daemons: Record<string, string> = {};
-		let meta = "";
-		let engine = "";
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key === null || !key.startsWith(prefix)) continue;
-			const name = key.slice(prefix.length);
-			const value = localStorage.getItem(key) ?? "";
-			if (name === "meta.json") meta = value;
-			else if (name === "engine.dat") engine = value;
-			else if (name.endsWith(".txt")) daemons[name] = value;
-		}
-		return { meta, daemons, engine };
-	});
+	const raw = await page.evaluate(
+		({ activeKey, sessionsPrefix }) => {
+			const sessionId = localStorage.getItem(activeKey) ?? "";
+			const prefix = `${sessionsPrefix}${sessionId}/`;
+			const daemons: Record<string, string> = {};
+			let meta = "";
+			let engine = "";
+			for (let i = 0; i < localStorage.length; i++) {
+				const key = localStorage.key(i);
+				if (key === null || !key.startsWith(prefix)) continue;
+				const name = key.slice(prefix.length);
+				const value = localStorage.getItem(key) ?? "";
+				if (name === "meta.json") meta = value;
+				else if (name === "engine.dat") engine = value;
+				else if (name.endsWith(".txt")) daemons[name] = value;
+			}
+			return { meta, daemons, engine };
+		},
+		{ activeKey: ACTIVE_SESSION_KEY, sessionsPrefix: SESSIONS_PREFIX },
+	);
 	return {
 		meta: raw.meta,
 		daemons: raw.daemons,
@@ -648,8 +684,8 @@ export async function waitForRound(
 	timeoutMs = 30_000,
 ): Promise<void> {
 	await page.waitForFunction(
-		({ sid, minimumRound: round }: { sid: string; minimumRound: number }) => {
-			const raw = localStorage.getItem(`hi-blue:sessions/${sid}/meta.json`);
+		({ metaKey, minimumRound: round }) => {
+			const raw = localStorage.getItem(metaKey);
 			if (raw === null) return false;
 			try {
 				const meta = JSON.parse(raw) as { round?: number };
@@ -658,7 +694,7 @@ export async function waitForRound(
 				return false;
 			}
 		},
-		{ sid: sessionId, minimumRound },
+		{ metaKey: sessionFileKey(sessionId, "meta.json"), minimumRound },
 		{ timeout: timeoutMs },
 	);
 }
@@ -668,12 +704,10 @@ export async function waitForFirstRoundSaved(
 	timeoutMs = 15_000,
 ): Promise<void> {
 	await page.waitForFunction(
-		() => {
-			const sessionId = localStorage.getItem("hi-blue:active-session");
+		({ activeKey, prefix }) => {
+			const sessionId = localStorage.getItem(activeKey);
 			if (!sessionId) return false;
-			const metaRaw = localStorage.getItem(
-				`hi-blue:sessions/${sessionId}/meta.json`,
-			);
+			const metaRaw = localStorage.getItem(`${prefix}${sessionId}/meta.json`);
 			if (!metaRaw) return false;
 			try {
 				const meta = JSON.parse(metaRaw) as { round?: number };
@@ -682,7 +716,7 @@ export async function waitForFirstRoundSaved(
 				return false;
 			}
 		},
-		undefined,
+		{ activeKey: ACTIVE_SESSION_KEY, prefix: SESSIONS_PREFIX },
 		{ timeout: timeoutMs },
 	);
 }
@@ -696,19 +730,19 @@ export async function waitForSavedPosition(
 ): Promise<void> {
 	await page.waitForFunction(
 		({
-			sid,
+			engineKey,
 			id,
 			row,
 			col,
 			obfuscationKey,
 		}: {
-			sid: string;
+			engineKey: string;
 			id: string;
 			row: number;
 			col: number;
 			obfuscationKey: string;
 		}) => {
-			const blob = localStorage.getItem(`hi-blue:sessions/${sid}/engine.dat`);
+			const blob = localStorage.getItem(engineKey);
 			if (blob === null) return false;
 			try {
 				const keyBytes = new TextEncoder().encode(obfuscationKey);
@@ -729,7 +763,7 @@ export async function waitForSavedPosition(
 			}
 		},
 		{
-			sid: sessionId,
+			engineKey: sessionFileKey(sessionId, "engine.dat"),
 			id: aiId,
 			row: expectedPosition.row,
 			col: expectedPosition.col,

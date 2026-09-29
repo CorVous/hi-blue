@@ -1,14 +1,17 @@
+import type { BootstrapOpts } from "../game/bootstrap.js";
 import {
 	getPendingBootstrap,
+	type PendingBootstrap,
 	startBootstrap,
 } from "../game/pending-bootstrap.js";
 import { getSpikeRng, setSpikeSeed } from "../game/spike-seed.js";
+import { CapHitError, upstreamMessageOf } from "../llm-client.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
 import {
 	renderReasonBanner,
 	VERSION_MISMATCH_MESSAGE,
 } from "./archived-build-link.js";
-import { trySetCaret } from "./dom.js";
+import { setHidden, tryFocus, trySetCaret } from "./dom.js";
 
 const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	broken:
@@ -90,13 +93,21 @@ function shouldSkipAnimation(searchParams: URLSearchParams): boolean {
 	return prefersReducedMotion();
 }
 
-function tryFocus(el: HTMLElement): void {
-	try {
-		el.focus();
-	} catch {}
+function setTimeoutUnlessAborted(
+	signal: AbortSignal,
+	callback: () => void,
+	delayMs: number,
+): void {
+	setTimeout(() => {
+		if (!signal.aborted) callback();
+	}, delayMs);
 }
 
-function typeDialUp(dialEl: HTMLElement, onDone: () => void): void {
+function typeDialUp(
+	dialEl: HTMLElement,
+	signal: AbortSignal,
+	onDone: () => void,
+): void {
 	let buffer = "";
 	let i = 0;
 
@@ -117,7 +128,8 @@ function typeDialUp(dialEl: HTMLElement, onDone: () => void): void {
 				charIdx++;
 				dialEl.innerHTML = `${prefix}<span class="blinkonly">▍</span>`;
 				const isIndentedLine = full.startsWith("  ");
-				setTimeout(
+				setTimeoutUnlessAborted(
+					signal,
 					tick,
 					isIndentedLine ? DIAL_CHAR_MS_INDENTED_LINE : DIAL_CHAR_MS,
 				);
@@ -127,12 +139,12 @@ function typeDialUp(dialEl: HTMLElement, onDone: () => void): void {
 				const pause = full.includes("ringing")
 					? DIAL_PAUSE_AFTER_RINGING_MS
 					: DIAL_PAUSE_AFTER_LINE_MS;
-				setTimeout(next, pause);
+				setTimeoutUnlessAborted(signal, next, pause);
 			}
 		};
 		tick();
 	};
-	setTimeout(next, DIAL_START_DELAY_MS);
+	setTimeoutUnlessAborted(signal, next, DIAL_START_DELAY_MS);
 }
 
 const LANDSCAPE_VARIANTS: ReadonlyArray<readonly [string, string, string]> = [
@@ -196,24 +208,44 @@ function paintLandscape(keyart: HTMLElement): void {
 	].join("\n");
 }
 
-function attachPasswordMask(pwEl: HTMLInputElement): void {
-	pwEl.addEventListener("input", () => {
-		const prev = pwEl.dataset.real || "";
-		const shown = pwEl.value;
-		let real = "";
-		for (let i = 0; i < shown.length; i++) {
-			real += shown[i] === "*" ? prev[i] || "" : shown[i];
-		}
-		pwEl.dataset.real = real;
-		const caret = pwEl.selectionStart;
-		pwEl.value = "*".repeat(real.length);
-		if (caret !== null) trySetCaret(pwEl, caret);
-	});
+function attachPasswordMask(pwEl: HTMLInputElement, signal: AbortSignal): void {
+	pwEl.addEventListener(
+		"input",
+		() => {
+			const prev = pwEl.dataset.real || "";
+			const shown = pwEl.value;
+			let real = "";
+			for (let i = 0; i < shown.length; i++) {
+				real += shown[i] === "*" ? prev[i] || "" : shown[i];
+			}
+			pwEl.dataset.real = real;
+			const caret = pwEl.selectionStart;
+			pwEl.value = "*".repeat(real.length);
+			if (caret !== null) trySetCaret(pwEl, caret);
+		},
+		{ signal },
+	);
 }
 
 let _connectSubmitInFlight = false;
-let _activeResizeHandler: (() => void) | undefined;
-let _activeUptimeInterval: ReturnType<typeof setInterval> | undefined;
+let _previousRender: AbortController | undefined;
+
+function abortPreviousRender(): AbortSignal {
+	_previousRender?.abort();
+	_previousRender = new AbortController();
+	return _previousRender.signal;
+}
+
+function bootstrapFailureText(err: unknown): string {
+	const upstreamMessage = upstreamMessageOf(err);
+	return upstreamMessage === null
+		? "> the daemons failed to wake"
+		: `> the daemons failed to wake (${upstreamMessage})`;
+}
+
+function logBootstrapFailure(err: unknown): void {
+	console.error("[start] generation failed", err);
+}
 
 function formatUptime(elapsedMs: number): string {
 	const safe = Math.max(0, Math.floor(elapsedMs / 1000));
@@ -231,37 +263,28 @@ export function renderStart(
 	const doc = root.ownerDocument;
 
 	const startScreenEl = doc.querySelector<HTMLElement>("#start-screen");
-	const panelsEl = doc.querySelector<HTMLElement>("#panels");
-	const composerEl = doc.querySelector<HTMLElement>("#composer");
-	const sessionsScreenEl = doc.querySelector<HTMLElement>("#sessions-screen");
-
-	if (panelsEl) panelsEl.hidden = true;
-	if (composerEl) composerEl.hidden = true;
-	if (sessionsScreenEl) sessionsScreenEl.hidden = true;
+	setHidden(
+		doc,
+		[
+			"#panels",
+			"#composer",
+			"#sessions-screen",
+			"#endgame",
+			"#stage > header",
+			"#topinfo",
+			"#banner",
+		],
+		true,
+	);
 	if (startScreenEl) startScreenEl.hidden = false;
 
-	const headerEl = doc.querySelector<HTMLElement>("#stage > header");
-	const topinfoEl = doc.querySelector<HTMLElement>("#topinfo");
-	const bannerEl = doc.querySelector<HTMLElement>("#banner");
-	if (headerEl) headerEl.hidden = true;
-	if (topinfoEl) topinfoEl.hidden = true;
-	if (bannerEl) bannerEl.hidden = true;
-
-	const persistenceWarningEl = doc.querySelector<HTMLElement>(
-		"#persistence-warning",
+	renderReasonBanner(
+		doc,
+		doc.querySelector<HTMLElement>("#persistence-warning"),
+		opts?.reason ?? null,
+		opts?.schemaVersion,
+		PERSISTENCE_WARNING_MESSAGES,
 	);
-	if (
-		persistenceWarningEl &&
-		renderReasonBanner(
-			doc,
-			persistenceWarningEl,
-			opts?.reason ?? null,
-			opts?.schemaVersion,
-			PERSISTENCE_WARNING_MESSAGES,
-		)
-	) {
-		persistenceWarningEl.removeAttribute("hidden");
-	}
 
 	const beginBtn = doc.querySelector<HTMLButtonElement>("#begin");
 	if (!beginBtn) return Promise.resolve();
@@ -297,15 +320,7 @@ export function renderStart(
 	const postlogEl = doc.querySelector<HTMLElement>("#login-postlog");
 	if (postlogEl) postlogEl.innerHTML = "";
 
-	if (_activeResizeHandler && typeof window !== "undefined") {
-		window.removeEventListener("resize", _activeResizeHandler);
-		_activeResizeHandler = undefined;
-	}
-
-	if (_activeUptimeInterval !== undefined) {
-		clearInterval(_activeUptimeInterval);
-		_activeUptimeInterval = undefined;
-	}
+	const signal = abortPreviousRender();
 
 	const searchParams = new URLSearchParams(
 		typeof location !== "undefined" ? location.search : "",
@@ -325,18 +340,19 @@ export function renderStart(
 				);
 			};
 			tick();
-			_activeUptimeInterval = setInterval(tick, UPTIME_REFRESH_MS);
+			const uptimeInterval = setInterval(tick, UPTIME_REFRESH_MS);
+			signal.addEventListener("abort", () => clearInterval(uptimeInterval));
 		}
 		if (keyartEl) {
 			paintLandscape(keyartEl);
-			const handler = () => paintLandscape(keyartEl);
-			_activeResizeHandler = handler;
 			if (typeof window !== "undefined") {
-				window.addEventListener("resize", handler);
+				window.addEventListener("resize", () => paintLandscape(keyartEl), {
+					signal,
+				});
 			}
 		}
 		if (pwEl) {
-			attachPasswordMask(pwEl);
+			attachPasswordMask(pwEl, signal);
 			tryFocus(pwEl);
 		}
 	};
@@ -345,11 +361,90 @@ export function renderStart(
 		if (dialEl) dialEl.innerHTML = renderDialTranscriptHtml();
 		revealLogin();
 	} else if (dialEl) {
-		typeDialUp(dialEl, () =>
-			setTimeout(revealLogin, REVEAL_LOGIN_AFTER_DIAL_MS),
+		typeDialUp(dialEl, signal, () =>
+			setTimeoutUnlessAborted(signal, revealLogin, REVEAL_LOGIN_AFTER_DIAL_MS),
 		);
 	} else {
 		revealLogin();
+	}
+
+	const seedRaw = searchParams.get("seed");
+	const seedNum = seedRaw !== null ? Number(seedRaw) : Number.NaN;
+	if (Number.isFinite(seedNum)) {
+		setSpikeSeed(seedNum | 0);
+	}
+
+	const engagementClauses =
+		searchParams.get("engagementClauses") === ENGAGEMENT_CLAUSES_ON;
+	const actionProfilesDisabled =
+		searchParams.get("actionProfiles") === ACTION_PROFILES_OFF;
+
+	const personasRng = getSpikeRng("personas");
+	const contentPackRng = getSpikeRng("contentPack");
+	const bootstrapOpts: BootstrapOpts = {
+		...(personasRng && contentPackRng ? { personasRng, contentPackRng } : {}),
+		...(engagementClauses ? { engagementClauses: true } : {}),
+		...(actionProfilesDisabled ? { actionProfiles: false } : {}),
+	};
+
+	const bootstrapErrorEl = doc.querySelector<HTMLElement>(
+		"#start-bootstrap-error",
+	);
+	const bootstrapErrorTextEl = doc.querySelector<HTMLElement>(
+		"#start-bootstrap-error-text",
+	);
+	const bootstrapRetryBtn = doc.querySelector<HTMLButtonElement>(
+		"#start-bootstrap-retry",
+	);
+	const hideBootstrapError = () => {
+		bootstrapErrorEl?.setAttribute("hidden", "");
+	};
+	const showBootstrapError = (err: unknown) => {
+		if (!bootstrapErrorEl) return;
+		if (bootstrapErrorTextEl) {
+			bootstrapErrorTextEl.textContent = bootstrapFailureText(err);
+		}
+		bootstrapErrorEl.removeAttribute("hidden");
+	};
+	hideBootstrapError();
+
+	const reportGenerationFailure = (
+		bootstrap: PendingBootstrap,
+		err: unknown,
+	): void => {
+		const superseded = getPendingBootstrap() !== bootstrap;
+		const startVisible = startScreenEl ? !startScreenEl.hidden : false;
+		if (superseded || !startVisible) return;
+		if (err instanceof CapHitError) {
+			const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
+			if (capHitEl) capHitEl.removeAttribute("hidden");
+			if (startScreenEl) startScreenEl.setAttribute("hidden", "");
+		} else {
+			showBootstrapError(err);
+		}
+	};
+
+	const watchGeneration = (bootstrap: PendingBootstrap): Promise<void> =>
+		Promise.all([
+			bootstrap.personasPromise,
+			bootstrap.contentPacksPromise,
+		]).then(
+			() => undefined,
+			(err: unknown) => {
+				reportGenerationFailure(bootstrap, err);
+				throw err;
+			},
+		);
+
+	const restartFailedGeneration = () => {
+		hideBootstrapError();
+		watchGeneration(startBootstrap(bootstrapOpts)).catch(logBootstrapFailure);
+	};
+
+	if (bootstrapRetryBtn) {
+		bootstrapRetryBtn.addEventListener("click", restartFailedGeneration, {
+			signal,
+		});
 	}
 
 	const proceedConnect = () => {
@@ -358,6 +453,7 @@ export function renderStart(
 		beginBtn.disabled = true;
 		if (pwEl) pwEl.disabled = true;
 		clearError();
+		if (getPendingBootstrap()?.status === "failed") restartFailedGeneration();
 		renderApp(root);
 	};
 
@@ -378,53 +474,13 @@ export function renderStart(
 		proceedConnect();
 	};
 
-	if (formEl) formEl.addEventListener("submit", handleSubmit);
-	beginBtn.addEventListener("click", handleSubmit);
+	if (formEl) formEl.addEventListener("submit", handleSubmit, { signal });
+	beginBtn.addEventListener("click", handleSubmit, { signal });
 
-	const seedRaw = searchParams.get("seed");
-	const seedNum = seedRaw !== null ? Number(seedRaw) : Number.NaN;
-	if (Number.isFinite(seedNum)) {
-		setSpikeSeed(seedNum | 0);
+	const failedBootstrap = getPendingBootstrap();
+	if (failedBootstrap?.status === "failed") {
+		reportGenerationFailure(failedBootstrap, failedBootstrap.error);
+		return Promise.reject(failedBootstrap.error);
 	}
-
-	const engagementClauses =
-		searchParams.get("engagementClauses") === ENGAGEMENT_CLAUSES_ON;
-	const actionProfilesDisabled =
-		searchParams.get("actionProfiles") === ACTION_PROFILES_OFF;
-
-	const existing = getPendingBootstrap();
-	const personasRng = getSpikeRng("personas");
-	const contentPackRng = getSpikeRng("contentPack");
-	const spikeOpts =
-		personasRng && contentPackRng ? { personasRng, contentPackRng } : undefined;
-	const engagementOpts = engagementClauses
-		? { engagementClauses: true }
-		: undefined;
-	const actionProfileOpts = actionProfilesDisabled
-		? { actionProfiles: false }
-		: undefined;
-	const mergedOpts =
-		spikeOpts || engagementOpts || actionProfileOpts
-			? { ...spikeOpts, ...engagementOpts, ...actionProfileOpts }
-			: undefined;
-	const bootstrap = existing ?? startBootstrap(mergedOpts);
-
-	const generationPromise = (async () => {
-		try {
-			await Promise.all([
-				bootstrap.personasPromise,
-				bootstrap.contentPacksPromise,
-			]);
-		} catch (err) {
-			const startVisible = startScreenEl ? !startScreenEl.hidden : false;
-			if (startVisible) {
-				const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
-				if (capHitEl) capHitEl.removeAttribute("hidden");
-				if (startScreenEl) startScreenEl.setAttribute("hidden", "");
-			}
-			throw err;
-		}
-	})();
-
-	return generationPromise;
+	return watchGeneration(startBootstrap(bootstrapOpts));
 }

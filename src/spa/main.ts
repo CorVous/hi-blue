@@ -35,7 +35,13 @@ if (!rootEl) {
 	throw new Error('main: root element "main" not found');
 }
 
-renderApp(rootEl);
+function renderAppLoggingFailures(root: HTMLElement): void {
+	Promise.resolve(renderApp(root)).catch((err: unknown) => {
+		console.error("[main] render failed", err);
+	});
+}
+
+renderAppLoggingFailures(rootEl);
 initByokModal();
 
 const sessionsIconBtn =
@@ -43,8 +49,15 @@ const sessionsIconBtn =
 if (sessionsIconBtn) {
 	sessionsIconBtn.addEventListener("click", () => {
 		togglePickerOpen();
-		renderApp(rootEl);
+		renderAppLoggingFailures(rootEl);
 	});
+}
+
+function isTypingInVisibleField(target: EventTarget | null): boolean {
+	const isTextField =
+		target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+	if (!isTextField) return false;
+	return !target.disabled && target.closest("[hidden]") === null;
 }
 
 document.addEventListener("keydown", (e) => {
@@ -52,8 +65,7 @@ document.addEventListener("keydown", (e) => {
 	if (!isPickerOpen()) return;
 	const byokDialog = document.querySelector<HTMLDialogElement>("#byok-dialog");
 	if (byokDialog?.open) return;
-	const tag = (e.target as HTMLElement | null)?.tagName;
-	if (tag === "INPUT" || tag === "TEXTAREA") return;
+	if (isTypingInVisibleField(e.target)) return;
 	setPickerOpen(false);
-	renderApp(rootEl);
+	renderAppLoggingFailures(rootEl);
 });

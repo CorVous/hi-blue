@@ -1,25 +1,36 @@
 export { getAiHandles, renderedPlayerLine } from "./handles";
-export { expectNoPageErrors } from "./page-errors";
+export { collectPageErrors, expectNoPageErrors } from "./page-errors";
 export {
 	pickerOkSessionFiles,
 	pickerOkSessionSeedScript,
 } from "./picker-seeds";
 export {
-	START_SCREEN_BOOT_TIMEOUT_MS,
-	waitForStartScreenReady,
-} from "./start-screen-ready";
+	ACTIVE_SESSION_KEY,
+	ARCHIVE_PREFIX,
+	activeSessionId,
+	listSessionIds,
+	requireActiveSessionId,
+	SESSIONS_PREFIX,
+	seedOkSession,
+	sessionDir,
+	sessionFileKey,
+} from "./sessions";
+export { waitForStartScreenReady } from "./start-screen-ready";
 export {
 	activePackOf,
 	CARDINAL_DIRECTIONS,
 	type CardinalDirection,
+	COMPLICATION_COUNTDOWN_BEYOND_ANY_SPEC,
 	classifyJsonRequest,
-	deobfuscateEngineBlob,
 	ENGINE_OBFUSCATION_KEY,
-	type EntityHolder,
 	type GridPosition,
 	goToGame,
+	type HeldChatCompletions,
+	holdChatCompletions,
 	inRoom,
 	inVista,
+	isDualContentPackRequest,
+	isGameplayRequest,
 	isGridPosition,
 	isJsonModeRequest,
 	isRequestForDaemon,
@@ -30,16 +41,14 @@ export {
 	parseRequestBody,
 	positionsEqual,
 	RELATIVE_DIRECTION_WORDS,
+	reachEndgame,
 	readActiveSessionEngine,
 	readActiveSessionFiles,
 	readDaemonFile,
-	type SealedContentPack,
-	type SealedConversationEntry,
-	type SealedDaemonFile,
 	type SealedEngine,
-	type SealedEntity,
 	SSE_HEADERS,
 	sectionBetween,
+	setComplicationCountdown,
 	stepDelta,
 	stubChatCompletions,
 	stubNewGameLLM,

@@ -1,4 +1,9 @@
-import { CapHitError, chatCompletionJson } from "../llm-client.js";
+import { chatCompletionJson, isRetryPointless } from "../llm-client.js";
+import {
+	parseJsonCompletion,
+	retryDelayMs,
+	sleepUnlessAborted,
+} from "./json-completion.js";
 
 export const SYNTHESIS_SYSTEM_PROMPT = `You MUST always respond in English. You MUST reason in English.
 You write AI personality blurbs and voice examples for a text-based game. Given a list of personas, each with two temperaments and a persona goal, produce one blurb and exactly 3 voiceExamples per persona.
@@ -64,6 +69,7 @@ export interface LlmSynthesisProvider {
 }
 
 const VOICE_EXAMPLES_PER_PERSONA = 3;
+const SYNTHESIS_RETRY_BACKOFF_MS = 1_000;
 
 function validateResult(raw: unknown, inputIds: string[]): SynthesisResult {
 	if (raw == null || typeof raw !== "object") {
@@ -90,6 +96,11 @@ function validateResult(raw: unknown, inputIds: string[]): SynthesisResult {
 		if (typeof entry.id !== "string" || typeof entry.blurb !== "string") {
 			throw new SynthesisError(
 				"synthesis persona entry missing string id or blurb",
+			);
+		}
+		if (entry.blurb.trim().length === 0) {
+			throw new SynthesisError(
+				`synthesis persona entry ${entry.id} has an empty blurb`,
 			);
 		}
 		if (!inputIds.includes(entry.id)) {
@@ -131,9 +142,19 @@ function validateResult(raw: unknown, inputIds: string[]): SynthesisResult {
 
 export class BrowserSynthesisProvider implements LlmSynthesisProvider {
 	private readonly disableReasoning: boolean;
+	private readonly chatFn: typeof chatCompletionJson;
+	private readonly signal: AbortSignal | undefined;
 
-	constructor(opts: { disableReasoning?: boolean } = {}) {
+	constructor(
+		opts: {
+			disableReasoning?: boolean;
+			chatFn?: typeof chatCompletionJson;
+			signal?: AbortSignal;
+		} = {},
+	) {
 		this.disableReasoning = opts.disableReasoning ?? false;
+		this.chatFn = opts.chatFn ?? chatCompletionJson;
+		this.signal = opts.signal;
 	}
 
 	async synthesizePersonas(input: SynthesisInput[]): Promise<SynthesisResult> {
@@ -144,32 +165,27 @@ export class BrowserSynthesisProvider implements LlmSynthesisProvider {
 		];
 
 		const attemptSynthesis = async (): Promise<SynthesisResult> => {
-			const { content, reasoning } = await chatCompletionJson({
+			const result = await this.chatFn({
 				messages,
 				disableReasoning: this.disableReasoning,
+				...(this.signal !== undefined ? { signal: this.signal } : {}),
 			});
-
-			const raw = content !== null && content !== "" ? content : reasoning;
-			if (raw === null || raw === "") {
-				throw new SynthesisError(
-					"synthesis response has neither content nor reasoning",
-				);
-			}
-
-			let parsed: unknown;
-			try {
-				parsed = JSON.parse(raw);
-			} catch {
-				throw new SynthesisError(`synthesis JSON parse failed: ${raw}`);
-			}
-
+			const { parsed } = parseJsonCompletion(
+				result,
+				"synthesis",
+				(message) => new SynthesisError(message),
+			);
 			return validateResult(parsed, inputIds);
 		};
 
 		try {
 			return await attemptSynthesis();
 		} catch (err) {
-			if (err instanceof CapHitError) throw err;
+			if (isRetryPointless(err) || this.signal?.aborted) throw err;
+			await sleepUnlessAborted(
+				retryDelayMs(err, SYNTHESIS_RETRY_BACKOFF_MS),
+				this.signal,
+			);
 			return await attemptSynthesis();
 		}
 	}

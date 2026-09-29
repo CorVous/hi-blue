@@ -22,7 +22,7 @@ import type {
 import {
 	checkConvergenceTier,
 	isCarryObjectiveSatisfied,
-	isUseItemObjectiveSatisfied,
+	isObjectiveSatisfied,
 } from "../win-condition";
 import {
 	CORNER_AI_STARTS,
@@ -580,6 +580,43 @@ describe("dispatchAiTurn", () => {
 		expect(result.rejected).toBe(false);
 		expect(result.game.budgets.red?.remaining).toBeCloseTo(4, 10);
 		expect(result.records[0]?.kind).toBe("pass");
+		expect(result.justExhausted).toBe(false);
+	});
+
+	it("reports justExhausted on the turn that spends the last of the budget", () => {
+		const game = makeFlowerKeyGame({ budgetPerAi: 0.01 });
+		const action: AiTurnAction = { aiId: "red", pass: true };
+		const result = dispatchAiTurn(game, action, { costUsd: 0.01 });
+		expect(result.justExhausted).toBe(true);
+		expect(result.game.exhausted.has("red")).toBe(true);
+	});
+
+	it("drops everything an exhausted Daemon holds onto its cell, witnessed by Daemons in its Vista", () => {
+		const game = makeFlowerKeyGame({ budgetPerAi: 0.01 });
+		const action: AiTurnAction = { aiId: "red", pass: true };
+		const result = dispatchAiTurn(game, action, { costUsd: 0.01 });
+		const key = result.game.world.entities.find((e) => e.id === "key");
+		expect(key?.holder).toEqual(result.game.personaSpatial.red?.position);
+		expect(result.game.conversationLogs.green).toContainEqual({
+			kind: "witnessed-event",
+			round: game.round,
+			actor: "red",
+			actionKind: "put_down",
+			item: "key",
+		});
+		expect(
+			(result.game.conversationLogs.red ?? []).some(
+				(e) => e.kind === "witnessed-event",
+			),
+		).toBe(false);
+	});
+
+	it("keeps held items held while the Daemon still has budget", () => {
+		const game = makeFlowerKeyGame({ budgetPerAi: 1 });
+		const action: AiTurnAction = { aiId: "red", pass: true };
+		const result = dispatchAiTurn(game, action, { costUsd: 0.01 });
+		const key = result.game.world.entities.find((e) => e.id === "key");
+		expect(key?.holder).toBe("red");
 	});
 
 	it("invalid pick_up produces tool_failure record, world unchanged", () => {
@@ -1165,6 +1202,93 @@ describe("validateToolCall — use on objective_space", () => {
 	});
 });
 
+describe("use on a space that is not a Use-Space", () => {
+	const carryObjective: CarryObjective = {
+		id: "obj-carry",
+		kind: "carry",
+		description: "Set the relic in the shrine",
+		satisfactionState: "pending",
+		objectId: "relic",
+		spaceId: "shrine",
+	};
+	const convergenceObjective: ConvergenceObjective = {
+		id: "obj-conv",
+		kind: "convergence",
+		description: "Gather at the shrine",
+		satisfactionState: "pending",
+		spaceId: "shrine",
+	};
+
+	function gameWithShrineBoundTo(
+		objective: Objective,
+		spaceOpts: Partial<WorldEntity> = {},
+	): GameState {
+		return {
+			...makeGameWithSpaceObjective(
+				{ row: 2, col: 2 },
+				{ row: 2, col: 2 },
+				spaceOpts,
+			),
+			objectives: [objective],
+		};
+	}
+
+	for (const [label, objective] of [
+		["carry-paired", carryObjective],
+		["Convergence", convergenceObjective],
+	] as const) {
+		it(`rejects use on a ${label} space in the actor's own cell`, () => {
+			const result = validateToolCall(gameWithShrineBoundTo(objective), "red", {
+				name: "use",
+				args: { item: "Shrine" },
+			});
+			expect(result).toEqual({
+				valid: false,
+				reason: '"Shrine" is not something you can use',
+			});
+		});
+
+		it(`leaves a ${label} space and its objective unchanged when use is dispatched`, () => {
+			const game = gameWithShrineBoundTo(objective);
+			const result = dispatchAiTurn(game, {
+				aiId: "red",
+				toolCall: { name: "use", args: { item: "shrine" } },
+			});
+			expect(result.records[0]?.kind).toBe("tool_failure");
+			expect(result.records[0]?.description).toContain(
+				'"Shrine" is not something you can use',
+			);
+			const space = result.game.world.entities.find((e) => e.id === "shrine");
+			expect(space?.useAvailable).toBe(true);
+			expect(space?.satisfactionState).toBeUndefined();
+			expect(result.game.objectives).toEqual([objective]);
+		});
+	}
+
+	it("leaves the space unchanged when executeToolCall is called directly", () => {
+		const game = gameWithShrineBoundTo(convergenceObjective);
+		const updated = executeToolCall(game, "red", {
+			name: "use",
+			args: { item: "shrine" },
+		});
+		const space = updated.world.entities.find((e) => e.id === "shrine");
+		expect(space?.useAvailable).toBe(true);
+		expect(updated.objectives).toEqual([convergenceObjective]);
+	});
+
+	it("treats a carry space spent by an older save like any other non-Use-Space", () => {
+		const game = gameWithShrineBoundTo(carryObjective, { useAvailable: false });
+		const useEnum =
+			availableTools(game, "red", []).find((t) => t.function.name === "use")
+				?.function.parameters.properties.item?.enum ?? [];
+		expect(useEnum).not.toContain("Shrine");
+		expect(
+			validateToolCall(game, "red", { name: "use", args: { item: "Shrine" } })
+				.reason,
+		).toBe('"Shrine" is not something you can use');
+	});
+});
+
 describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor", () => {
 	it("emits witnessed event with satisfactionFlavor to a witness whose Vista contains the actor's cell", () => {
 		const space: WorldEntity = {
@@ -1583,9 +1707,9 @@ describe("interaction range — availability, validation, and effects agree", ()
 
 		for (const { label, offset, reachable } of cases) {
 			const game = makeRangeGame([makeGroundItem(offset)]);
-			const call: ToolCall = { name: "pick_up", args: { item: "flower" } };
+			const call: ToolCall = { name: "pick_up", args: { item: "Flower" } };
 			const validation = validateToolCall(game, "red", call);
-			expect(pickUpEnum(game).includes("flower"), label).toBe(reachable);
+			expect(pickUpEnum(game).includes("Flower"), label).toBe(reachable);
 			expect(validation.valid, label).toBe(reachable);
 		}
 	});
@@ -1594,12 +1718,12 @@ describe("interaction range — availability, validation, and effects agree", ()
 		const near = makeRangeGame([makeGroundItem({ dx: 1, dy: 1 })]);
 		const nearResult = validateToolCall(near, "red", {
 			name: "use",
-			args: { item: "flower" },
+			args: { item: "Flower" },
 		});
 		expect(nearResult.valid).toBe(false);
 		expect(nearResult.reason).toMatch(/on the ground/);
 		expect(nearResult.reason).toMatch(/pick_up/i);
-		expect(pickUpEnum(near)).toContain("flower");
+		expect(pickUpEnum(near)).toContain("Flower");
 
 		const far = makeRangeGame([makeGroundItem({ dx: 2, dy: 0 })]);
 		const farResult = validateToolCall(far, "red", {
@@ -1719,7 +1843,8 @@ describe("interaction range — availability, validation, and effects agree", ()
 		});
 		const satisfied = updated.objectives.find((o) => o.id === "obj-item");
 		expect(
-			satisfied?.kind === "use_item" && isUseItemObjectiveSatisfied(satisfied),
+			satisfied?.kind === "use_item" &&
+				isObjectiveSatisfied(satisfied, updated.world),
 		).toBe(true);
 	});
 

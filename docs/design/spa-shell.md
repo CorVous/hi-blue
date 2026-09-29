@@ -40,8 +40,18 @@ re-render is a call to `renderApp` from a view.
   reason reaches the banner. Otherwise, `pickerOpen` shows the picker with no
   reason, because the user opened it. Otherwise, the verdict's route
   determines the view.
-- **Escape closes the picker** unless the BYOK dialog is open or focus is in
-  an input or textarea.
+- **Escape closes the picker** unless the BYOK dialog is open or the player
+  is typing in a visible, enabled input or textarea
+  (`isTypingInVisibleField`). The picker hides the composer, but `#prompt`
+  can keep focus inside the hidden form (the player sent a round and then
+  opened the picker without clicking elsewhere, or the browser does not move
+  focus to the icon button). A plain "focus is in an input" check then
+  swallowed every Escape until the player clicked somewhere.
+- **`main.ts` catches what a render rejects with** (`renderAppLoggingFailures`)
+  and logs it. The start view's promise rejects when generation fails, after
+  it has already painted `#cap-hit` or the retryable error; without the catch
+  every such failure surfaced as an unhandled rejection. The catch only logs,
+  so it never hides the UI a view chose to show.
 
 ## BBS chrome (`bbs-chrome.ts`)
 
@@ -69,7 +79,19 @@ re-render is a call to `renderApp` from a view.
 - **Validation** calls OpenRouter's `/api/v1/auth/key`.
   - 401 and 402 are rejections.
   - Other 4xx responses are `rejected-other`.
-  - 5xx responses and network failures offer "save unverified".
+  - 5xx responses and network failures offer "save unverified". It saves
+    the key that failed to validate (`keyAwaitingUnverifiedSave`), never the
+    input's text: after Re-validate the input only shows the masked
+    `sk-or-v1-••••<suffix>`, and after Validate & save the player may have
+    edited it since.
+  - Only one validation runs at a time (`runExclusiveValidation`). A second
+    click on Validate & save or Re-validate while a request is out is
+    ignored, so one key is not checked, and written, twice; the status line
+    says "Validation in progress…" so the click does not look dead. The
+    request is aborted after `KEY_VALIDATION_TIMEOUT_MS` (15 s) and then
+    counts as a network failure, so a stalled fetch cannot hold the lock
+    forever. An abort while the body is being read also counts as a network
+    failure, not as an unparseable 200.
   - A 200 response that reports `usage >= limit` is treated as a 402.
   - A 200 response whose body cannot be parsed counts as validated
     (`readAuthKeyInfoOrNull` returns `null`). The endpoint has already
@@ -79,6 +101,16 @@ re-render is a call to `renderApp` from a view.
 - **Target resolution.** When a non-empty key is stored, requests go directly
   to OpenRouter. Otherwise they go to the Worker proxy. If localStorage
   cannot be read, the SPA behaves as if no key were stored.
+- **Storage can refuse the key.** `writeKeyAndMeta` and `clearKey` return
+  `false` instead of throwing when localStorage is blocked or full (private
+  mode, a quota). The modal then says it could not store (or clear) the key
+  and keeps the dialog open. Before, the throw escaped the click handler and
+  the status line stayed on "Validating…" forever. A write that fails half way
+  (key written, meta refused) puts back the key and meta that were stored
+  before the write, or removes them when there were none, so the SPA never
+  runs on a key the modal says it did not save. Removing them outright used
+  to delete a key that was working: a failed replacement left the player
+  with no key at all.
 - **Key storage.** `openrouter-key.ts` owns the storage key
   (`OPENROUTER_KEY_STORAGE_KEY`) and `readStoredByokKey`, which returns
   `null` when localStorage cannot be read. The modal, `llm-client.ts` and
@@ -112,22 +144,81 @@ re-render is a call to `renderApp` from a view.
   cost the same as what the evals measured (ADR 0017).
 - A 200 response whose body contains an `error` object throws
   `UpstreamErrorBodyError`.
+- **One request path.** `streamCompletion` and `chatCompletionJson` share
+  `completionRequestBody` (model, provider, messages, usage, reasoning) and
+  `postCompletion` (target, fetch, error mapping). Both take an optional
+  `AbortSignal` and hand it to `fetch`, which also cancels reading the body.
+  The bootstrap uses it to abort stalled generation calls.
+- **Errors (`llm-errors.ts`).** A non-2xx response becomes `CapHitError` when
+  the body is the proxy's own cap, and otherwise `HttpStatusError` with the
+  `status`, the OpenRouter `error.message` (`upstreamMessage`, `null` when the
+  body has none) and `Retry-After` in seconds (a number or an HTTP date). The
+  message used to be only `HTTP <status>: <statusText>`, so a 401 or 402 gave
+  the player no hint of the cause. `isRetryPointless` is true for the cap and
+  for 400, 401, 402 and 403: a bad request, a missing or wrong key and an empty
+  account fail the same way on every retry, and retrying them only delayed the
+  error by the backoff. `upstreamMessageOf` gives the text the views show
+  (`HTTP 402: Insufficient credits`, or an error body's message). The error
+  classes live in their own module so `streaming.ts` can throw them without
+  importing `llm-client.ts`, which imports it. `llm-client.ts` re-exports them.
 
 ## SSE parsing (`streaming.ts`)
 
-- Events are split on blank lines. The unfinished trailing event stays in the
-  buffer until the next read.
+- Line endings are normalised (`\r\n` and a bare `\r` become `\n`) before
+  events are split on blank lines, since SSE allows all three. A `\r` at the
+  very end of a read is held back until the next read, because it may be the
+  first half of a `\r\n` pair split across chunks. The unfinished trailing
+  event stays in the buffer until the next read.
+- When the stream closes, the buffer is parsed as a final event even though
+  no blank line ended it, so an upstream that closes without `[DONE]` does
+  not lose its last chunk. Tool calls still accumulated at that point are
+  flushed only if some chunk carried a `finish_reason` (for example `stop`
+  with tool calls and no `[DONE]`): the model finished, so the calls are
+  whole. Without one, the stream was cut off (a mid-stream error, then a
+  close), the arguments may be truncated, and the calls are dropped.
 - Tool calls accumulate by `index`. The id and name arrive in the first
   fragment, and later fragments append to the arguments. The accumulated
-  calls are flushed on `finish_reason: "tool_calls"` or `[DONE]`.
+  calls are flushed on `finish_reason: "tool_calls"`, `[DONE]` or the end of
+  a stream that carried a `finish_reason`.
 - **Usage.** OpenRouter's final chunk has empty `choices` and a populated
   `usage` (`usageFromChunk`). `cached_tokens` is read from the OpenAI-style
   `prompt_tokens_details.cached_tokens`, falling back to the Anthropic-style
   `cache_read_input_tokens`. It is left undefined when the provider does not
   report caching.
-- Malformed JSON chunks are dropped. The same `try` block wraps the callbacks,
-  so an exception thrown by `onDelta` or another callback while it handles a
-  chunk is dropped too.
+- **Errors inside a 200 stream.** OpenRouter reports a failure that happens
+  after the stream has started (the provider disconnects, a moderation stop)
+  as a chunk with an `error` object and `finish_reason: "error"`, because the
+  status line has already gone out. What happens depends on what the turn
+  already received:
+  - The chunk's usage is reported through `onUsage` first, whatever follows.
+    The call is billed even when it fails, and the spend must be counted.
+  - If no content and no tool call arrived before the error (reasoning does
+    not count), `UpstreamErrorBodyError` is thrown, so the round fails and
+    shows `#round-error`. There is nothing to commit for that Daemon.
+  - If content or a tool call already arrived, the turn ends with what was
+    received: accumulated tool calls are flushed and parsing stops, without
+    a throw. Throwing here used to discard the whole round, including the
+    turns other Daemons had already taken and been billed for. A tool call
+    cut off mid-arguments fails argument parsing in the coordinator and is
+    recorded as a tool failure, like any other malformed call.
+  - `finish_reason: "error"` without an `error` object does not throw by
+    itself. It counts as a finish reason, so the turn keeps what it received;
+    a turn that received nothing becomes a pass.
+
+  The error check runs outside the `try` that swallows malformed chunks;
+  inside it, the throw was dropped like a parse error.
+- **Why a failed turn still fails the round.** An upstream failure with
+  nothing received is not turned into an "is unresponsive…" turn by the
+  round coordinator. That line belongs to a Daemon whose budget is spent:
+  it makes no LLM call and is charged nothing, and the game treats it as a
+  lasting state. A provider hiccup is transient, and the SPA already models
+  it as a failed round: `#round-error` with the upstream message and the
+  `connection unstable` pip (views.md, "Round errors"), after which the
+  player can send again. Folding it into a pass would silently spend the
+  player's round and hide the failure.
+- Malformed JSON chunks are dropped. A separate `try` block wraps the
+  callbacks, so an exception thrown by `onDelta` or another callback while it
+  handles a chunk is dropped too.
 
 ## Build-time globals (`env.d.ts`, `test-setup.ts`)
 
@@ -157,12 +248,21 @@ affordance such as `?winImmediately=1` would change a later test's round.
   (`withDevInspectorRecording`) records them in module-level maps in
   `dev-inspector/daemon-footer.ts`. Every session render clears the turn results
   so that data from a previous session does not appear.
-- **Update invariants.** `updateDaemonFooterSummary` never touches the pip,
-  which only `setDaemonFooterInFlight` changes.
-  `updateDaemonFooterDetails` never replaces a `<details>` element or its
-  `open` attribute, so a block the user expanded stays open. The persona card
-  is filled in once. `updateGameStripSummary` keeps the strip's `<details>`
-  element. `updateWorldMap` mutates the existing cells and never creates or
+- **A session render is complete on its own.** After it rebuilds each footer,
+  `renderSessionInspector` fills the summary and details from the session
+  (last tools, complication chips) and calls `setMapFocus(getMapFocus())`. The
+  footers' focus buttons are new elements, so without that call a focused
+  Vista stayed tinted while every button read inactive, and the footers stayed
+  blank until the next round.
+- **Update invariants.** `refreshDaemonFooter` fills the summary and the
+  details together, because every caller needs both. It never touches the pip,
+  which only `setDaemonFooterInFlight` changes, and it never replaces a
+  `<details>` element or its `open` attribute, so a block the user expanded
+  stays open. The persona card is filled in once. `renderGameStrip` builds
+  empty spans from the same field table that `updateGameStripSummary` fills,
+  so the two cannot drift, and `updateGameStripSummary` keeps the strip's
+  `<details>` element. `renderWorldMap` and `updateWorldMap` share one
+  `paintCell`; the update mutates the existing cells and never creates or
   removes nodes.
 - **Pending strip.** A 100 ms ticker updates the elapsed time. Only
   `renderPendingStrip` restarts it; `updatePendingStrip` does not.

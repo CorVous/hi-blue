@@ -1,27 +1,30 @@
+import { isDevHost } from "../dev-host";
 import { availableTools } from "./available-tools";
 import {
 	applyComplicationResult,
 	decrementComplicationCountdown,
+	isPlayerChatLockedOut,
 	resolveExpiredChatLockouts,
 	resolveExpiredDirectives,
 	tickComplication,
 } from "./complication-engine";
+import { isGridPosition, positionsEqual } from "./direction";
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advanceRound,
+	appendLogEntry,
 	appendMessage,
 	appendPrivateSystemNotice,
-	appendWitnessedConvergence,
-	appendWitnessedObstacleShift,
 	FAREWELL_LINE,
 	isDaemonExhausted,
+	isFirstRoundOfRoom,
+	personaName,
 	resolveToolDisables,
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
 import {
 	buildAiContext,
-	buildDiskEntityState,
-	buildDiskSnapshot,
+	type DiskEntityState,
 	renderPerceptionDelta,
 } from "./prompt-builder";
 import type {
@@ -56,26 +59,12 @@ import {
 	checkWinCondition,
 } from "./win-condition";
 
-function isDevHost(): boolean {
-	return (
-		typeof __WORKER_BASE_URL__ !== "undefined" &&
-		__WORKER_BASE_URL__ === "http://localhost:8787" &&
-		typeof location !== "undefined" &&
-		location.origin === __WORKER_BASE_URL__
-	);
-}
-
-type DiskEntityStates = Record<
-	string,
-	{ inVista: boolean; satisfied: boolean }
->;
-
 export interface RunRoundResult {
 	nextState: GameState;
 	result: RoundResult;
 	toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>>;
 	diskSnapshots: Partial<Record<AiId, string>>;
-	diskEntities: Partial<Record<AiId, DiskEntityStates>>;
+	diskEntities: Partial<Record<AiId, Record<string, DiskEntityState>>>;
 }
 
 export interface RunRoundOptions {
@@ -86,7 +75,9 @@ export interface RunRoundOptions {
 	priorDiskSnapshots?: Partial<Record<AiId, string>> | undefined;
 	onAiTurnComplete?: ((aiId: AiId) => void) | undefined;
 	onLifecycle?: ((event: LifecyclePhase) => void) | undefined;
-	priorDiskEntities?: Partial<Record<AiId, DiskEntityStates>> | undefined;
+	priorDiskEntities?:
+		| Partial<Record<AiId, Record<string, DiskEntityState>>>
+		| undefined;
 }
 
 const DRIFT_TO_SILENCE_NUDGE =
@@ -146,7 +137,7 @@ function assertInitiativePermutes(initiative: AiId[], aiOrder: AiId[]): void {
 }
 
 function unresponsiveLine(state: GameState, aiId: AiId): string {
-	return `${state.personas[aiId]?.name ?? aiId} is unresponsive…`;
+	return `${personaName(state, aiId)} is unresponsive…`;
 }
 
 export async function runRound(
@@ -176,7 +167,9 @@ export async function runRound(
 	const roundActions: RoundActionRecord[] = [];
 	const newToolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
 	const newDiskSnapshots: Partial<Record<AiId, string>> = {};
-	const newDiskEntities: Partial<Record<AiId, DiskEntityStates>> = {};
+	const newDiskEntities: Partial<
+		Record<AiId, Record<string, DiskEntityState>>
+	> = {};
 
 	for (const aiId of turnOrder) {
 		if (isDaemonExhausted(state, aiId)) {
@@ -185,64 +178,55 @@ export async function runRound(
 				round: state.round,
 				actor: aiId,
 				kind: "lockout",
-				description: `${state.personas[aiId]?.name ?? aiId} has exhausted its budget`,
+				description: `${personaName(state, aiId)} has exhausted its budget`,
 			});
 			onAiTurnComplete?.(aiId);
 			continue;
 		}
 
-		const priorSnapshot = priorDiskSnapshots?.[aiId];
-		const priorEntities = priorDiskEntities?.[aiId];
 		const ctx = buildAiContext(state, aiId, {
-			...(priorSnapshot !== undefined
-				? { prevDiskSnapshot: priorSnapshot }
-				: {}),
-			...(priorEntities !== undefined
-				? { prevDiskEntities: priorEntities }
-				: {}),
+			prevDiskSnapshot: priorDiskSnapshots?.[aiId],
+			prevDiskEntities: priorDiskEntities?.[aiId],
 		});
-		newDiskSnapshots[aiId] = buildDiskSnapshot(ctx);
-		newDiskEntities[aiId] = buildDiskEntityState(ctx);
+		newDiskSnapshots[aiId] = ctx.diskSnapshot();
+		const promptEntities = ctx.diskEntities();
+		newDiskEntities[aiId] = promptEntities;
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
 		const messages = buildOpenAiMessages(ctx, priorRoundtrip, state.round);
 
 		const tools = availableTools(state, aiId, state.activeComplications);
 
-		const { assistantText, toolCalls, costUsd } =
-			await streamTurnWithOffTheRecordRetry(
-				(turnMessages) =>
-					provider.streamRound(
-						turnMessages,
-						tools,
-						onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
-						aiId,
-						onLifecycle,
-					),
-				messages,
-			);
+		const {
+			assistantText,
+			toolCalls: providerToolCalls,
+			costUsd,
+		} = await streamTurnWithOffTheRecordRetry(
+			(turnMessages) =>
+				provider.streamRound(
+					turnMessages,
+					tools,
+					onAiDelta ? (text) => onAiDelta(aiId, text) : undefined,
+					aiId,
+					onLifecycle,
+				),
+			messages,
+		);
+		const toolCalls = withUniqueToolCallIds(
+			providerToolCalls,
+			replayedToolCallIds(messages),
+			`${aiId}-r${state.round}`,
+		);
 
 		const action: AiTurnAction = { aiId };
 
+		type EmittedToolCall = { id: string; name: string; argumentsJson: string };
 		type PendingEntry =
-			| {
-					kind: "parseFail";
-					tc: { id: string; name: string; argumentsJson: string };
-					description: string;
-					reason: string;
-			  }
-			| {
-					kind: "message";
-					tc: { id: string; name: string; argumentsJson: string };
-			  }
-			| {
-					kind: "actionAccepted";
-					tc: { id: string; name: string; argumentsJson: string };
-			  }
+			| { kind: "message"; tc: EmittedToolCall }
+			| { kind: "actionAccepted"; tc: EmittedToolCall }
 			| {
 					kind: "rejected";
-					tc: { id: string; name: string; argumentsJson: string };
+					tc: EmittedToolCall;
 					description: string;
-					reason: string;
 			  };
 		const toolCallsInEmissionOrder: PendingEntry[] = [];
 
@@ -250,14 +234,24 @@ export async function runRound(
 		let messageAssigned = false;
 
 		const round = state.round;
-		const actorName = state.personas[aiId]?.name ?? aiId;
+		const actorName = personaName(state, aiId);
+
+		function rejectToolCall(tc: EmittedToolCall, description: string) {
+			roundActions.push({
+				round,
+				actor: aiId,
+				kind: "tool_failure",
+				description,
+			});
+			toolCallsInEmissionOrder.push({ kind: "rejected", tc, description });
+		}
 
 		for (const tc of toolCalls) {
 			const parseResult = parseToolCallArguments(
 				tc.name as ToolName,
 				tc.argumentsJson,
 			);
-			const tcTriple = {
+			const tcTriple: EmittedToolCall = {
 				id: tc.id,
 				name: tc.name,
 				argumentsJson: tc.argumentsJson,
@@ -265,32 +259,10 @@ export async function runRound(
 
 			if (!parseResult.ok) {
 				const failDesc = `${actorName} tried to ${tc.name} but failed: ${parseResult.reason}`;
-				roundActions.push({
-					round,
-					actor: aiId,
-					kind: "tool_failure",
-					description: failDesc,
-				});
-				toolCallsInEmissionOrder.push({
-					kind: "parseFail",
-					tc: tcTriple,
-					description: failDesc,
-					reason: parseResult.reason,
-				});
+				rejectToolCall(tcTriple, failDesc);
 			} else if (tc.name === "message" && messageAssigned) {
 				const dupDesc = `${actorName} tried to send more than one message in a turn: ${ONE_MESSAGE_PER_TURN_REASON}`;
-				roundActions.push({
-					round,
-					actor: aiId,
-					kind: "tool_failure",
-					description: dupDesc,
-				});
-				toolCallsInEmissionOrder.push({
-					kind: "rejected",
-					tc: tcTriple,
-					description: dupDesc,
-					reason: ONE_MESSAGE_PER_TURN_REASON,
-				});
+				rejectToolCall(tcTriple, dupDesc);
 			} else if (tc.name === "message") {
 				messageAssigned = true;
 				const msgArgs = parseResult.args as { to: string; content: string };
@@ -311,18 +283,7 @@ export async function runRound(
 				toolCallsInEmissionOrder.push({ kind: "actionAccepted", tc: tcTriple });
 			} else {
 				const dupDesc = `${actorName} tried to take more than one action in a turn: ${ONE_ACTION_PER_TURN_REASON}`;
-				roundActions.push({
-					round,
-					actor: aiId,
-					kind: "tool_failure",
-					description: dupDesc,
-				});
-				toolCallsInEmissionOrder.push({
-					kind: "rejected",
-					tc: tcTriple,
-					description: dupDesc,
-					reason: ONE_ACTION_PER_TURN_REASON,
-				});
+				rejectToolCall(tcTriple, dupDesc);
 			}
 		}
 
@@ -338,8 +299,6 @@ export async function runRound(
 			action.pass = true;
 		}
 
-		const exhaustedBeforeDispatch = new Set(state.exhausted);
-
 		const dispatchResult = dispatchAiTurn(
 			state,
 			action,
@@ -347,11 +306,8 @@ export async function runRound(
 		);
 		state = dispatchResult.game;
 
-		const budgetJustExhausted =
-			!exhaustedBeforeDispatch.has(aiId) && state.exhausted.has(aiId);
-		if (budgetJustExhausted) {
-			const personaName = state.personas[aiId]?.name ?? aiId;
-			const farewellContent = FAREWELL_LINE(personaName);
+		if (dispatchResult.justExhausted) {
+			const farewellContent = FAREWELL_LINE(personaName(state, aiId));
 			state = appendMessage(state, aiId, "blue", farewellContent);
 			roundActions.push({
 				round: state.round,
@@ -372,24 +328,11 @@ export async function runRound(
 				? dispatchResult.records[messageRecordCount]
 				: undefined;
 
-		const perceptionDeltaLines = renderPerceptionDelta(ctx, priorEntities);
-
-		const recordedAssistantToolCalls: Array<{
-			id: string;
-			name: string;
-			argumentsJson: string;
-		}> = [];
-		const recordedToolResults: Array<{
-			tool_call_id: string;
-			success: boolean;
-			description: string;
-			reason?: string;
-		}> = [];
-
-		let perceptionDeltaMerged = false;
+		const failedMessageCalls: EmittedToolCall[] = [];
+		const failedMessageResults: ToolRoundtripMessage["toolResults"] = [];
 
 		function appendToolCallEntry(
-			entry: PendingEntry,
+			tc: EmittedToolCall,
 			success: boolean,
 			description: string,
 			diskDelta?: string,
@@ -398,9 +341,9 @@ export async function runRound(
 				kind: "tool-call",
 				round: state.round,
 				aiId: aiId,
-				toolCallId: entry.tc.id,
-				toolArgumentsJson: entry.tc.argumentsJson,
-				toolName: entry.tc.name,
+				toolCallId: tc.id,
+				toolArgumentsJson: tc.argumentsJson,
+				toolName: tc.name,
 				result: description,
 				success,
 				...(diskDelta !== undefined ? { diskDelta } : {}),
@@ -414,73 +357,44 @@ export async function runRound(
 			};
 		}
 
+		function actionDiskDelta(): string | undefined {
+			const lines = [
+				...(dispatchResult.actorDiskDelta !== undefined
+					? [dispatchResult.actorDiskDelta]
+					: []),
+				...renderPerceptionDelta(buildAiContext(state, aiId), promptEntities),
+			];
+			return lines.length > 0 ? lines.join("\n") : undefined;
+		}
+
 		let nextMessageIdx = 0;
 		for (const entry of toolCallsInEmissionOrder) {
-			if (entry.kind === "parseFail") {
-				recordedAssistantToolCalls.push(entry.tc);
-				recordedToolResults.push({
-					tool_call_id: entry.tc.id,
-					success: false,
-					description: entry.description,
-					reason: entry.reason,
-				});
-				appendToolCallEntry(entry, false, entry.description);
-			} else if (entry.kind === "rejected") {
-				recordedAssistantToolCalls.push(entry.tc);
-				recordedToolResults.push({
-					tool_call_id: entry.tc.id,
-					success: false,
-					description: entry.description,
-					reason: entry.reason,
-				});
-				appendToolCallEntry(entry, false, entry.description);
+			if (entry.kind === "rejected") {
+				appendToolCallEntry(entry.tc, false, entry.description);
 			} else if (entry.kind === "message") {
 				const rec = messageRecords[nextMessageIdx++];
-				const messageFailed = rec?.kind === "tool_failure";
-				if (messageFailed) {
-					recordedAssistantToolCalls.push(entry.tc);
-					recordedToolResults.push({
+				if (rec?.kind === "tool_failure") {
+					failedMessageCalls.push(entry.tc);
+					failedMessageResults.push({
 						tool_call_id: entry.tc.id,
 						success: false,
 						description: rec.description,
 					});
 				}
 			} else {
-				recordedAssistantToolCalls.push(entry.tc);
-				const pickUpAutoExamine = dispatchResult.actorPrivateToolResult;
-				if (pickUpAutoExamine !== undefined) {
-					const { description, success } = pickUpAutoExamine;
-					recordedToolResults.push({
-						tool_call_id: entry.tc.id,
-						success,
-						description,
-					});
-					appendToolCallEntry(entry, success, description);
-				} else {
-					const success = actionRecord?.kind === "tool_success";
-					const description = actionRecord?.description ?? "";
-					recordedToolResults.push({
-						tool_call_id: entry.tc.id,
-						success,
-						description,
-					});
-					let diskDelta = dispatchResult.actorDiskDelta;
-					if (!perceptionDeltaMerged && perceptionDeltaLines.length > 0) {
-						const perceptionDeltaText = perceptionDeltaLines.join("\n");
-						diskDelta = diskDelta
-							? `${diskDelta}\n${perceptionDeltaText}`
-							: perceptionDeltaText;
-						perceptionDeltaMerged = true;
-					}
-					appendToolCallEntry(entry, success, description, diskDelta);
-				}
+				const { success, description } =
+					dispatchResult.actorPrivateToolResult ?? {
+						success: actionRecord?.kind === "tool_success",
+						description: actionRecord?.description ?? "",
+					};
+				appendToolCallEntry(entry.tc, success, description, actionDiskDelta());
 			}
 		}
 
-		if (recordedAssistantToolCalls.length > 0) {
+		if (failedMessageCalls.length > 0) {
 			newToolRoundtrip[aiId] = {
-				assistantToolCalls: recordedAssistantToolCalls,
-				toolResults: recordedToolResults,
+				assistantToolCalls: failedMessageCalls,
+				toolResults: failedMessageResults,
 			};
 		}
 
@@ -491,6 +405,12 @@ export async function runRound(
 
 	let chatLockoutTriggered: RoundResult["chatLockoutTriggered"] | undefined;
 	let chatLockoutsResolved: AiId[] | undefined;
+
+	state = restoreExpiredToolDisables(state);
+	const { nextState: stateAfterChatLockouts, resolvedAiIds } =
+		resolveExpiredChatLockouts(state);
+	state = stateAfterChatLockouts;
+	state = expireSysadminDirectives(state);
 
 	const complicationResult = tickComplication(state, rng);
 	if (complicationResult !== null) {
@@ -525,17 +445,18 @@ export async function runRound(
 		state = decrementComplicationCountdown(state);
 	}
 
-	state = restoreExpiredToolDisables(state);
-
-	const { nextState: stateAfterChatLockouts, resolvedAiIds } =
-		resolveExpiredChatLockouts(state);
-	state = stateAfterChatLockouts;
-	if (resolvedAiIds.length > 0) {
-		chatLockoutsResolved = resolvedAiIds;
+	const stateAfterComplication = state;
+	const unlockedAiIds = [...new Set(resolvedAiIds)].filter(
+		(aiId) => !isPlayerChatLockedOut(stateAfterComplication, aiId),
+	);
+	if (unlockedAiIds.length > 0) {
+		chatLockoutsResolved = unlockedAiIds;
 	}
 
-	state = expireSysadminDirectives(state);
-	state = evaluateConvergenceObjectives(state);
+	state = evaluateConvergenceObjectives(
+		state,
+		isFirstRoundOfRoom(game) ? {} : game.personaSpatial,
+	);
 
 	let gameEnded = false;
 	if (checkWinCondition(state.world, state.objectives)) {
@@ -563,6 +484,34 @@ export async function runRound(
 		diskSnapshots: newDiskSnapshots,
 		diskEntities: newDiskEntities,
 	};
+}
+
+function replayedToolCallIds(messages: OpenAiMessage[]): Set<string> {
+	const ids = new Set<string>();
+	for (const message of messages) {
+		if (message.role !== "assistant") continue;
+		for (const toolCall of message.tool_calls ?? []) ids.add(toolCall.id);
+	}
+	return ids;
+}
+
+function withUniqueToolCallIds<T extends { id: string }>(
+	toolCalls: T[],
+	takenIds: Set<string>,
+	fallbackPrefix: string,
+): T[] {
+	const taken = new Set(takenIds);
+	return toolCalls.map((tc, index) => {
+		let id = tc.id;
+		for (let attempt = 0; id === "" || taken.has(id); attempt++) {
+			id =
+				attempt === 0
+					? `call-${fallbackPrefix}-${index}`
+					: `call-${fallbackPrefix}-${index}-${attempt}`;
+		}
+		taken.add(id);
+		return id === tc.id ? tc : { ...tc, id };
+	});
 }
 
 function issueSysadminDirective(
@@ -641,7 +590,7 @@ function shiftObstacle(
 			toCell: shift.toCell,
 			flavor: obstacle.shiftFlavor ?? "",
 		};
-		state = appendWitnessedObstacleShift(state, daemonId, entry);
+		state = appendLogEntry(state, daemonId, entry);
 	}
 	return state;
 }
@@ -673,7 +622,21 @@ function expireSysadminDirectives(game: GameState): GameState {
 	return state;
 }
 
-function evaluateConvergenceObjectives(game: GameState): GameState {
+function occupantIdsOf(
+	personaSpatial: GameState["personaSpatial"],
+	cell: GridPosition,
+): string {
+	return Object.entries(personaSpatial)
+		.filter(([, spatial]) => positionsEqual(spatial.position, cell))
+		.map(([daemonId]) => daemonId)
+		.sort()
+		.join(",");
+}
+
+function evaluateConvergenceObjectives(
+	game: GameState,
+	personaSpatialAlreadyTold: GameState["personaSpatial"],
+): GameState {
 	let state = game;
 	for (const objective of state.objectives) {
 		if (objective.kind !== "convergence") continue;
@@ -688,30 +651,28 @@ function evaluateConvergenceObjectives(game: GameState): GameState {
 		if (tier === 0) continue;
 
 		const spaceEntity = state.world.entities.find((e) => e.id === spaceId);
-		const spaceCell =
-			spaceEntity &&
-			typeof spaceEntity.holder === "object" &&
-			spaceEntity.holder !== null
-				? (spaceEntity.holder as GridPosition)
-				: null;
+		if (!spaceEntity || !isGridPosition(spaceEntity.holder)) continue;
+		const spaceCell = spaceEntity.holder;
 
-		if (!spaceCell) continue;
+		const convergenceComplete = tier === 2;
+		const occupantsUnchanged =
+			occupantIdsOf(state.personaSpatial, spaceCell) ===
+			occupantIdsOf(personaSpatialAlreadyTold, spaceCell);
+		if (occupantsUnchanged && !convergenceComplete) continue;
 
 		const witnessFlavor =
 			tier === 1
-				? (spaceEntity?.convergenceTier1Flavor ?? "Something stirs here.")
-				: (spaceEntity?.convergenceTier2Flavor ?? "Two presences converge.");
+				? (spaceEntity.convergenceTier1Flavor ?? "Something stirs here.")
+				: (spaceEntity.convergenceTier2Flavor ?? "Two presences converge.");
 		const actorFlavor =
 			tier === 1
-				? (spaceEntity?.convergenceTier1ActorFlavor ??
+				? (spaceEntity.convergenceTier1ActorFlavor ??
 					"You linger here; the place feels poised for company.")
-				: (spaceEntity?.convergenceTier2ActorFlavor ??
+				: (spaceEntity.convergenceTier2ActorFlavor ??
 					"You stand here; another presence shares the place with you.");
 
 		for (const [daemonId, spatial] of Object.entries(state.personaSpatial)) {
-			const isOccupant =
-				spatial.position.row === spaceCell.row &&
-				spatial.position.col === spaceCell.col;
+			const isOccupant = positionsEqual(spatial.position, spaceCell);
 			const witnessesCell = vistaContains(spatial.position, spaceCell);
 			if (!isOccupant && !witnessesCell) continue;
 
@@ -726,13 +687,20 @@ function evaluateConvergenceObjectives(game: GameState): GameState {
 				flavor: isOccupant ? actorFlavor : witnessFlavor,
 				audience: isOccupant ? "actor" : "witness",
 			};
-			state = appendWitnessedConvergence(state, daemonId, entry);
+			state = appendLogEntry(state, daemonId, entry);
 		}
 
-		const convergenceComplete = tier === 2;
 		if (convergenceComplete) {
 			state = {
 				...state,
+				world: {
+					...state.world,
+					entities: state.world.entities.map((e) =>
+						e.id === spaceId
+							? { ...e, satisfactionState: "satisfied" as const }
+							: e,
+					),
+				},
 				objectives: state.objectives.map((o) =>
 					o.id === objective.id
 						? { ...o, satisfactionState: "satisfied" as const }

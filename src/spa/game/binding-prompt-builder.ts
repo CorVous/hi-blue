@@ -47,7 +47,7 @@ function mintDecoys(): DecoySkeleton[] {
 	return [{ id: "decoy-0" }, { id: "decoy-1" }];
 }
 
-function obstacleIds(count: number): string[] {
+export function obstacleIds(count: number): string[] {
 	return Array.from({ length: count }, (_, i) => `obstacle-${i}`);
 }
 
@@ -61,7 +61,7 @@ function describeSkeletonInUserMessage(sk: BindingSkeleton, i: number): string {
 				`  "object": {`,
 				`    "id": "${sk.objectId}",`,
 				`    "name": "<2-4 words>",`,
-				`    "examineDescription": "<1-2 sentences; MUST reference the paired space '${sk.spaceId}' by name>",`,
+				`    "examineDescription": "<1-2 sentences; MUST mention the paired space by the name you write in this binding's space.name, never by its id>",`,
 				`    "useOutcome": "<1 stateless sentence>",`,
 				`    "placementFlavor": "<1 sentence; MUST contain literal {actor}>",`,
 				`    "proximityFlavor": "<1 sentence; daemon POV; no {actor}>"`,
@@ -126,57 +126,6 @@ function describeSkeletonInUserMessage(sk: BindingSkeleton, i: number): string {
 				`}`,
 			].join("\n");
 	}
-}
-
-export function buildBindingPrompt(
-	types: ObjectiveType[],
-	setting: string,
-	theme: string,
-	weather: string,
-	timeOfDay: string,
-	obstacleCount: number,
-): BindingPromptResult {
-	const skeletons = types.map((t, i) => mintSkeleton(t, i));
-	const decoys = mintDecoys();
-
-	const lines: string[] = [
-		`Generate a content pack for:`,
-		`  setting="${setting}", theme="${theme}", weather="${weather}", timeOfDay="${timeOfDay}"`,
-		``,
-		`Entity bindings to author (use EXACTLY these IDs):`,
-	];
-
-	for (let i = 0; i < skeletons.length; i++) {
-		// biome-ignore lint/style/noNonNullAssertion: bounded index
-		lines.push(describeSkeletonInUserMessage(skeletons[i]!, i));
-	}
-
-	lines.push(``);
-	lines.push(`Decoys (always exactly 2):`);
-	for (const d of decoys) {
-		lines.push(
-			`  decoy id="${d.id}": name, examineDescription (MUST NOT contain use-cue), proximityFlavor, useOutcome`,
-		);
-	}
-
-	if (obstacleCount > 0) {
-		lines.push(``);
-		lines.push(`Obstacles (${obstacleCount}):`);
-		for (const id of obstacleIds(obstacleCount)) {
-			lines.push(
-				`  obstacle id="${id}": name, examineDescription, shiftFlavor (no {actor})`,
-			);
-		}
-	}
-
-	lines.push(``);
-	lines.push(`Also generate: wallName.`);
-
-	return {
-		skeletons,
-		decoys,
-		userMessage: lines.join("\n"),
-	};
 }
 
 export function buildDualBindingPrompt(

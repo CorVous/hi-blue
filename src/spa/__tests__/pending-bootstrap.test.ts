@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AiId, AiPersona, ContentPack } from "../game/types.js";
+import { awaitIgnoringRejection } from "./fixtures/await-ignoring-rejection.js";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs.js";
 import { STATIC_PERSONAS } from "./fixtures/static-personas.js";
 
@@ -15,14 +16,6 @@ const STATIC_CONTENT: {
 	packsA: [STATIC_CONTENT_PACK],
 	packsB: [STATIC_CONTENT_PACK],
 };
-
-async function awaitIgnoringRejection(
-	promise: Promise<unknown>,
-): Promise<void> {
-	try {
-		await promise;
-	} catch {}
-}
 
 describe("pending-bootstrap.ts", () => {
 	afterEach(async () => {
@@ -368,5 +361,124 @@ describe("pending-bootstrap.ts", () => {
 		const meta = getPendingCallMeta();
 		expect(meta.retryCount).toBe(1);
 		expect(meta.lastError).toBe("content pack generation failed");
+	});
+
+	it("a persona failure that also rejects the content packs counts one retry", async () => {
+		const failure = new Error("persona generation failed");
+		vi.doMock("../game/bootstrap.js", () => ({
+			generateNewGameAssetsSplit: () => ({
+				personasPromise: Promise.reject(failure),
+				contentPacksPromise: Promise.reject(failure),
+			}),
+			generateContentPacksOnlySplit: () => ({
+				personasPromise: Promise.resolve(STATIC_PERSONAS),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+		}));
+		vi.resetModules();
+
+		const { startBootstrap, getPendingCallMeta } = await import(
+			"../game/pending-bootstrap.js"
+		);
+
+		const pending = startBootstrap();
+		await awaitIgnoringRejection(pending.personasPromise);
+		await awaitIgnoringRejection(pending.contentPacksPromise);
+
+		expect(getPendingCallMeta().retryCount).toBe(1);
+	});
+
+	it("a bootstrap that was cleared leaves the call meta alone when it settles", async () => {
+		let rejectPersonas: (err: Error) => void = () => undefined;
+		const personasPromise = new Promise<Record<AiId, AiPersona>>(
+			(_resolve, reject) => {
+				rejectPersonas = reject;
+			},
+		);
+		vi.doMock("../game/bootstrap.js", () => ({
+			generateNewGameAssetsSplit: () => ({
+				personasPromise,
+				contentPacksPromise: personasPromise.then(() => STATIC_CONTENT),
+			}),
+			generateContentPacksOnlySplit: () => ({
+				personasPromise: Promise.resolve(STATIC_PERSONAS),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+		}));
+		vi.resetModules();
+
+		const { startBootstrap, clearPendingBootstrap, getPendingCallMeta } =
+			await import("../game/pending-bootstrap.js");
+
+		const abandoned = startBootstrap();
+		clearPendingBootstrap();
+		rejectPersonas(new Error("late failure"));
+		await awaitIgnoringRejection(abandoned.contentPacksPromise);
+
+		expect(getPendingCallMeta()).toEqual({});
+		expect(abandoned.status).toBe("failed");
+	});
+
+	it("hands the bootstrap an abort signal that clearPendingBootstrap aborts", async () => {
+		let receivedSignal: AbortSignal | undefined;
+		vi.doMock("../game/bootstrap.js", () => ({
+			generateNewGameAssetsSplit: (opts?: { signal?: AbortSignal }) => {
+				receivedSignal = opts?.signal;
+				return {
+					personasPromise: new Promise(() => {}),
+					contentPacksPromise: new Promise(() => {}),
+				};
+			},
+			generateContentPacksOnlySplit: () => ({
+				personasPromise: Promise.resolve(STATIC_PERSONAS),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+		}));
+		vi.resetModules();
+
+		const { startBootstrap, clearPendingBootstrap } = await import(
+			"../game/pending-bootstrap.js"
+		);
+
+		startBootstrap();
+		expect(receivedSignal?.aborted).toBe(false);
+		clearPendingBootstrap();
+		expect(receivedSignal?.aborted).toBe(true);
+	});
+
+	it("failPendingBootstrap aborts a stalled bootstrap so the next restart starts fresh", async () => {
+		const signals: AbortSignal[] = [];
+		vi.doMock("../game/bootstrap.js", () => ({
+			generateNewGameAssetsSplit: (opts?: { signal?: AbortSignal }) => {
+				if (opts?.signal) signals.push(opts.signal);
+				return {
+					personasPromise: new Promise(() => {}),
+					contentPacksPromise: new Promise(() => {}),
+				};
+			},
+			generateContentPacksOnlySplit: () => ({
+				personasPromise: Promise.resolve(STATIC_PERSONAS),
+				contentPacksPromise: Promise.resolve(STATIC_CONTENT),
+			}),
+		}));
+		vi.resetModules();
+
+		const { startBootstrap, failPendingBootstrap, restartContentPacks } =
+			await import("../game/pending-bootstrap.js");
+
+		const stalled = startBootstrap();
+		const timeout = new Error("bootstrap loading timed out");
+		failPendingBootstrap(stalled, timeout);
+
+		expect(stalled.status).toBe("failed");
+		expect(stalled.error).toBe(timeout);
+		expect(signals[0]?.aborted).toBe(true);
+		expect(signals[0]?.reason).toBe(timeout);
+
+		const regenerated = restartContentPacks();
+
+		expect(regenerated).not.toBe(stalled);
+		expect(signals).toHaveLength(2);
+		expect(signals[1]?.aborted).toBe(false);
 	});
 });

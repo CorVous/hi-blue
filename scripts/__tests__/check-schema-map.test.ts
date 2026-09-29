@@ -314,6 +314,60 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
+	it("passes when the migration is declared as a const arrow function", () => {
+		const result = runScriptWith([
+			{
+				path: SESSION_CONSTANT,
+				baseline: sessionConstant(9),
+				head: sessionConstant(10),
+			},
+			{
+				path: SESSION_CODEC,
+				baseline: "export function readSealed() {}\n",
+				head: "export function readSealed() {}\nexport const migrateV9ToV10 = (sealed) => sealed;\n",
+			},
+		]);
+		expect(result.status).toBe(0);
+	});
+
+	it("fails when the migration name is only called, never declared", () => {
+		const result = runScriptWith([
+			{
+				path: SESSION_CONSTANT,
+				baseline: sessionConstant(9),
+				head: sessionConstant(10),
+			},
+			{
+				path: SESSION_CODEC,
+				baseline: "export function readSealed() {}\n",
+				head: "export function readSealed(sealed) { return migrateV9ToV10(sealed); }\n",
+			},
+		]);
+		expect(result.status).toBe(1);
+		expect(result.stderr).toContain("superseded schema version 9");
+	});
+
+	it.each([
+		"src/spa/persistence/__tests__/session-codec.test.ts",
+		"src/spa/persistence/migrations.test.ts",
+		"e2e/migrations.spec.ts",
+	])("ignores a migration declared only in the test file %s", (testFile) => {
+		const result = runScriptWith([
+			{
+				path: SESSION_CONSTANT,
+				baseline: sessionConstant(9),
+				head: sessionConstant(10),
+			},
+			{
+				path: testFile,
+				baseline: null,
+				head: "function migrateV9ToV10(sealed) { return sealed; }\n",
+			},
+		]);
+		expect(result.status).toBe(1);
+		expect(result.stderr).toContain("superseded schema version 9");
+	});
+
 	it("fails when GAME_SAVE_VERSION bumps with a map comment as the only map edit", () => {
 		const result = runScriptWith([
 			{

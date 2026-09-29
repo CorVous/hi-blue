@@ -2,58 +2,42 @@ import type { GameSession } from "../game/game-session";
 import type { AiId, AiPersona, ConversationEntry } from "../game/types";
 import { getMapFocus, setMapFocus } from "./world-map.js";
 
-const daemonTurnResults: Record<
-	string,
-	{
-		promptTokens?: number;
-		completionTokens?: number;
-		cachedPromptTokens?: number;
-		costUsd?: number;
-		lastRawCompletion?: string;
-		lastToolCalls?: Array<{ name: string; argumentsJson: string }>;
-	}
-> = {};
+interface DaemonTurnResult {
+	promptTokens?: number;
+	completionTokens?: number;
+	cachedPromptTokens?: number;
+	costUsd?: number;
+	lastRawCompletion?: string;
+	lastToolCalls?: Array<{ name: string; argumentsJson: string }>;
+}
 
-const daemonSystemPrompts: Record<string, string> = {};
+const daemonTurnResults = new Map<AiId, DaemonTurnResult>();
 
-const daemonErrors: Record<string, { text: string; statusCode?: number }> = {};
+const daemonSystemPrompts = new Map<AiId, string>();
 
-const daemonRounds: Record<string, number> = {};
+const daemonErrors = new Map<AiId, { text: string; statusCode?: number }>();
+
+const daemonRounds = new Map<AiId, number>();
 
 export function recordDaemonTurnResult(
 	aiId: AiId,
-	result: {
-		promptTokens?: number;
-		completionTokens?: number;
-		cachedPromptTokens?: number;
-		costUsd?: number;
-		lastRawCompletion?: string;
-		lastToolCalls?: Array<{ name: string; argumentsJson: string }>;
-	},
+	result: DaemonTurnResult,
 ): void {
-	daemonTurnResults[aiId] = result;
+	daemonTurnResults.set(aiId, result);
 }
 
 export function clearDaemonTurnResults(): void {
-	for (const key of Object.keys(daemonTurnResults)) {
-		delete daemonTurnResults[key];
-	}
-	for (const key of Object.keys(daemonSystemPrompts)) {
-		delete daemonSystemPrompts[key];
-	}
-	for (const key of Object.keys(daemonErrors)) {
-		delete daemonErrors[key];
-	}
-	for (const key of Object.keys(daemonRounds)) {
-		delete daemonRounds[key];
-	}
+	daemonTurnResults.clear();
+	daemonSystemPrompts.clear();
+	daemonErrors.clear();
+	daemonRounds.clear();
 }
 
 export function recordDaemonSystemPrompt(
 	aiId: AiId,
 	systemPrompt: string,
 ): void {
-	daemonSystemPrompts[aiId] = systemPrompt;
+	daemonSystemPrompts.set(aiId, systemPrompt);
 }
 
 export function recordDaemonError(aiId: AiId, error: unknown): void {
@@ -65,53 +49,150 @@ export function recordDaemonError(aiId: AiId, error: unknown): void {
 		typeof error.status === "number"
 			? error.status
 			: undefined;
-	daemonErrors[aiId] = {
+	daemonErrors.set(aiId, {
 		text,
 		...(statusCode !== undefined && { statusCode }),
-	};
+	});
 }
 
 export function recordDaemonRound(aiId: AiId, round: number): void {
-	daemonRounds[aiId] = round;
+	daemonRounds.set(aiId, round);
 }
 
-function buildFooterFields(): HTMLElement[] {
-	const spans: HTMLElement[] = [];
+export type DaemonFooterPipState = "in-flight" | "idle" | "errored";
 
-	const pipSpan = document.createElement("span");
-	pipSpan.className = "dev-footer-pip";
-	pipSpan.setAttribute("data-field", "pip");
-	pipSpan.setAttribute("data-state", "idle");
-	pipSpan.textContent = "○";
-	spans.push(pipSpan);
+const PIP_GLYPHS: Readonly<Record<DaemonFooterPipState, string>> = {
+	idle: "○",
+	"in-flight": "●",
+	errored: "✕",
+};
 
-	const toolsSpan = document.createElement("span");
-	toolsSpan.className = "dev-footer-tools";
-	toolsSpan.setAttribute("data-field", "last-tools");
-	toolsSpan.textContent = "";
-	spans.push(toolsSpan);
+const FOOTER_FIELDS: readonly {
+	tag: "span" | "button";
+	className: string;
+	field: string;
+	text: string;
+	attributes?: Readonly<Record<string, string>>;
+}[] = [
+	{
+		tag: "span",
+		className: "dev-footer-pip",
+		field: "pip",
+		text: PIP_GLYPHS.idle,
+		attributes: { "data-state": "idle" },
+	},
+	{ tag: "span", className: "dev-footer-tools", field: "last-tools", text: "" },
+	{ tag: "span", className: "dev-footer-llm", field: "llm-line", text: "" },
+	{
+		tag: "span",
+		className: "dev-footer-chips",
+		field: "complication-chips",
+		text: "",
+	},
+	{
+		tag: "button",
+		className: "dev-footer-focus-vista",
+		field: "focus-vista",
+		text: "[ focus vista ]",
+		attributes: { type: "button", "data-focus-active": "false" },
+	},
+];
 
-	const llmSpan = document.createElement("span");
-	llmSpan.className = "dev-footer-llm";
-	llmSpan.setAttribute("data-field", "llm-line");
-	llmSpan.textContent = "";
-	spans.push(llmSpan);
+function buildFooterFields(doc: Document): HTMLElement[] {
+	return FOOTER_FIELDS.map(({ tag, className, field, text, attributes }) => {
+		const el = doc.createElement(tag);
+		el.className = className;
+		el.setAttribute("data-field", field);
+		for (const [name, value] of Object.entries(attributes ?? {})) {
+			el.setAttribute(name, value);
+		}
+		el.textContent = text;
+		return el;
+	});
+}
 
-	const chipsSpan = document.createElement("span");
-	chipsSpan.className = "dev-footer-chips";
-	chipsSpan.setAttribute("data-field", "complication-chips");
-	chipsSpan.textContent = "";
-	spans.push(chipsSpan);
+const PERSONA_FIELDS = [
+	"handle",
+	"color",
+	"temperaments",
+	"persona-goal",
+	"blurb",
+] as const;
 
-	const focusBtn = document.createElement("button");
-	focusBtn.className = "dev-footer-focus-vista";
-	focusBtn.setAttribute("data-field", "focus-vista");
-	focusBtn.setAttribute("type", "button");
-	focusBtn.textContent = "[ focus vista ]";
-	focusBtn.setAttribute("data-focus-active", "false");
-	spans.push(focusBtn);
+function fillPersonaField(
+	fieldDiv: HTMLElement,
+	field: (typeof PERSONA_FIELDS)[number],
+	persona: AiPersona,
+): void {
+	switch (field) {
+		case "handle":
+			fieldDiv.textContent = `*${persona.name}`;
+			return;
+		case "color": {
+			const doc = fieldDiv.ownerDocument;
+			const swatch = doc.createElement("span");
+			swatch.className = "dev-footer-color-swatch";
+			swatch.style.backgroundColor = persona.color;
+			fieldDiv.appendChild(swatch);
+			fieldDiv.appendChild(doc.createTextNode(persona.color));
+			return;
+		}
+		case "temperaments":
+			fieldDiv.textContent = `${persona.temperaments[0]} / ${persona.temperaments[1]}`;
+			return;
+		case "persona-goal":
+			fieldDiv.textContent = persona.personaGoal;
+			return;
+		case "blurb":
+			fieldDiv.textContent = persona.blurb;
+			return;
+	}
+}
 
-	return spans;
+function formatDaemonError(aiId: AiId): string {
+	const error = daemonErrors.get(aiId);
+	if (!error) return "";
+	return error.statusCode ? `${error.statusCode} ${error.text}` : error.text;
+}
+
+const DETAIL_BLOCKS: readonly {
+	disclosure: string;
+	summary: string;
+	content: (aiId: AiId) => string;
+}[] = [
+	{
+		disclosure: "system-prompt",
+		summary: "last system prompt",
+		content: (aiId) => daemonSystemPrompts.get(aiId) ?? "",
+	},
+	{
+		disclosure: "raw-completion",
+		summary: "last raw completion",
+		content: (aiId) => daemonTurnResults.get(aiId)?.lastRawCompletion ?? "",
+	},
+	{
+		disclosure: "tool-calls",
+		summary: "last tool calls",
+		content: (aiId) =>
+			(daemonTurnResults.get(aiId)?.lastToolCalls ?? [])
+				.map((tc) => `${tc.name}(${tc.argumentsJson})`)
+				.join("\n"),
+	},
+	{ disclosure: "error", summary: "last error", content: formatDaemonError },
+];
+
+function createFooterDetails(
+	doc: Document,
+	disclosure: string,
+	summary: string,
+): HTMLElement {
+	const details = doc.createElement("details");
+	details.className = "dev-footer-details";
+	details.setAttribute("data-disclosure", disclosure);
+	const summaryEl = doc.createElement("summary");
+	summaryEl.textContent = summary;
+	details.appendChild(summaryEl);
+	return details;
 }
 
 export function renderDaemonFooter(
@@ -129,116 +210,38 @@ export function renderDaemonFooter(
 	summaryDiv.className = "dev-footer-summary";
 	summaryDiv.setAttribute("data-line", "summary");
 
-	const fields = buildFooterFields();
-	for (const field of fields) {
+	for (const field of buildFooterFields(doc)) {
 		summaryDiv.appendChild(field);
 	}
 
 	footerEl.appendChild(summaryDiv);
 
-	const detailsBlocks = [
-		{
-			disclosure: "system-prompt",
-			summary: "last system prompt",
-		},
-		{
-			disclosure: "raw-completion",
-			summary: "last raw completion",
-		},
-		{
-			disclosure: "tool-calls",
-			summary: "last tool calls",
-		},
-		{
-			disclosure: "error",
-			summary: "last error",
-		},
-		{
-			disclosure: "persona-card",
-			summary: "persona card",
-		},
-	];
-
-	for (const block of detailsBlocks) {
-		const details = doc.createElement("details");
-		details.className = "dev-footer-details";
-		details.setAttribute("data-disclosure", block.disclosure);
-
-		const summaryEl = doc.createElement("summary");
-		summaryEl.textContent = block.summary;
-		details.appendChild(summaryEl);
-
-		if (block.disclosure === "persona-card") {
-			const personaDiv = doc.createElement("div");
-			personaDiv.className = "dev-footer-persona";
-			personaDiv.setAttribute("data-content", "persona-card");
-
-			const personaFields = [
-				"handle",
-				"color",
-				"temperaments",
-				"persona-goal",
-				"blurb",
-			];
-			for (const field of personaFields) {
-				const fieldDiv = doc.createElement("div");
-				fieldDiv.setAttribute("data-persona-field", field);
-				personaDiv.appendChild(fieldDiv);
-			}
-
-			details.appendChild(personaDiv);
-
-			const state = session.getState();
-			const persona = state.personas[aiId] as AiPersona | undefined;
-			if (persona) {
-				const handleEl = personaDiv.querySelector<HTMLElement>(
-					'[data-persona-field="handle"]',
-				);
-				if (handleEl) {
-					handleEl.textContent = `*${persona.name}`;
-				}
-
-				const colorEl = personaDiv.querySelector<HTMLElement>(
-					'[data-persona-field="color"]',
-				);
-				if (colorEl) {
-					const swatch = doc.createElement("span");
-					swatch.className = "dev-footer-color-swatch";
-					swatch.style.backgroundColor = persona.color;
-					colorEl.appendChild(swatch);
-					colorEl.appendChild(doc.createTextNode(persona.color));
-				}
-
-				const tempEl = personaDiv.querySelector<HTMLElement>(
-					'[data-persona-field="temperaments"]',
-				);
-				if (tempEl) {
-					tempEl.textContent = `${persona.temperaments[0]} / ${persona.temperaments[1]}`;
-				}
-
-				const goalEl = personaDiv.querySelector<HTMLElement>(
-					'[data-persona-field="persona-goal"]',
-				);
-				if (goalEl) {
-					goalEl.textContent = persona.personaGoal;
-				}
-
-				const blurbEl = personaDiv.querySelector<HTMLElement>(
-					'[data-persona-field="blurb"]',
-				);
-				if (blurbEl) {
-					blurbEl.textContent = persona.blurb;
-				}
-			}
-		} else {
-			const pre = doc.createElement("pre");
-			pre.setAttribute("data-content", block.disclosure);
-			pre.textContent = "";
-			details.appendChild(pre);
-		}
-
+	for (const block of DETAIL_BLOCKS) {
+		const details = createFooterDetails(doc, block.disclosure, block.summary);
+		const pre = doc.createElement("pre");
+		pre.setAttribute("data-content", block.disclosure);
+		pre.textContent = "";
+		details.appendChild(pre);
 		footerEl.appendChild(details);
 	}
+
+	const personaDetails = createFooterDetails(
+		doc,
+		"persona-card",
+		"persona card",
+	);
+	const personaDiv = doc.createElement("div");
+	personaDiv.className = "dev-footer-persona";
+	personaDiv.setAttribute("data-content", "persona-card");
+	const persona = session.getState().personas[aiId] as AiPersona | undefined;
+	for (const field of PERSONA_FIELDS) {
+		const fieldDiv = doc.createElement("div");
+		fieldDiv.setAttribute("data-persona-field", field);
+		if (persona) fillPersonaField(fieldDiv, field, persona);
+		personaDiv.appendChild(fieldDiv);
+	}
+	personaDetails.appendChild(personaDiv);
+	footerEl.appendChild(personaDetails);
 
 	footerEl.removeAttribute("hidden");
 
@@ -255,7 +258,7 @@ export function renderDaemonFooter(
 
 export function setDaemonFooterInFlight(
 	panelEl: HTMLElement,
-	state: "in-flight" | "idle" | "errored",
+	state: DaemonFooterPipState,
 ): void {
 	const footerEl = panelEl.querySelector<HTMLElement>(".dev-daemon-footer");
 	if (!footerEl) return;
@@ -263,20 +266,8 @@ export function setDaemonFooterInFlight(
 	const pipSpan = footerEl.querySelector<HTMLElement>('[data-field="pip"]');
 	if (!pipSpan) return;
 
-	switch (state) {
-		case "idle":
-			pipSpan.textContent = "○";
-			pipSpan.dataset.state = "idle";
-			break;
-		case "in-flight":
-			pipSpan.textContent = "●";
-			pipSpan.dataset.state = "in-flight";
-			break;
-		case "errored":
-			pipSpan.textContent = "✕";
-			pipSpan.dataset.state = "errored";
-			break;
-	}
+	pipSpan.textContent = PIP_GLYPHS[state];
+	pipSpan.dataset.state = state;
 }
 
 function computeLastRoundTools(
@@ -318,7 +309,7 @@ function computeLastRoundTools(
 }
 
 function computeLlmLine(aiId: AiId): string {
-	const result = daemonTurnResults[aiId];
+	const result = daemonTurnResults.get(aiId);
 	if (!result) return "";
 
 	const N = result.promptTokens ?? "?";
@@ -371,16 +362,24 @@ function buildComplicationChips(
 	return chips;
 }
 
-export function updateDaemonFooterSummary(
+export function refreshDaemonFooter(
 	panelEl: HTMLElement,
 	aiId: AiId,
 	session: GameSession,
 ): void {
 	const footerEl = panelEl.querySelector<HTMLElement>(".dev-daemon-footer");
 	if (!footerEl) return;
+	refreshFooterSummary(footerEl, aiId, session);
+	refreshFooterDetails(footerEl, aiId);
+}
 
+function refreshFooterSummary(
+	footerEl: HTMLElement,
+	aiId: AiId,
+	session: GameSession,
+): void {
 	const state = session.getState();
-	const doc = panelEl.ownerDocument;
+	const doc = footerEl.ownerDocument;
 
 	const toolsSpan = footerEl.querySelector<HTMLElement>(
 		'[data-field="last-tools"]',
@@ -406,63 +405,22 @@ export function updateDaemonFooterSummary(
 	}
 }
 
-export function updateDaemonFooterDetails(
-	panelEl: HTMLElement,
-	aiId: AiId,
-	_session: GameSession,
-): void {
-	const footerEl = panelEl.querySelector<HTMLElement>(".dev-daemon-footer");
-	if (!footerEl) return;
-
-	const round = daemonRounds[aiId];
-
-	const updateSummary = (disclosure: string, baseLabel: string): void => {
+function refreshFooterDetails(footerEl: HTMLElement, aiId: AiId): void {
+	const round = daemonRounds.get(aiId);
+	for (const block of DETAIL_BLOCKS) {
 		const details = footerEl.querySelector<HTMLElement>(
-			`[data-disclosure="${disclosure}"]`,
+			`[data-disclosure="${block.disclosure}"]`,
 		);
-		if (!details) return;
+		if (!details) continue;
 		const summary = details.querySelector<HTMLElement>("summary");
 		if (summary) {
-			summary.textContent = `${baseLabel}${round ? ` (round ${round})` : ""}`;
+			summary.textContent = `${block.summary}${round ? ` (round ${round})` : ""}`;
 		}
-	};
-
-	const updatePreContent = (disclosure: string, content: string): void => {
-		const details = footerEl.querySelector<HTMLElement>(
-			`[data-disclosure="${disclosure}"]`,
-		);
-		if (!details) return;
 		const pre = details.querySelector<HTMLElement>(
-			`[data-content="${disclosure}"]`,
+			`[data-content="${block.disclosure}"]`,
 		);
 		if (pre) {
-			pre.textContent = content;
+			pre.textContent = block.content(aiId);
 		}
-	};
-
-	updateSummary("system-prompt", "last system prompt");
-	updatePreContent("system-prompt", daemonSystemPrompts[aiId] ?? "");
-
-	updateSummary("raw-completion", "last raw completion");
-	updatePreContent(
-		"raw-completion",
-		daemonTurnResults[aiId]?.lastRawCompletion ?? "",
-	);
-
-	updateSummary("tool-calls", "last tool calls");
-	const toolCalls = daemonTurnResults[aiId]?.lastToolCalls ?? [];
-	const toolCallsText = toolCalls
-		.map((tc) => `${tc.name}(${tc.argumentsJson})`)
-		.join("\n");
-	updatePreContent("tool-calls", toolCallsText);
-
-	updateSummary("error", "last error");
-	const error = daemonErrors[aiId];
-	let errorText = "";
-	if (error) {
-		errorText = error.statusCode
-			? `${error.statusCode} ${error.text}`
-			: error.text;
 	}
-	updatePreContent("error", errorText);
 }

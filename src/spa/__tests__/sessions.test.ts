@@ -12,6 +12,16 @@ import {
 	type LocalStorageStub,
 	makeLocalStorageStub,
 } from "./fixtures/local-storage";
+import {
+	STATIC_CONTENT_PACKS,
+	STATIC_OBJECTIVE_TYPES,
+} from "./fixtures/static-content-packs";
+
+const generateDualContentPacks = vi.hoisted(() => vi.fn());
+
+vi.mock("../../content/content-pack-generator", () => ({
+	generateDualContentPacks,
+}));
 
 const TEST_CONTENT_PACK: ContentPack = {
 	setting: "",
@@ -749,5 +759,140 @@ describe("renderSessions — archived Continue button", () => {
 			archivedRow?.querySelectorAll<HTMLButtonElement>(".ops button") ?? [],
 		).map((b) => b.textContent);
 		expect(buttons).not.toContain("[ continue with new room ]");
+	});
+});
+
+interface DeferredPacks {
+	resolve(): void;
+}
+
+function holdContentPacks(): DeferredPacks {
+	let release: () => void = () => undefined;
+	generateDualContentPacks.mockReturnValue(
+		new Promise((resolve) => {
+			release = () =>
+				resolve({
+					packA: STATIC_CONTENT_PACKS[0],
+					packB: STATIC_CONTENT_PACKS[0],
+					objectiveTypes: STATIC_OBJECTIVE_TYPES,
+				});
+		}),
+	);
+	return { resolve: () => release() };
+}
+
+function archivedContinueButton(archiveId: string): HTMLButtonElement {
+	const btn = document.querySelector<HTMLButtonElement>(
+		`.session-row[data-session-id="${archiveId}"] .session-continue-btn`,
+	);
+	if (!btn) throw new Error(`test: no continue button on ${archiveId}`);
+	return btn;
+}
+
+function archivedContinueStatus(archiveId: string): string {
+	return (
+		document.querySelector<HTMLElement>(
+			`.session-row[data-session-id="${archiveId}"] .session-continue-status`,
+		)?.textContent ?? ""
+	);
+}
+
+async function landOnSessionsWithBrokenActive(): Promise<LocalStorageStub> {
+	const stub = makeLocalStorageStub();
+	stub._store.openrouter_key = "sk-or-test";
+	vi.stubGlobal("localStorage", stub);
+	await seedBrokenSession(stub, "0xBROK");
+	await seedArchivedSessionInStore(stub, "0xARCH");
+	stub._store[ACTIVE_KEY] = "0xBROK";
+	return stub;
+}
+
+describe("renderSessions — continue with new room from a forced sessions view", () => {
+	beforeEach(() => {
+		document.body.innerHTML = INDEX_BODY_HTML;
+		generateDualContentPacks.mockReset();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("takes the player into the new room when a broken active session forced the picker open", async () => {
+		vi.resetModules();
+		const stub = await landOnSessionsWithBrokenActive();
+		const packs = holdContentPacks();
+		const { registerView, renderApp } = await import("../render-app.js");
+		const { renderSessions } = await import("../views/sessions.js");
+		registerView("sessions", renderSessions);
+		renderApp(getMain());
+		expect(getMain().dataset.view).toBe("sessions");
+
+		archivedContinueButton("0xARCH").click();
+		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		packs.resolve();
+
+		await vi.waitFor(() => expect(stub._store[ACTIVE_KEY]).not.toBe("0xBROK"));
+		expect(stub._store[ACTIVE_KEY]).toMatch(/^0x/);
+		expect(getMain().dataset.view).toBe("game");
+	});
+
+	it("keeps the reason banner when the pointer moved while the sessions screen stays up", async () => {
+		vi.resetModules();
+		const stub = await landOnSessionsWithBrokenActive();
+		await seedOkSession(stub, "0xOKAY");
+		const packs = holdContentPacks();
+		const { renderSessions } = await import("../views/sessions.js");
+		const root = getMain();
+		root.dataset.view = "sessions";
+		renderSessions(root, { reason: "broken" });
+
+		archivedContinueButton("0xARCH").click();
+		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		stub._store[ACTIVE_KEY] = "0xOKAY";
+		packs.resolve();
+
+		await vi.waitFor(() =>
+			expect(archivedContinueStatus("0xARCH")).toContain("new room ready"),
+		);
+		expect(stub._store[ACTIVE_KEY]).toBe("0xOKAY");
+		const banner = document.querySelector<HTMLElement>("#sessions-banner");
+		expect(banner?.hidden).toBe(false);
+		expect(banner?.textContent).toContain("unreadable");
+	});
+
+	it("gives up on a build that never finishes, says so on the row and re-enables the button", async () => {
+		vi.resetModules();
+		vi.useFakeTimers();
+		const stub = await landOnSessionsWithBrokenActive();
+		generateDualContentPacks.mockReturnValue(new Promise(() => undefined));
+		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import(
+			"../game/bootstrap.js"
+		);
+		const { renderSessions } = await import("../views/sessions.js");
+		const root = getMain();
+		root.dataset.view = "sessions";
+		renderSessions(root, { reason: "broken" });
+
+		archivedContinueButton("0xARCH").click();
+		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		expect(archivedContinueButton("0xARCH").disabled).toBe(true);
+		const provider = generateDualContentPacks.mock.calls[0]?.[3] as {
+			signal?: AbortSignal;
+		};
+
+		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+
+		expect(archivedContinueStatus("0xARCH")).toContain(
+			"could not spin up a new room: content-pack generation timed out",
+		);
+		expect(archivedContinueButton("0xARCH").disabled).toBe(false);
+		expect(provider.signal?.aborted).toBe(true);
+		expect(stub._store[ACTIVE_KEY]).toBe("0xBROK");
+
+		renderSessions(root, { reason: "broken" });
+		expect(archivedContinueButton("0xARCH").disabled).toBe(false);
 	});
 });

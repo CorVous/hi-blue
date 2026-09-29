@@ -12,7 +12,15 @@ The `browser` project in `vitest.config.ts`. Unit-level coverage for SPA and con
 
 The same `browser` project also runs `scripts/__tests__/**` and `evals/__tests__/**` (unit tests for the eval scoring modules, next to the evals they cover). `src/spa/__tests__/build.test.ts` is the exception: it runs in its own node-environment `build` project.
 
-Shared fixtures: `src/spa/__tests__/fixtures/` (`local-storage.ts` with `makeLocalStorageStub` / `seedSessionInStub`, plus the static personas and content packs) and `src/spa/game/__tests__/fixtures/` (`make-test-pack.ts`, `make-game-state.ts`, and `prompt-sections.ts` for pulling the cardinal clause out of a prompt). Reuse them before writing a local builder.
+Shared fixtures: `src/spa/__tests__/fixtures/` (`local-storage.ts` with `makeLocalStorageStub` / `seedSessionInStub`, `await-ignoring-rejection.ts`, plus the static personas and content packs) and `src/spa/game/__tests__/fixtures/` (`make-test-pack.ts`, `make-game-state.ts`, and `prompt-sections.ts` for pulling the cardinal clause out of a prompt). Reuse them before writing a local builder.
+
+### Round fuzz (`src/spa/game/__tests__/round-fuzz.test.ts`)
+
+A seeded fuzz test that plays 20 games of up to 40 rounds through `GameSession.submitMessage`, on real packs from `generateDualContentPacks` (with `MockContentPackProvider`) and `TEST_PERSONAS`. Its mock LLM answers each turn with a random mix of calls built from the offered `availableTools` enums, junk calls (malformed JSON, retired or unknown tools, bad arguments, empty and reused ids), text-only turns and empty turns. `Math.random` is replaced by a seeded generator for the game's own draws. Every other game is "stormy": before most rounds it restores the session with the complication countdown at 1, so complications (and their collisions) happen every round instead of every 5–15.
+
+After every round it checks: positions in bounds, nothing resting on an obstacle, every item held by one valid holder, the open grid connected, exhausted Daemons never prompted and never acting, satisfied Objectives staying satisfied, every tool call id in each request unique and followed by exactly one result, every offered call succeeding, and the composer lockout state rebuilt from `encodeRoundResult` events matching `isPlayerChatLockedOut`. Every fifth round it saves through `saveActiveSession`, loads through `loadSession` and deep-compares the whole state.
+
+It runs in about two seconds and is deterministic. A failure names the seed and round; `BASE_SEED + n` reproduces game `n`. When the game gains a rule that one of these invariants should cover, add it here. If a change legitimately breaks one, fix the invariant, not the seed.
 
 ## Playwright e2e (`e2e/**/*.spec.ts`)
 

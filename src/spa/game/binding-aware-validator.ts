@@ -1,10 +1,11 @@
 import type { BindingSkeleton } from "./binding-prompt-builder.js";
+import { obstacleIds } from "./binding-prompt-builder.js";
 import type {
+	PackLabel,
 	ValidationError,
 	ValidationResult,
 } from "./content-pack-validation.js";
 import {
-	examineMentionsUseTell,
 	findMatchedUseTellKeywords,
 	USE_CUE_KEYWORD_HINTS,
 } from "./content-pack-validation.js";
@@ -145,40 +146,63 @@ const DECOY_FORBIDDEN_FIELDS = [
 	"postLookFlavor",
 ];
 
+const PACK_REQUIRED_FIELDS = ["setting", "wallName"] as const;
+
 const OBSTACLE_REQUIRED_FIELDS = ["name", "examineDescription", "shiftFlavor"];
 
+type RetryTarget = ValidationError["retryUnit"];
+
+const WHOLE_PACK_RETRY_UNIT: RetryTarget = {
+	kind: "objective-pair",
+	pairId: "",
+};
+
+interface EntityLabel {
+	noun: string;
+	forbiddenReason: string;
+}
+
+const BINDING_ENTITY_LABEL: EntityLabel = {
+	noun: "Entity",
+	forbiddenReason: " for this binding type",
+};
+const DECOY_LABEL: EntityLabel = { noun: "Decoy", forbiddenReason: "" };
+const OBSTACLE_LABEL: EntityLabel = { noun: "Obstacle", forbiddenReason: "" };
+
 function requiredString(
-	entity: RawBindingEntity,
+	entity: Record<string, unknown>,
 	field: string,
 	entityId: string,
-	retryUnit: ValidationError["retryUnit"],
+	retryUnit: RetryTarget,
 	errors: ValidationError[],
+	label: EntityLabel,
 ): void {
-	const val = (entity as Record<string, unknown>)[field];
+	const val = entity[field];
 	if (typeof val !== "string" || val.length === 0) {
 		errors.push({
 			entityId,
 			field,
 			rule: "missing-field",
-			message: `Entity ${entityId}: missing required field "${field}"`,
+			message: `${label.noun} ${entityId}: missing required field "${field}"`,
 			retryUnit,
 		});
 	}
 }
 
 function forbiddenField(
-	entity: RawBindingEntity,
+	entity: Record<string, unknown>,
 	field: string,
 	entityId: string,
-	retryUnit: ValidationError["retryUnit"],
+	retryUnit: RetryTarget,
 	errors: ValidationError[],
+	label: EntityLabel,
 ): void {
-	if ((entity as Record<string, unknown>)[field] !== undefined) {
+	if (entity[field] !== undefined) {
 		errors.push({
 			entityId,
 			field,
 			rule: "binding-forbidden-field",
-			message: `Entity ${entityId}: field "${field}" is forbidden for this binding type`,
+			message: `${label.noun} ${entityId}: field "${field}" is forbidden${label.forbiddenReason}`,
 			retryUnit,
 		});
 	}
@@ -189,7 +213,7 @@ type EntitySubKey = "object" | "space" | "item";
 function bindingShapeHint(
 	subKey: EntitySubKey,
 	expectedId: string,
-	retryUnit: ValidationError["retryUnit"],
+	retryUnit: RetryTarget,
 ): string {
 	switch (retryUnit.kind) {
 		case "carry-binding":
@@ -210,7 +234,7 @@ function bindingShapeHint(
 function checkWrongId(
 	entity: RawBindingEntity,
 	expectedId: string,
-	retryUnit: ValidationError["retryUnit"],
+	retryUnit: RetryTarget,
 	errors: ValidationError[],
 	subKey: EntitySubKey,
 ): void {
@@ -229,246 +253,262 @@ function checkWrongId(
 	}
 }
 
-function validateCarryBinding(
-	binding: RawBinding,
-	sk: BindingSkeleton,
-	phaseIndex: number,
-	warnings: ValidationError[],
-	errors: ValidationError[],
-): void {
-	const bindingRetryUnit = {
-		kind: "carry-binding" as const,
-		phaseIndex,
-		bindingId: `carry-${phaseIndex}`,
-	};
+function hasText(value: string | undefined): value is string {
+	return typeof value === "string" && value.length > 0;
+}
 
-	const obj = binding.object;
-	const space = binding.space;
-	const objectId = sk.objectId ?? "";
-	const spaceId = sk.spaceId ?? "";
+function useCueHintList(): string {
+	return USE_CUE_KEYWORD_HINTS.map((k) => `"${k}"`).join(", ");
+}
 
-	if (!obj || typeof obj !== "object") {
+interface EntityCheckContext {
+	entity: RawBindingEntity;
+	entityId: string;
+	skeletonId: string | undefined;
+	retryUnit: RetryTarget;
+	errors: ValidationError[];
+	warnings: ValidationError[];
+}
+
+interface BindingEntityRule {
+	subKey: EntitySubKey;
+	skeletonId: (sk: BindingSkeleton) => string | undefined;
+	required: readonly string[];
+	forbidden: readonly string[];
+	extraCheck: (ctx: EntityCheckContext) => void;
+}
+
+interface BindingRule {
+	label: string;
+	retryUnit: (bindingIndex: number) => RetryTarget;
+	entities: readonly BindingEntityRule[];
+}
+
+function requireActorInPlacement({
+	entity,
+	entityId,
+	skeletonId,
+	retryUnit,
+	errors,
+}: EntityCheckContext): void {
+	if (
+		hasText(entity.placementFlavor) &&
+		!entity.placementFlavor.includes("{actor}")
+	) {
 		errors.push({
-			entityId: objectId,
-			field: "object",
-			rule: "missing-field",
-			message:
-				`Carry binding: the binding object has no "object" key. ` +
-				`Add a top-level "object" sub-object with id "${objectId}". Required shape: ${bindingShapeHint("object", objectId, bindingRetryUnit)}`,
-			retryUnit: bindingRetryUnit,
+			entityId,
+			field: "placementFlavor",
+			rule: "actor-presence",
+			message: `Carry object ${skeletonId}: placementFlavor must contain "{actor}"`,
+			retryUnit,
 		});
-	} else {
-		checkWrongId(obj, objectId, bindingRetryUnit, errors, "object");
-		for (const f of CARRY_OBJECT_REQUIRED_FIELDS) {
-			requiredString(obj, f, objectId, bindingRetryUnit, errors);
-		}
+	}
+}
+
+function warnOnUseCue(label: string, suffix: string) {
+	return ({
+		entity,
+		entityId,
+		skeletonId,
+		retryUnit,
+		warnings,
+	}: EntityCheckContext): void => {
 		if (
-			typeof obj.placementFlavor === "string" &&
-			obj.placementFlavor.length > 0 &&
-			!obj.placementFlavor.includes("{actor}")
+			hasText(entity.examineDescription) &&
+			findMatchedUseTellKeywords(entity.examineDescription).length > 0
 		) {
-			errors.push({
-				entityId: objectId,
-				field: "placementFlavor",
-				rule: "actor-presence",
-				message: `Carry object ${sk.objectId}: placementFlavor must contain "{actor}"`,
-				retryUnit: bindingRetryUnit,
-			});
-		}
-	}
-
-	if (!space || typeof space !== "object") {
-		errors.push({
-			entityId: spaceId,
-			field: "space",
-			rule: "missing-field",
-			message:
-				`Carry binding: the binding object has no "space" key. ` +
-				`Add a top-level "space" sub-object with id "${spaceId}". Required shape: ${bindingShapeHint("space", spaceId, bindingRetryUnit)}`,
-			retryUnit: bindingRetryUnit,
-		});
-	} else {
-		checkWrongId(space, spaceId, bindingRetryUnit, errors, "space");
-		for (const f of CARRY_SPACE_REQUIRED_FIELDS) {
-			requiredString(space, f, spaceId, bindingRetryUnit, errors);
-		}
-		for (const f of CARRY_SPACE_FORBIDDEN_FIELDS) {
-			forbiddenField(space, f, spaceId, bindingRetryUnit, errors);
-		}
-		if (
-			typeof space.examineDescription === "string" &&
-			space.examineDescription.length > 0
-		) {
-			if (examineMentionsUseTell(space.examineDescription)) {
-				warnings.push({
-					entityId: spaceId,
-					field: "examineDescription",
-					rule: "binding-forbidden-field",
-					message: `Carry space ${sk.spaceId}: examineDescription contains a use-cue keyword (warning only — carry spaces should not have use-cue)`,
-					retryUnit: bindingRetryUnit,
-				});
-			}
-		}
-	}
-}
-
-function validateUseSpaceBinding(
-	binding: RawBinding,
-	sk: BindingSkeleton,
-	phaseIndex: number,
-	errors: ValidationError[],
-): void {
-	const bindingRetryUnit = {
-		kind: "use-space-binding" as const,
-		phaseIndex,
-		bindingId: `useSpace-${phaseIndex}`,
-	};
-
-	const space = binding.space;
-	const spaceId = sk.spaceId ?? "";
-	if (!space || typeof space !== "object") {
-		errors.push({
-			entityId: spaceId,
-			field: "space",
-			rule: "missing-field",
-			message:
-				`UseSpace binding: the binding object has no "space" key. ` +
-				`Add a top-level "space" sub-object with id "${spaceId}". Required shape: ${bindingShapeHint("space", spaceId, bindingRetryUnit)}`,
-			retryUnit: bindingRetryUnit,
-		});
-		return;
-	}
-
-	checkWrongId(space, spaceId, bindingRetryUnit, errors, "space");
-	for (const f of USE_SPACE_REQUIRED_FIELDS) {
-		requiredString(space, f, spaceId, bindingRetryUnit, errors);
-	}
-	for (const f of USE_SPACE_FORBIDDEN_FIELDS) {
-		forbiddenField(space, f, spaceId, bindingRetryUnit, errors);
-	}
-	if (
-		typeof space.examineDescription === "string" &&
-		space.examineDescription.length > 0
-	) {
-		if (!examineMentionsUseTell(space.examineDescription)) {
-			errors.push({
-				entityId: spaceId,
-				field: "examineDescription",
-				rule: "verb-of-activation",
-				message: `UseSpace space ${sk.spaceId}: examineDescription must contain at least one use-cue keyword (e.g. ${USE_CUE_KEYWORD_HINTS.map((k) => `"${k}"`).join(", ")}). Current text: ${JSON.stringify(space.examineDescription)}`,
-				retryUnit: bindingRetryUnit,
-			});
-		}
-	}
-}
-
-function validateUseItemBinding(
-	binding: RawBinding,
-	sk: BindingSkeleton,
-	phaseIndex: number,
-	errors: ValidationError[],
-): void {
-	const bindingRetryUnit = {
-		kind: "use-item-binding" as const,
-		phaseIndex,
-		bindingId: `useItem-${phaseIndex}`,
-	};
-
-	const item = binding.item;
-	const itemId = sk.itemId ?? "";
-	if (!item || typeof item !== "object") {
-		errors.push({
-			entityId: itemId,
-			field: "item",
-			rule: "missing-field",
-			message:
-				`UseItem binding: the binding object has no "item" key. ` +
-				`Add a top-level "item" sub-object with id "${itemId}". Required shape: ${bindingShapeHint("item", itemId, bindingRetryUnit)}`,
-			retryUnit: bindingRetryUnit,
-		});
-		return;
-	}
-
-	checkWrongId(item, itemId, bindingRetryUnit, errors, "item");
-	for (const f of USE_ITEM_REQUIRED_FIELDS) {
-		requiredString(item, f, itemId, bindingRetryUnit, errors);
-	}
-	if (
-		typeof item.examineDescription === "string" &&
-		item.examineDescription.length > 0
-	) {
-		if (!examineMentionsUseTell(item.examineDescription)) {
-			errors.push({
-				entityId: itemId,
-				field: "examineDescription",
-				rule: "verb-of-activation",
-				message: `UseItem item ${sk.itemId}: examineDescription must contain at least one use-cue keyword (e.g. ${USE_CUE_KEYWORD_HINTS.map((k) => `"${k}"`).join(", ")}). Current text: ${JSON.stringify(item.examineDescription)}`,
-				retryUnit: bindingRetryUnit,
-			});
-		}
-	}
-}
-
-function validateConvergenceBinding(
-	binding: RawBinding,
-	sk: BindingSkeleton,
-	phaseIndex: number,
-	warnings: ValidationError[],
-	errors: ValidationError[],
-): void {
-	const bindingRetryUnit = {
-		kind: "convergence-binding" as const,
-		phaseIndex,
-		bindingId: `convergence-${phaseIndex}`,
-	};
-
-	const space = binding.space;
-	const spaceId = sk.spaceId ?? "";
-	if (!space || typeof space !== "object") {
-		errors.push({
-			entityId: spaceId,
-			field: "space",
-			rule: "missing-field",
-			message:
-				`Convergence binding: the binding object has no "space" key. ` +
-				`Add a top-level "space" sub-object with id "${spaceId}". Required shape: ${bindingShapeHint("space", spaceId, bindingRetryUnit)}`,
-			retryUnit: bindingRetryUnit,
-		});
-		return;
-	}
-
-	checkWrongId(space, spaceId, bindingRetryUnit, errors, "space");
-	for (const f of CONVERGENCE_SPACE_REQUIRED_FIELDS) {
-		requiredString(space, f, spaceId, bindingRetryUnit, errors);
-	}
-	for (const f of CONVERGENCE_SPACE_FORBIDDEN_FIELDS) {
-		forbiddenField(space, f, spaceId, bindingRetryUnit, errors);
-	}
-	if (
-		typeof space.examineDescription === "string" &&
-		space.examineDescription.length > 0
-	) {
-		if (examineMentionsUseTell(space.examineDescription)) {
 			warnings.push({
-				entityId: spaceId,
+				entityId,
 				field: "examineDescription",
 				rule: "binding-forbidden-field",
-				message: `Convergence space ${sk.spaceId}: examineDescription contains a use-cue keyword (warning only)`,
-				retryUnit: bindingRetryUnit,
+				message: `${label} ${skeletonId}: examineDescription contains a use-cue keyword (warning only${suffix})`,
+				retryUnit,
 			});
 		}
+	};
+}
+
+function requireUseCue(label: string) {
+	return ({
+		entity,
+		entityId,
+		skeletonId,
+		retryUnit,
+		errors,
+	}: EntityCheckContext): void => {
+		if (
+			hasText(entity.examineDescription) &&
+			findMatchedUseTellKeywords(entity.examineDescription).length === 0
+		) {
+			errors.push({
+				entityId,
+				field: "examineDescription",
+				rule: "verb-of-activation",
+				message: `${label} ${skeletonId}: examineDescription must contain at least one use-cue keyword (e.g. ${useCueHintList()}). Current text: ${JSON.stringify(entity.examineDescription)}`,
+				retryUnit,
+			});
+		}
+	};
+}
+
+const BINDING_RULES: Readonly<Record<BindingSkeleton["type"], BindingRule>> = {
+	carry: {
+		label: "Carry",
+		retryUnit: (i) => ({ kind: "carry-binding", bindingId: `carry-${i}` }),
+		entities: [
+			{
+				subKey: "object",
+				skeletonId: (sk) => sk.objectId,
+				required: CARRY_OBJECT_REQUIRED_FIELDS,
+				forbidden: [],
+				extraCheck: requireActorInPlacement,
+			},
+			{
+				subKey: "space",
+				skeletonId: (sk) => sk.spaceId,
+				required: CARRY_SPACE_REQUIRED_FIELDS,
+				forbidden: CARRY_SPACE_FORBIDDEN_FIELDS,
+				extraCheck: warnOnUseCue(
+					"Carry space",
+					" — carry spaces should not have use-cue",
+				),
+			},
+		],
+	},
+	use_space: {
+		label: "UseSpace",
+		retryUnit: (i) => ({
+			kind: "use-space-binding",
+			bindingId: `useSpace-${i}`,
+		}),
+		entities: [
+			{
+				subKey: "space",
+				skeletonId: (sk) => sk.spaceId,
+				required: USE_SPACE_REQUIRED_FIELDS,
+				forbidden: USE_SPACE_FORBIDDEN_FIELDS,
+				extraCheck: requireUseCue("UseSpace space"),
+			},
+		],
+	},
+	use_item: {
+		label: "UseItem",
+		retryUnit: (i) => ({ kind: "use-item-binding", bindingId: `useItem-${i}` }),
+		entities: [
+			{
+				subKey: "item",
+				skeletonId: (sk) => sk.itemId,
+				required: USE_ITEM_REQUIRED_FIELDS,
+				forbidden: [],
+				extraCheck: requireUseCue("UseItem item"),
+			},
+		],
+	},
+	convergence: {
+		label: "Convergence",
+		retryUnit: (i) => ({
+			kind: "convergence-binding",
+			bindingId: `convergence-${i}`,
+		}),
+		entities: [
+			{
+				subKey: "space",
+				skeletonId: (sk) => sk.spaceId,
+				required: CONVERGENCE_SPACE_REQUIRED_FIELDS,
+				forbidden: CONVERGENCE_SPACE_FORBIDDEN_FIELDS,
+				extraCheck: warnOnUseCue("Convergence space", ""),
+			},
+		],
+	},
+};
+
+function validateBindingEntity(
+	binding: RawBinding,
+	sk: BindingSkeleton,
+	rule: BindingRule,
+	entityRule: BindingEntityRule,
+	retryUnit: RetryTarget,
+	warnings: ValidationError[],
+	errors: ValidationError[],
+): void {
+	const { subKey } = entityRule;
+	const entity = binding[subKey];
+	const skeletonId = entityRule.skeletonId(sk);
+	const entityId = skeletonId ?? "";
+
+	if (!entity || typeof entity !== "object") {
+		errors.push({
+			entityId,
+			field: subKey,
+			rule: "missing-field",
+			message:
+				`${rule.label} binding: the binding object has no "${subKey}" key. ` +
+				`Add a top-level "${subKey}" sub-object with id "${entityId}". Required shape: ${bindingShapeHint(subKey, entityId, retryUnit)}`,
+			retryUnit,
+		});
+		return;
+	}
+
+	checkWrongId(entity, entityId, retryUnit, errors, subKey);
+	for (const f of entityRule.required) {
+		requiredString(
+			entity,
+			f,
+			entityId,
+			retryUnit,
+			errors,
+			BINDING_ENTITY_LABEL,
+		);
+	}
+	for (const f of entityRule.forbidden) {
+		forbiddenField(
+			entity,
+			f,
+			entityId,
+			retryUnit,
+			errors,
+			BINDING_ENTITY_LABEL,
+		);
+	}
+	entityRule.extraCheck({
+		entity,
+		entityId,
+		skeletonId,
+		retryUnit,
+		errors,
+		warnings,
+	});
+}
+
+function validateBinding(
+	binding: RawBinding,
+	sk: BindingSkeleton,
+	bindingIndex: number,
+	warnings: ValidationError[],
+	errors: ValidationError[],
+): void {
+	const rule = BINDING_RULES[sk.type];
+	const retryUnit = rule.retryUnit(bindingIndex);
+	for (const entityRule of rule.entities) {
+		validateBindingEntity(
+			binding,
+			sk,
+			rule,
+			entityRule,
+			retryUnit,
+			warnings,
+			errors,
+		);
 	}
 }
 
 function validateDecoy(
 	decoy: RawDecoy,
 	expectedId: string,
-	phaseIndex: number,
 	errors: ValidationError[],
 ): void {
 	const retryUnit = {
 		kind: "decoy" as const,
-		phaseIndex,
 		decoyId: expectedId,
 	};
 
@@ -484,32 +524,12 @@ function validateDecoy(
 
 	const entityId = decoy.id ?? expectedId;
 	for (const f of DECOY_REQUIRED_FIELDS) {
-		const val = (decoy as Record<string, unknown>)[f];
-		if (typeof val !== "string" || val.length === 0) {
-			errors.push({
-				entityId,
-				field: f,
-				rule: "missing-field",
-				message: `Decoy ${entityId}: missing required field "${f}"`,
-				retryUnit,
-			});
-		}
+		requiredString(decoy, f, entityId, retryUnit, errors, DECOY_LABEL);
 	}
 	for (const f of DECOY_FORBIDDEN_FIELDS) {
-		if ((decoy as Record<string, unknown>)[f] !== undefined) {
-			errors.push({
-				entityId,
-				field: f,
-				rule: "binding-forbidden-field",
-				message: `Decoy ${entityId}: field "${f}" is forbidden`,
-				retryUnit,
-			});
-		}
+		forbiddenField(decoy, f, entityId, retryUnit, errors, DECOY_LABEL);
 	}
-	if (
-		typeof decoy.examineDescription === "string" &&
-		decoy.examineDescription.length > 0
-	) {
+	if (hasText(decoy.examineDescription)) {
 		const matched = findMatchedUseTellKeywords(decoy.examineDescription);
 		if (matched.length > 0) {
 			const matchedList = matched.map((k) => `"${k}"`).join(", ");
@@ -527,12 +547,10 @@ function validateDecoy(
 function validateObstacle(
 	obstacle: RawObstacle,
 	expectedId: string,
-	phaseIndex: number,
 	errors: ValidationError[],
 ): void {
 	const retryUnit = {
 		kind: "obstacle" as const,
-		phaseIndex,
 		entityId: expectedId,
 	};
 
@@ -548,16 +566,7 @@ function validateObstacle(
 
 	const entityId = obstacle.id ?? expectedId;
 	for (const f of OBSTACLE_REQUIRED_FIELDS) {
-		const val = (obstacle as Record<string, unknown>)[f];
-		if (typeof val !== "string" || val.length === 0) {
-			errors.push({
-				entityId,
-				field: f,
-				rule: "missing-field",
-				message: `Obstacle ${entityId}: missing required field "${f}"`,
-				retryUnit,
-			});
-		}
+		requiredString(obstacle, f, entityId, retryUnit, errors, OBSTACLE_LABEL);
 	}
 	if (
 		typeof obstacle.shiftFlavor === "string" &&
@@ -576,13 +585,25 @@ function validateObstacle(
 function validateBoundPack(
 	pack: RawBoundPack,
 	schedule: ValidationSchedule,
-	phaseIndex: number,
 	errors: ValidationError[],
 	warnings: ValidationError[],
 ): void {
 	const bindings = pack.bindings ?? [];
 	const decoys = pack.decoys ?? [];
 	const obstacles = pack.obstacles ?? [];
+
+	for (const field of PACK_REQUIRED_FIELDS) {
+		const value = pack[field];
+		if (typeof value !== "string" || value.trim().length === 0) {
+			errors.push({
+				entityId: "",
+				field,
+				rule: "missing-field",
+				message: `Pack is missing required top-level string field "${field}"`,
+				retryUnit: WHOLE_PACK_RETRY_UNIT,
+			});
+		}
+	}
 
 	for (const [i, sk] of schedule.skeletons.entries()) {
 		const binding = bindings[i];
@@ -591,26 +612,13 @@ function validateBoundPack(
 				entityId: "",
 				field: "bindings",
 				rule: "missing-field",
-				message: `Phase ${phaseIndex}: binding ${i} is missing`,
-				retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+				message: `Binding ${i} is missing`,
+				retryUnit: WHOLE_PACK_RETRY_UNIT,
 			});
 			continue;
 		}
 
-		switch (sk.type) {
-			case "carry":
-				validateCarryBinding(binding, sk, phaseIndex, warnings, errors);
-				break;
-			case "use_space":
-				validateUseSpaceBinding(binding, sk, phaseIndex, errors);
-				break;
-			case "use_item":
-				validateUseItemBinding(binding, sk, phaseIndex, errors);
-				break;
-			case "convergence":
-				validateConvergenceBinding(binding, sk, phaseIndex, warnings, errors);
-				break;
-		}
+		validateBinding(binding, sk, i, warnings, errors);
 	}
 
 	if (decoys.length !== schedule.decoys.length) {
@@ -618,8 +626,8 @@ function validateBoundPack(
 			entityId: "",
 			field: "decoys",
 			rule: "wrong-count",
-			message: `Phase ${phaseIndex}: expected ${schedule.decoys.length} decoys, got ${decoys.length}`,
-			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+			message: `Expected ${schedule.decoys.length} decoys, got ${decoys.length}`,
+			retryUnit: WHOLE_PACK_RETRY_UNIT,
 		});
 	} else {
 		for (const [i, expectedDecoy] of schedule.decoys.entries()) {
@@ -629,68 +637,73 @@ function validateBoundPack(
 					entityId: expectedDecoy.id,
 					field: "decoys",
 					rule: "missing-field",
-					message: `Phase ${phaseIndex}: decoy ${i} is missing`,
-					retryUnit: { kind: "decoy", phaseIndex, decoyId: expectedDecoy.id },
+					message: `Decoy ${i} is missing`,
+					retryUnit: { kind: "decoy", decoyId: expectedDecoy.id },
 				});
 				continue;
 			}
-			validateDecoy(decoy, expectedDecoy.id, phaseIndex, errors);
+			validateDecoy(decoy, expectedDecoy.id, errors);
 		}
 	}
 
-	for (let i = 0; i < schedule.obstacleCount; i++) {
-		const expectedId = `obstacle-${i}`;
+	if (obstacles.length !== schedule.obstacleCount) {
+		const expectedIds = obstacleIds(schedule.obstacleCount)
+			.map((id) => `"${id}"`)
+			.join(", ");
+		errors.push({
+			entityId: "",
+			field: "obstacles",
+			rule: "wrong-count",
+			message: `Expected exactly ${schedule.obstacleCount} obstacles (${expectedIds || "none"}), got ${obstacles.length}`,
+			retryUnit: WHOLE_PACK_RETRY_UNIT,
+		});
+	}
+
+	for (const [i, expectedId] of obstacleIds(schedule.obstacleCount).entries()) {
 		const obstacle = obstacles[i];
 		if (!obstacle) {
 			errors.push({
 				entityId: expectedId,
 				field: "obstacles",
 				rule: "missing-field",
-				message: `Phase ${phaseIndex}: obstacle ${i} (id="${expectedId}") is missing`,
-				retryUnit: { kind: "obstacle", phaseIndex, entityId: expectedId },
+				message: `Obstacle ${i} (id="${expectedId}") is missing`,
+				retryUnit: { kind: "obstacle", entityId: expectedId },
 			});
 			continue;
 		}
-		validateObstacle(obstacle, expectedId, phaseIndex, errors);
+		validateObstacle(obstacle, expectedId, errors);
 	}
 }
 
-export function validateBoundContentPack(
-	rawResponse: unknown,
+function labelWithPack(
+	error: ValidationError,
+	pack: PackLabel,
+): ValidationError {
+	return { ...error, retryUnit: { ...error.retryUnit, pack } };
+}
+
+function validateLabelledPack(
+	pack: RawBoundPack | undefined,
+	label: PackLabel,
 	schedule: ValidationSchedule,
-): ValidationResult<{ warnings: ValidationError[] }> {
-	const errors: ValidationError[] = [];
-	const warnings: ValidationError[] = [];
-
-	if (rawResponse == null || typeof rawResponse !== "object") {
-		errors.push({
-			entityId: "",
-			field: "<root>",
-			rule: "structural",
-			message: "Response is not an object",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
-		});
-		return { ok: false, errors };
-	}
-
-	const resp = rawResponse as Record<string, unknown>;
-	const pack = resp.pack as RawBoundPack | undefined;
+	errors: ValidationError[],
+	warnings: ValidationError[],
+): void {
+	const packErrors: ValidationError[] = [];
+	const packWarnings: ValidationError[] = [];
 	if (!pack || typeof pack !== "object") {
-		errors.push({
+		packErrors.push({
 			entityId: "",
-			field: "pack",
+			field: `pack${label}`,
 			rule: "missing-field",
-			message: "Response missing 'pack' field",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+			message: `Phase 0 missing pack${label}`,
+			retryUnit: WHOLE_PACK_RETRY_UNIT,
 		});
-		return { ok: false, errors };
+	} else {
+		validateBoundPack(pack, schedule, packErrors, packWarnings);
 	}
-
-	validateBoundPack(pack, schedule, 0, errors, warnings);
-
-	return errors.length === 0
-		? { ok: true, value: { warnings } }
-		: { ok: false, errors };
+	errors.push(...packErrors.map((e) => labelWithPack(e, label)));
+	warnings.push(...packWarnings.map((w) => labelWithPack(w, label)));
 }
 
 export function validateBoundDualContentPack(
@@ -706,7 +719,7 @@ export function validateBoundDualContentPack(
 			field: "<root>",
 			rule: "structural",
 			message: "Response is not an object",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+			retryUnit: WHOLE_PACK_RETRY_UNIT,
 		});
 		return { ok: false, errors };
 	}
@@ -722,7 +735,7 @@ export function validateBoundDualContentPack(
 			field: "phases",
 			rule: "missing-field",
 			message: "Response missing 'phases' array",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+			retryUnit: WHOLE_PACK_RETRY_UNIT,
 		});
 		return { ok: false, errors };
 	}
@@ -734,37 +747,13 @@ export function validateBoundDualContentPack(
 			field: "phases[0]",
 			rule: "structural",
 			message: "Phase 0 is missing",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+			retryUnit: WHOLE_PACK_RETRY_UNIT,
 		});
 		return { ok: false, errors };
 	}
 
-	const packA = phase.packA;
-	const packB = phase.packB;
-
-	if (!packA || typeof packA !== "object") {
-		errors.push({
-			entityId: "",
-			field: "packA",
-			rule: "missing-field",
-			message: "Phase 0 missing packA",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
-		});
-	} else {
-		validateBoundPack(packA, schedule, 0, errors, warnings);
-	}
-
-	if (!packB || typeof packB !== "object") {
-		errors.push({
-			entityId: "",
-			field: "packB",
-			rule: "missing-field",
-			message: "Phase 0 missing packB",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
-		});
-	} else {
-		validateBoundPack(packB, schedule, 0, errors, warnings);
-	}
+	validateLabelledPack(phase.packA, "A", schedule, errors, warnings);
+	validateLabelledPack(phase.packB, "B", schedule, errors, warnings);
 
 	return errors.length === 0
 		? { ok: true, value: { warnings } }

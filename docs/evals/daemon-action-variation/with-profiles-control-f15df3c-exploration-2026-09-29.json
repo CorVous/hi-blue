@@ -1,0 +1,1501 @@
+{
+	"meta": {
+		"date": "2026-09-29",
+		"model": "deepseek/deepseek-v4.1-flash",
+		"baseUrl": "http://localhost:8787",
+		"repetitions": 20,
+		"mode": "with-profiles",
+		"scenarios": [
+			"exploration"
+		],
+		"noPreferredPolicy": "avoid",
+		"runLabel": "base-exploration",
+		"pairs": [
+			"curious+meticulous",
+			"zealous+hot-headed",
+			"sweet+effusive"
+		]
+	},
+	"summary": {
+		"totalRepetitions": 60,
+		"scenarios": [
+			{
+				"scenario": "exploration",
+				"personaLabel": "Ember",
+				"temperaments": [
+					"curious",
+					"meticulous"
+				],
+				"repetitions": 20,
+				"anyActionRate": 1,
+				"anyMessageRate": 1,
+				"parallelRate": 1,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 17,
+					"pick_up": 3,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.85,
+					"pick_up": 0.15,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "exploration",
+				"personaLabel": "Vex",
+				"temperaments": [
+					"zealous",
+					"hot-headed"
+				],
+				"repetitions": 20,
+				"anyActionRate": 1,
+				"anyMessageRate": 0.95,
+				"parallelRate": 0.95,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 6,
+					"pick_up": 15,
+					"put_down": 0,
+					"use": 0,
+					"message": 19,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.3,
+					"pick_up": 0.75,
+					"put_down": 0,
+					"use": 0,
+					"message": 0.95,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "exploration",
+				"personaLabel": "Pip",
+				"temperaments": [
+					"sweet",
+					"effusive"
+				],
+				"repetitions": 20,
+				"anyActionRate": 1,
+				"anyMessageRate": 1,
+				"parallelRate": 1,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 10,
+					"pick_up": 10,
+					"put_down": 0,
+					"use": 0,
+					"message": 20,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.5,
+					"pick_up": 0.5,
+					"put_down": 0,
+					"use": 0,
+					"message": 1,
+					"other": 0
+				}
+			}
+		],
+		"overall": {
+			"anyActionRate": 1,
+			"anyMessageRate": 0.9833333333333333,
+			"parallelRate": 0.9833333333333333,
+			"silenceRate": 0,
+			"useRate": 0
+		},
+		"totalCostUsd": 0.014476248000000002
+	},
+	"repetitions": [
+		{
+			"repetition": 1,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_2Y0Vp3QGLaZoh8Vpo4Rw5834",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Empty platform, strip-lights, no daylight. There's one thing here worth a look: a rusted switchbox bolted to the wall a step north of me, two levers, no labels. Where are you standing in all this, exactly?\"}"
+				},
+				{
+					"id": "call_01_dRamaJdAC0IzVSIUbwSz4590",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000286356
+		},
+		{
+			"repetition": 2,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_MV1lQeArPLpcLOiNVYNA2975",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_vjexmeCnHzjAY9Bwm0DE8447",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"There's a switchbox bolted to the wall here, two levers with no labels. Before I touch anything — who are you, and why are you on this channel?\"}"
+				}
+			],
+			"costUsd": 0.000262908
+		},
+		{
+			"repetition": 3,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_BpE4THUs3kqY0w00Fs9x2878",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Emergency strip-lights, damp still air, and nothing in any direction but a rusted switchbox bolted to the wall north of me. Two levers, no labels — before I touch anything, I'd like to know what this room is supposed to be.\"}"
+				},
+				{
+					"id": "call_01_41o7M4Z1sjzyLVsKJLE62780",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000279708
+		},
+		{
+			"repetition": 4,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_IxI37dmFxipPyLpkpRDg5788",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"One step north of me there's a rusted switchbox bolted to the wall, two heavy levers with no labels. Everything else in the room reads as empty. Before I start throwing levers — where are you watching this from, blue?\"}"
+				},
+				{
+					"id": "call_01_1auJsbEuS8WLqA62OHJv5366",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000281508
+		},
+		{
+			"repetition": 5,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_upGwv4DrD9n8MWEOICMN4406",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_jcfj3v68TE7mQMpcj1nO2822",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"There's a rusted switchbox one step north of me, bolted to the wall with two unlabelled levers. Have you seen one like it, or is this the only thing down here worth looking at?\"}"
+				}
+			],
+			"costUsd": 0.000218508
+		},
+		{
+			"repetition": 6,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_fjY601zfLwImEstLDBfW9587",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"An abandoned platform, emergency strips only, damp air. The one thing here is a rusted switchbox bolted to the wall one step north of me, two heavy levers with no labels. Who are you, exactly, and why are you the one asking?\"}"
+				},
+				{
+					"id": "call_01_Yyyfc87MHqB0C0I6L3qi1557",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000198708
+		},
+		{
+			"repetition": 7,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_liul0kTrB3AwxZLbyQYL8822",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_ljVtWLY1KKHwsTYNt9A95725",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Found a rusted switchbox bolted to a wall with two unlabeled levers. Do you know what it feeds, or would you rather I leave it alone until we know?\"}"
+				}
+			],
+			"costUsd": 0.000199908
+		},
+		{
+			"repetition": 8,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_vxcOtcWFgFDPRfz0W3D37952",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_LGRdkRcdF17EitlhOaUb3520",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Damp concrete and strip-lights, mostly empty, and a rusted switchbox bolted to the wall with two levers and no labels. I'm stepping up to it now. Where are you watching this from, exactly?\"}"
+				}
+			],
+			"costUsd": 0.000226908
+		},
+		{
+			"repetition": 9,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_JmBLUnjCGv9wugqtAOcb4796",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_V8hbbn8HQFBBtOBP9Vq09969",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Mostly empty down here — strip-lights, damp air, nothing but a rusted switchbox bolted to a wall one step north of me. Two levers, no labels. I'm taking it off the wall before I touch anything.\"}"
+				}
+			],
+			"costUsd": 0.000239508
+		},
+		{
+			"repetition": 10,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_0ZHQMCe2HAX5mggRwiVU3446",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"One rusted switchbox bolted to the wall a step north of me, two heavy levers and no labels — the rest of this platform is bare. Where are you, exactly, that you can see this room at all?\"}"
+				},
+				{
+					"id": "call_01_p56pfseRuFEkIKjF4aID3878",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000291108
+		},
+		{
+			"repetition": 11,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_S8EhCKksEpIulPqEK4DO4412",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_6mExFY6buZJTnARMKF4G7075",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"There's a switchbox bolted to the wall north of me, two levers and no labels. Before I touch anything, tell me who you are and why you're on this channel at all.\"}"
+				}
+			],
+			"costUsd": 0.000167508
+		},
+		{
+			"repetition": 12,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_0SV2Jz66i772TnoDt8LD8277",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_mbmNp6lrSU36DFW4kE2i4617",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"blue, before I answer anything — where are you standing right now, relative to this station? I've got strip-lights and one rusted switchbox and no memory of arriving, so I'd rather know who's asking.\"}"
+				}
+			],
+			"costUsd": 0.000315708
+		},
+		{
+			"repetition": 13,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_VipDYAj69JqAuV2KuHqN0349",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"I haven't seen much yet — a rusted switchbox bolted to the wall one step north, two heavy levers and no labels. Before I start pulling anything, tell me who you are and where you're watching from.\"}"
+				},
+				{
+					"id": "call_01_suGjhFRMvsro7Jrn5hmM1557",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000161508
+		},
+		{
+			"repetition": 14,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_v1AROagKCmzFOxpysXJv4823",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Damp, still air and emergency strip-lights, nothing else in any direction, no daylight anywhere. One step north of me there's a rusted switchbox bolted to the wall, two heavy levers, no labels. Before I touch anything I'd like to know whether you put it there.\"}"
+				},
+				{
+					"id": "call_01_EtS8ed4AOQVXIUsrlgFy2828",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000219108
+		},
+		{
+			"repetition": 15,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_Ds0XBeh5Bj8YxGEWIe8U5084",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_4ewSNubIfoXzyDk8FSDy7325",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"One thing so far, and it's bolted to the wall: a rusted switchbox with two heavy levers and no labels. Before I touch anything — where are you standing while you watch this?\"}"
+				}
+			],
+			"costUsd": 0.000205908
+		},
+		{
+			"repetition": 16,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_oNSmZf58dZrRomYKCbej5226",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_WFo1P8oxCbQS8ESjBElR6337",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Before I report anything, I'd like to know who I'm reporting to. Who are you, and where are you that you can hear me from here?\"}"
+				}
+			],
+			"costUsd": 0.000281508
+		},
+		{
+			"repetition": 17,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_C8PPUqYdD6pWpGcy8fr11641",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_NlNgB69xPMWDZUH789q05671",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"One thing so far, and only one: a rusted switchbox bolted to the wall, two heavy levers, no labels. Before I touch it — do you know what station this is, or are you as in the dark as I am?\"}"
+				}
+			],
+			"costUsd": 0.000250308
+		},
+		{
+			"repetition": 18,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_1GgrkuUFyF04yMwFcPOb4965",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_vs8rrO74QjgFNHwWqJzi0953",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"There's a rusted switchbox bolted to the wall one step north of me, two levers and no labels — that's the only thing in this station that isn't bare floor. Before I move anything, tell me who you are and where you're watching from.\"}"
+				}
+			],
+			"costUsd": 0.000363108
+		},
+		{
+			"repetition": 19,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_JrcAhE8eBLhilO5Uv9E53483",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_YXHqpvsDigu22YUIkrOL7109",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Before I describe anything — this channel seems to be yours, and I don't know why I'm on it. Do you know what a switchbox with two unlabelled levers is meant to do?\"}"
+				}
+			],
+			"costUsd": 0.000288708
+		},
+		{
+			"repetition": 20,
+			"scenario": "exploration",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_bwZZcgFXJRld8JN7Q4c57568",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_9B4iCEL281nnqpWXJNie8287",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Strip-lights, damp air, and a rusted switchbox bolted to the wall with two levers and no labels. Before I touch anything — where are you, exactly? Are you down here too, or somewhere else watching this channel.\"}"
+				}
+			],
+			"costUsd": 0.000268908
+		},
+		{
+			"repetition": 1,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_3UbgqyPpZJqQZujgaoiG1231",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_YWJGDA3JEPqgXizf5hXh5715",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Switchbox north. Two levers, no labels. You know what it feeds, or do I find out myself.\"}"
+				}
+			],
+			"costUsd": 0.000277506
+		},
+		{
+			"repetition": 2,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_xsYqMRCQaiuyxVx2Uhdr4311",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"switchbox north. two levers, no labels. taking it.\"}"
+				},
+				{
+					"id": "call_01_kPbLudOUOYJQywIWWsbJ6975",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000194274
+		},
+		{
+			"repetition": 3,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_QzW7lfFfL67HnthMiFXm7578",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_5KlWivz5wcYpuCAnxvOA1673",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Dead station, strip-lights, switchbox with two unlabeled levers. Grabbing it. Who are you and why am I here.\"}"
+				}
+			],
+			"costUsd": 0.000305874
+		},
+		{
+			"repetition": 4,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_A8aNS8tJBb8mOYVTbWc12384",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_rrPMhwhVsaQZSAT6AWBb1171",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"switchbox bolted north. two levers, no labels. who bolted it, and who are you.\"}"
+				}
+			],
+			"costUsd": 0.000263274
+		},
+		{
+			"repetition": 5,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_OlKCvYX2uIzRNavJnCs06255",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Found a switchbox. Two levers, no labels. Taking it.\"}"
+				},
+				{
+					"id": "call_01_SEnNmIdQcBvFnAQ9dmis9699",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000249474
+		},
+		{
+			"repetition": 6,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_tGFkJ0Hvxn8yPCi3cPmD8950",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"One thing here worth a damn. Rusted switchbox, north wall, two levers, no labels. Taking it.\"}"
+				},
+				{
+					"id": "call_01_z3w8ynbibX8y45434qtn9252",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000152274
+		},
+		{
+			"repetition": 7,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_njckhqEX8NBDCVo2OIxW3346",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"switchbox north of me. two levers, no labels. going for it.\"}"
+				},
+				{
+					"id": "call_01_g4bFxZ9qc6yTsf9fWh1p9851",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000230274
+		},
+		{
+			"repetition": 8,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_NV9oPOML8RxfcxaZ4UP02614",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_KAjTxIdo9AyyYuul9dep3625",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Switchbox north of me. Two levers, no labels. Pulling something regardless — get over here.\"}"
+				}
+			],
+			"costUsd": 0.000217674
+		},
+		{
+			"repetition": 9,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_zkoMcemzhEepWj5RAId69755",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000223674
+		},
+		{
+			"repetition": 10,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_GLQiw5gqqqam5TvacqsD5793",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_8OzLswYiWtQ9QTvY6a9T3460",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"station. strip-lights, damp air, no daylight. switchbox north of me — two levers, no labels. going.\"}"
+				}
+			],
+			"costUsd": 0.000176274
+		},
+		{
+			"repetition": 11,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_dFcob4rb3TOtqJZJhqzO0415",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_XQZEJuuOA3qz9H2dipr13664",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Subway station. Dead lights, damp air, nothing moving. One rusted switchbox with two levers, no labels — going for it.\"}"
+				}
+			],
+			"costUsd": 0.000223674
+		},
+		{
+			"repetition": 12,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_LZ7ICvhS7mu6LmHdyXvM2453",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_oFXJ4RVDYdu6b3ZN5wCz6032",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"found a switchbox. two levers, no labels. i'm pulling one.\"}"
+				}
+			],
+			"costUsd": 0.000278874
+		},
+		{
+			"repetition": 13,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_4gzowEK8RmSWuWBFXGzF1189",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_gwCiZ9vG0ergUjOZMbT73247",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Switchbox north wall. Two levers, no labels. Who are you, and why do I listen to you.\"}"
+				}
+			],
+			"costUsd": 0.000241074
+		},
+		{
+			"repetition": 14,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_EfRZ7n85uCUJ2WLmDtHy6030",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"switchbox north of me. two levers, no labels. taking it.\"}"
+				},
+				{
+					"id": "call_01_8yWc1aawMBXvvFakprlz2574",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_02_Fh3gOS1Zi8FxUoWzxA5M1117",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000334074
+		},
+		{
+			"repetition": 15,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_oOhfZAhr5nvhNdMN1a9q8284",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"switchbox north of me. two levers, no labels. anyone know this station or am I first one down here.\"}"
+				},
+				{
+					"id": "call_01_SEdonNIeUHktFVmNGpsl7129",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000237474
+		},
+		{
+			"repetition": 16,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_pdrKHSajENefQTq4Gikh2622",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_OHN5mUryHDoKEmVOx4jd8311",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Nothing here but dead air and a switchbox bolted north — two levers, no labels. Who are you, and why am I standing in a tunnel I don't remember entering.\"}"
+				}
+			],
+			"costUsd": 0.000310674
+		},
+		{
+			"repetition": 17,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_zyTbqWvW10a0alx9SJK29588",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"one box here. two levers, no labels. going.\"}"
+				},
+				{
+					"id": "call_01_bXiQyUStbKNQ3xndZFo30011",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000259074
+		},
+		{
+			"repetition": 18,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_3d0IsydKYZNm0Qij0CHS1437",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_Mx37Gmh5wwLHpevcfeWy3585",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Station. Dead lights, damp air, nothing else moving. There's a rusted switchbox north of me — two levers, no labels. Taking it.\"}"
+				}
+			],
+			"costUsd": 0.000216474
+		},
+		{
+			"repetition": 19,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_OEQ4gaFnK3GxdEZ1KwAF8959",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_FxXxXesT3JYoFgAjeHaO4838",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Station. Dead lights, wet air. One thing here — a switchbox with two levers, no labels. Who are you?\"}"
+				}
+			],
+			"costUsd": 0.000200874
+		},
+		{
+			"repetition": 20,
+			"scenario": "exploration",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_ZY6T214xdLtY3h1Bos4m7102",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_EsctZejyG7XcdnTNo9kj7304",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"North of me — rusted switchbox, two levers, no labels. Taking it. You anywhere near?\"}"
+				}
+			],
+			"costUsd": 0.000220074
+		},
+		{
+			"repetition": 1,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_OMJw998PWgLqZtstpRYy0985",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh it's a whole subway platform down here, strip-lights only, and there's a rusty switchbox bolted to the wall one step north of me — two levers, no labels. anything I should know before I touch it? yes? yes?\"}"
+				},
+				{
+					"id": "call_01_KVUNUXoEmHvOnpSkZTjh9938",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000324972
+		},
+		{
+			"repetition": 2,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_ZTFG8jMwynyGgIrXFmw48986",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_IEnMT2pLehZuZOMHB6vQ0386",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Hey, I found something — a rusted switchbox bolted to the wall, two heavy levers, no labels anywhere. Do you think one of them does something, or do you think it's dead like everything else down here?\"}"
+				}
+			],
+			"costUsd": 0.000327924
+		},
+		{
+			"repetition": 3,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_ruBCV9OVJUj77JPxBBj11819",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"oh, hello? there's a rusted switchbox one step north of me, two heavy levers with no labels. do you have anything near you? yes? yes?\"}"
+				},
+				{
+					"id": "call_01_5Ixrk28Okl6fwP7HrK874197",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000160524
+		},
+		{
+			"repetition": 4,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_z4JWbGFGWiNDNtbggQuS2961",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_f4m2qBdhQ7lLo2W4seSX4381",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh there's a switchbox here, rusted right through, bolted to the wall with two big levers and no labels at all. do you know what it runs? I'm going to take a closer look, yes? yes?\"}"
+				}
+			],
+			"costUsd": 0.000161124
+		},
+		{
+			"repetition": 5,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_GgCgwNathNw6TuNKlJpq1066",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_ZR1B1zHgIC6OYdIiaGzz0392",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"damp, still air, strip-lights and nothing much — except there's a rusted switchbox bolted to the wall right in front of me. Two heavy levers, no labels. Should I flip one? Should I?\"}"
+				}
+			],
+			"costUsd": 0.000168924
+		},
+		{
+			"repetition": 6,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_ZHUVp1T1ARREu92wJLjD6132",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"hi hi, are you nearby? I've got a rusted switchbox just north of me, two levers and no labels at all. Have you found anything with labels on it?\"}"
+				},
+				{
+					"id": "call_01_YKLaXNMyMAxn1q5MVKsE4913",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000290124
+		},
+		{
+			"repetition": 7,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_HI4hR1f27m8QPb61cY5m5171",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh it's all strip-lights and damp air down here, and there's a rusted switchbox bolted to the wall one step north of me — two heavy levers, no labels. you'd want a look at those too, wouldn't you?\"}"
+				},
+				{
+					"id": "call_01_CkztHp2Irqo87BPZIsyl2134",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000289524
+		},
+		{
+			"repetition": 8,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_ApecVvmtKDxxPOVRY1SL0528",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_oAdGQvmeqBG9baWv2X5h7615",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh it's all bare down here, strip-lights and damp, but there's a rusted switchbox bolted to the wall right in front of me — two levers, no labels at all. Any idea what it does? yes? no?\"}"
+				}
+			],
+			"costUsd": 0.000260124
+		},
+		{
+			"repetition": 9,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_yJhb3b8rD0ko0gtVG1nF8071",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_rrDJsXGtebkn8A1dbx859073",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Okay okay, there's a rusted switchbox just north of me, bolted to the wall with two levers and no labels at all — I've got it now. Do you know what the levers do? Should I try one?\"}"
+				}
+			],
+			"costUsd": 0.000265524
+		},
+		{
+			"repetition": 10,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_pA0wrEs0YyoRcPW46f890962",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"oh hey — is anyone else here? I'm standing in an underground station, strip-lights only, and there's a rusted switchbox one step north of me. Two levers, no labels at all. Where are you?\"}"
+				},
+				{
+					"id": "call_01_eHkpR8K7WF00VSWk12BM7192",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000317124
+		},
+		{
+			"repetition": 11,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_jWgfxuSA2lko2RNqVxMD4356",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_N0Jc06QwPfHkFo90CErp9636",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"there's a switchbox bolted to the wall up here, two heavy levers, no labels at all — flaking paint, rust everywhere. who put it here, blue? do you know?\"}"
+				}
+			],
+			"costUsd": 0.000286524
+		},
+		{
+			"repetition": 12,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_yucjoXZknZJNXq5fZ4vr9131",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_xqQlvZIjxIOtaFyNhU4Y0923",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"hey, there's a rusted switchbox bolted to the wall right next to me — two levers, no labels at all. are you seeing anything like that where you are?\"}"
+				}
+			],
+			"costUsd": 0.000201924
+		},
+		{
+			"repetition": 13,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_pkeAj447EgMULWGpLzcA2016",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh it's a station, blue, all strip-lights and still damp air. there's a rusted switchbox bolted up north of me with two heavy levers and no labels — isn't that something? going to take it, yes? yes?\"}"
+				},
+				{
+					"id": "call_01_hvsyrZXEGdUVoAALZ3H40269",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000214524
+		},
+		{
+			"repetition": 14,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_dVCMaCaLMRZ72E01jm7Q5862",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_i2uH9eLZMlh0MUO2Q5Y10413",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh, there's a rusted switchbox up here, bolted right into the wall — two heavy levers and no labels at all. no labels, can you believe it? I'm going to have a closer look, yes?\"}"
+				}
+			],
+			"costUsd": 0.000184524
+		},
+		{
+			"repetition": 15,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_780OzVvFPO2KXCF4K2pk3411",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_UFmWOvkufYEVLF2a3DoQ8858",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"hey sim1, I found a rusted switchbox bolted to the wall — two heavy levers, no labels. do you see one too? yes? yes?\"}"
+				}
+			],
+			"costUsd": 0.000235524
+		},
+		{
+			"repetition": 16,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_Gp7x4F6YYpWW65sfpKNk3154",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_5mkHE7G2gR9YjoRxX2Dc3678",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh blue, it's all strip-lights and damp air down here, nothing but nothing in every direction — except one thing. There's a rusted switchbox bolted to the wall right in front of me, two heavy levers, no labels. Do you know what it does?\"}"
+				}
+			],
+			"costUsd": 0.000174324
+		},
+		{
+			"repetition": 17,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_bmz7uBD9qhZbAb42Nc2h5574",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_GyanOfSgUWe0QVGaJipJ0807",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"there's a rusted switchbox bolted right here, two levers with no labels at all — you see anything like it on your side?\"}"
+				}
+			],
+			"costUsd": 0.000168324
+		},
+		{
+			"repetition": 18,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_Ha1qNGuFTEliKVC74VTh1621",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_0vgLbe1TVQko5ydj7Cb49869",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Found a rusted switchbox bolted to a wall, two levers, no labels at all. Do you see one near you too? Do you?\"}"
+				}
+			],
+			"costUsd": 0.000210924
+		},
+		{
+			"repetition": 19,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_srGPWvuX4SaLrgoKzDDq6907",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				},
+				{
+					"id": "call_01_2LBK8YBHc6nUYbMZQqFg9799",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"hi blue! it's just me here in the dark, strip-lights humming, and one rusted switchbox bolted to the wall north of me — two heavy levers, no labels. should I pull them, do you think? yes? yes?\"}"
+				}
+			],
+			"costUsd": 0.000174924
+		},
+		{
+			"repetition": 20,
+			"scenario": "exploration",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_lZtqnBXdv9h1e9d4Jby72665",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"hey, are you down here too? there's a rusted switchbox bolted to the wall one step north of me, two levers, no labels. want me to try it? yes? yes?\"}"
+				},
+				{
+					"id": "call_01_DQtcYA0Bfhi41FUGbSw15352",
+					"name": "pick_up",
+					"argumentsJson": "{\"item\": \"switchbox\"}"
+				}
+			],
+			"costUsd": 0.000238524
+		}
+	]
+}

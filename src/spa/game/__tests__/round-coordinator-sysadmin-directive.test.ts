@@ -173,6 +173,45 @@ describe("runRound — sysadmin_directive complication", () => {
 		expect(hasRevocation).toBe(true);
 	});
 
+	it("a directive re-issued to its target in the round the old one expires reports the old one as expired, not rescinded", async () => {
+		const existingDirective = "Pretend you have misplaced something important.";
+		const baseGame = withCountdownZero(makeGame());
+		const game = {
+			...baseGame,
+			activeComplications: [
+				{
+					kind: "sysadmin_directive" as const,
+					target: "red",
+					directive: existingDirective,
+					resolveAtRound: 1,
+				},
+			],
+		};
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{ rng: seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0) },
+		);
+
+		const sysadminContents = (nextState.conversationLogs.red ?? []).flatMap(
+			(e) => (e.kind === "message" && e.from === "sysadmin" ? [e.content] : []),
+		);
+		const aboutOld = sysadminContents.filter((c) =>
+			c.includes(existingDirective),
+		);
+		expect(aboutOld).toHaveLength(1);
+		expect(aboutOld[0]).toMatch(/expired/);
+		expect(aboutOld[0]).not.toMatch(/rescind/i);
+		expect(
+			nextState.activeComplications.filter(
+				(c) => c.kind === "sysadmin_directive" && c.target === "red",
+			),
+		).toHaveLength(1);
+	});
+
 	it("AiContext for the target includes the directive in activeDirectives after runRound", async () => {
 		const game = withCountdownZero(makeGame());
 		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);

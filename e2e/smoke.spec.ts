@@ -1,9 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame } from "./helpers";
+import { collectPageErrors, expectNoPageErrors, goToGame } from "./helpers";
 
 test("SPA root renders three AI panels and composer", async ({ page }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await goToGame(page, { sse: ["hi"] });
 
@@ -27,8 +26,7 @@ test("SPA root renders three AI panels and composer", async ({ page }) => {
 test("expectNoPageErrors catches late-fired microtask errors (regression)", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await goToGame(page, { sse: ["hi"] });
 

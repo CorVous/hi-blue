@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
 	applyDirection,
-	areAdjacent4,
 	CARDINAL_DIRECTIONS,
 	COMPASS_ORDER,
-	directionDelta,
 	inBounds,
-	manhattan,
 	positionsEqual,
 } from "../direction";
 
@@ -27,24 +24,6 @@ describe("COMPASS_ORDER — the shared compass rotation", () => {
 
 	it("contains every cardinal exactly once", () => {
 		expect([...COMPASS_ORDER].sort()).toEqual([...CARDINAL_DIRECTIONS].sort());
-	});
-});
-
-describe("directionDelta", () => {
-	it("north moves row -1, col 0", () => {
-		expect(directionDelta("north")).toEqual({ drow: -1, dcol: 0 });
-	});
-
-	it("south moves row +1, col 0", () => {
-		expect(directionDelta("south")).toEqual({ drow: 1, dcol: 0 });
-	});
-
-	it("east moves row 0, col +1", () => {
-		expect(directionDelta("east")).toEqual({ drow: 0, dcol: 1 });
-	});
-
-	it("west moves row 0, col -1", () => {
-		expect(directionDelta("west")).toEqual({ drow: 0, dcol: -1 });
 	});
 });
 
@@ -111,47 +90,6 @@ describe("inBounds", () => {
 
 	it("col 5 is out of bounds", () => {
 		expect(inBounds({ row: 0, col: 5 })).toBe(false);
-	});
-});
-
-describe("manhattan", () => {
-	it("same cell has distance 0", () => {
-		expect(manhattan({ row: 2, col: 2 }, { row: 2, col: 2 })).toBe(0);
-	});
-
-	it("adjacent cells have distance 1", () => {
-		expect(manhattan({ row: 0, col: 0 }, { row: 0, col: 1 })).toBe(1);
-		expect(manhattan({ row: 0, col: 0 }, { row: 1, col: 0 })).toBe(1);
-	});
-
-	it("diagonal neighbors have distance 2", () => {
-		expect(manhattan({ row: 0, col: 0 }, { row: 1, col: 1 })).toBe(2);
-	});
-
-	it("opposite corners of 5×5 grid have distance 8", () => {
-		expect(manhattan({ row: 0, col: 0 }, { row: 4, col: 4 })).toBe(8);
-	});
-});
-
-describe("areAdjacent4", () => {
-	it("adjacent horizontally → true", () => {
-		expect(areAdjacent4({ row: 2, col: 2 }, { row: 2, col: 3 })).toBe(true);
-	});
-
-	it("adjacent vertically → true", () => {
-		expect(areAdjacent4({ row: 2, col: 2 }, { row: 3, col: 2 })).toBe(true);
-	});
-
-	it("same cell → false", () => {
-		expect(areAdjacent4({ row: 2, col: 2 }, { row: 2, col: 2 })).toBe(false);
-	});
-
-	it("diagonal neighbor → false (distance 2)", () => {
-		expect(areAdjacent4({ row: 2, col: 2 }, { row: 3, col: 3 })).toBe(false);
-	});
-
-	it("two cells apart → false", () => {
-		expect(areAdjacent4({ row: 0, col: 0 }, { row: 0, col: 2 })).toBe(false);
 	});
 });
 

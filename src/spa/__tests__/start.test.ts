@@ -1,15 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { awaitIgnoringRejection } from "./fixtures/await-ignoring-rejection";
 import { installLocalStorageStub } from "./fixtures/local-storage";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-vi.mock("../../content", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("../../content")>();
-	return {
-		...actual,
-		generatePersonas: async () => STATIC_PERSONAS,
-	};
-});
+vi.mock("../../content/persona-generator", () => ({
+	generatePersonas: async () => STATIC_PERSONAS,
+}));
 
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
@@ -32,6 +29,10 @@ const INDEX_BODY_HTML = `
         </div>
         <output id="login-error" hidden></output>
       </form>
+      <div id="start-bootstrap-error" hidden>
+        <span id="start-bootstrap-error-text"></span>
+        <button id="start-bootstrap-retry" type="button">[ retry ]</button>
+      </div>
       <pre id="login-postlog" class="dial"></pre>
     </div>
   </section>
@@ -80,14 +81,6 @@ function getMain(): HTMLElement {
 
 function setSearch(query: string): void {
 	window.history.replaceState({}, "", `/?${query}`);
-}
-
-async function awaitIgnoringRejection(
-	promise: Promise<unknown>,
-): Promise<void> {
-	try {
-		await promise;
-	} catch {}
 }
 
 describe("renderStart — screen visibility", () => {
@@ -310,6 +303,190 @@ describe("renderStart — CapHitError handling", () => {
 	});
 });
 
+describe("renderStart — generation failures that are not the spend cap", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+		installLocalStorageStub();
+	});
+
+	afterEach(() => {
+		vi.doUnmock("../game/bootstrap.js");
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	async function importStartWithSplits(
+		splits: Array<
+			() => {
+				personasPromise: Promise<unknown>;
+				contentPacksPromise: Promise<unknown>;
+			}
+		>,
+	) {
+		vi.resetModules();
+		const calls = { count: 0 };
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => {
+					const make = splits[Math.min(calls.count, splits.length - 1)];
+					calls.count++;
+					if (!make) throw new Error("no split scripted");
+					return make();
+				},
+			};
+		});
+		const { renderStart } = await import("../views/start.js");
+		const pending = await import("../game/pending-bootstrap.js");
+		return { renderStart, pending, calls };
+	}
+
+	function rejectedSplit(err: unknown) {
+		return () => ({
+			personasPromise: Promise.reject(err),
+			contentPacksPromise: Promise.reject(err),
+		});
+	}
+
+	const hangingSplit = () => ({
+		personasPromise: new Promise<never>(() => {}),
+		contentPacksPromise: new Promise<never>(() => {}),
+	});
+
+	it("shows a retryable error with the upstream message, not #cap-hit", async () => {
+		let failure: unknown;
+		const { renderStart } = await importStartWithSplits([
+			() => rejectedSplit(failure)(),
+		]);
+		const { HttpStatusError } = await import("../llm-client.js");
+		failure = new HttpStatusError({
+			status: 401,
+			statusText: "Unauthorized",
+			upstreamMessage: "No auth credentials found",
+			retryAfterSec: null,
+		});
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		const errorEl = document.querySelector<HTMLElement>(
+			"#start-bootstrap-error",
+		);
+		expect(errorEl?.hidden).toBe(false);
+		expect(
+			document.querySelector("#start-bootstrap-error-text")?.textContent,
+		).toContain("HTTP 401: No auth credentials found");
+		expect(document.querySelector("#cap-hit")?.hasAttribute("hidden")).toBe(
+			true,
+		);
+		expect(document.querySelector<HTMLElement>("#start-screen")?.hidden).toBe(
+			false,
+		);
+	});
+
+	it("retry starts a fresh bootstrap and hides the error", async () => {
+		const { renderStart, pending, calls } = await importStartWithSplits([
+			rejectedSplit(new Error("network down")),
+			hangingSplit,
+		]);
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		const failed = pending.getPendingBootstrap();
+		expect(failed?.status).toBe("failed");
+
+		document
+			.querySelector<HTMLButtonElement>("#start-bootstrap-retry")
+			?.click();
+
+		expect(calls.count).toBe(2);
+		expect(pending.getPendingBootstrap()).not.toBe(failed);
+		expect(
+			document.querySelector<HTMLElement>("#start-bootstrap-error")?.hidden,
+		).toBe(true);
+	});
+
+	it("rendering the start screen again keeps a failed bootstrap and shows its error without a new request", async () => {
+		const { renderStart, pending, calls } = await importStartWithSplits([
+			rejectedSplit(new Error("network down")),
+			hangingSplit,
+		]);
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		const failed = pending.getPendingBootstrap();
+		expect(failed?.status).toBe("failed");
+		const firstErrorText = document.querySelector(
+			"#start-bootstrap-error-text",
+		)?.textContent;
+
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		expect(calls.count).toBe(1);
+		expect(pending.getPendingBootstrap()).toBe(failed);
+		expect(
+			document.querySelector<HTMLElement>("#start-bootstrap-error")?.hidden,
+		).toBe(false);
+		expect(
+			document.querySelector("#start-bootstrap-error-text")?.textContent,
+		).toBe(firstErrorText);
+	});
+
+	it("rendering the start screen again after a cap hit shows #cap-hit without a new request", async () => {
+		let failure: unknown;
+		const { renderStart, pending, calls } = await importStartWithSplits([
+			() => rejectedSplit(failure)(),
+			hangingSplit,
+		]);
+		const { CapHitError } = await import("../llm-client.js");
+		failure = new CapHitError({
+			message: "rate limit",
+			reason: "per-ip-daily",
+			retryAfterSec: 86400,
+		});
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		expect(pending.getPendingBootstrap()?.status).toBe("failed");
+		document.querySelector("#cap-hit")?.setAttribute("hidden", "");
+
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		expect(calls.count).toBe(1);
+		expect(document.querySelector("#cap-hit")?.hasAttribute("hidden")).toBe(
+			false,
+		);
+		expect(document.querySelector<HTMLElement>("#start-screen")?.hidden).toBe(
+			true,
+		);
+	});
+
+	it("CONNECT with a failed bootstrap starts a fresh one", async () => {
+		const { renderStart, pending, calls } = await importStartWithSplits([
+			rejectedSplit(new Error("network down")),
+			hangingSplit,
+		]);
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		const failed = pending.getPendingBootstrap();
+
+		const passwordEl = document.querySelector<HTMLInputElement>("#password");
+		if (passwordEl) passwordEl.dataset.real = "password";
+		document.querySelector<HTMLButtonElement>("#begin")?.click();
+
+		expect(calls.count).toBe(2);
+		expect(pending.getPendingBootstrap()).not.toBe(failed);
+		expect(pending.getPendingBootstrap()?.status).toBe("pending");
+	});
+});
+
 describe("renderStart — persistence warning banners", () => {
 	beforeEach(() => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
@@ -459,5 +636,111 @@ describe("renderStart — persistence warning banners", () => {
 			"#persistence-warning",
 		);
 		expect(warningEl?.hasAttribute("hidden")).toBe(true);
+	});
+});
+
+describe("renderStart — repeated renders", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		vi.stubGlobal("__COMMIT_TIMESTAMP_MS__", 0);
+		document.body.innerHTML = INDEX_BODY_HTML;
+		installLocalStorageStub();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	it("hides a reason banner left by an earlier render when the next render has no reason", async () => {
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../views/start.js");
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain(), { reason: "broken" }));
+		const warningEl = document.querySelector<HTMLElement>(
+			"#persistence-warning",
+		);
+		expect(warningEl?.hidden).toBe(false);
+
+		await awaitIgnoringRejection(renderStart(getMain()));
+		expect(warningEl?.hidden).toBe(true);
+		expect(warningEl?.textContent).toBe("");
+	});
+
+	it("hides the endgame screen", async () => {
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../views/start.js");
+		const endgameEl = document.querySelector<HTMLElement>("#endgame");
+		endgameEl?.removeAttribute("hidden");
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		expect(endgameEl?.hidden).toBe(true);
+	});
+
+	it("keeps one live login listener per element after rendering twice", async () => {
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../views/start.js");
+
+		const registrations: Array<{
+			target: EventTarget;
+			type: string;
+			signal: AbortSignal | undefined;
+		}> = [];
+		const originalAdd = EventTarget.prototype.addEventListener;
+		vi.spyOn(EventTarget.prototype, "addEventListener").mockImplementation(
+			function (
+				this: EventTarget,
+				type: string,
+				listener: EventListenerOrEventListenerObject | null,
+				options?: boolean | AddEventListenerOptions,
+			) {
+				const signal = typeof options === "object" ? options.signal : undefined;
+				registrations.push({ target: this, type, signal });
+				originalAdd.call(this, type, listener, options);
+			},
+		);
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		const liveCount = (selector: string, type: string): number =>
+			registrations.filter(
+				(r) =>
+					r.target === document.querySelector(selector) &&
+					r.type === type &&
+					!r.signal?.aborted,
+			).length;
+		expect(liveCount("#login-form", "submit")).toBe(1);
+		expect(liveCount("#begin", "click")).toBe(1);
+		expect(liveCount("#password", "input")).toBe(1);
+	});
+
+	it("stops the previous dial-up animation when the start screen renders again", async () => {
+		vi.useFakeTimers();
+		vi.spyOn(Math, "random").mockReturnValue(0.9);
+		vi.resetModules();
+		const { renderStart } = await import("../views/start.js");
+
+		setSearch("");
+		void renderStart(getMain()).catch(() => undefined);
+		await vi.advanceTimersByTimeAsync(2_000);
+		const dialEl = document.querySelector<HTMLElement>("#dial");
+		expect(dialEl?.textContent?.length ?? 0).toBeGreaterThan(20);
+
+		void renderStart(getMain()).catch(() => undefined);
+		expect(dialEl?.textContent).toBe("");
+		await vi.advanceTimersByTimeAsync(100);
+		expect(dialEl?.textContent).toBe("");
 	});
 });

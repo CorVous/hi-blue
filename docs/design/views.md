@@ -1,24 +1,38 @@
 # Route views (`src/spa/views/`)
 
 Design notes for the three route renderers (`start.ts` → `#/start`,
-`game.ts` → `#/game`, `sessions.ts` → `#/sessions`) and the shared
+`game.ts` → `#/game`, `sessions.ts` → `#/sessions`), the game route's
+`game-bootstrap-flow.ts`, `game-chrome.ts`, `game-endgame.ts` and
+`transcript-lines.ts`, and the shared
 `archived-build-link.ts` and `dom.ts`. Each renderer owns what is visible for its route:
 it hides the other routes' screens and shows or hides the global chrome
 (`#stage > header`, `#topinfo`, `#banner`).
 
 ## Shared: route chrome
 
+- Routes show and hide screens through `setHidden` (in `dom.ts`), which sets
+  `hidden` on every element a list of selectors finds and skips the ones
+  that are missing, so a test fixture without some screen still renders.
 - The start route hides the global chrome (the dial-up login takes the whole
   viewport). The game and sessions routes therefore always un-hide it on
   entry (`revealGameRouteChrome`, `showGlobalChrome`), because either can be
   entered straight after the start route.
+- Every route hides `#endgame`, and the game route shows it again only for a
+  finished session. The endgame choices ("new daemons", "same daemons",
+  "continue") leave through `renderApp`, so a route that forgot it would
+  leave the endgame screen over the next game.
+- `#persistence-warning` is shared by the start route's reason banner and the
+  game route's save warnings. The start route hides it whenever it has no
+  reason to show, and the game route hides it on every entry before its own
+  checks run, so a banner such as "broken" does not follow the player into a
+  new game.
 - `sessions.ts` also paints the banner and topinfo itself (`paintBanner`,
   `paintTopInfo`). Without that, loading `#/sessions` directly leaves them
   empty.
 - `renderReasonBanner` (in `archived-build-link.ts`) paints the reason
   banner for both `start.ts` and `sessions.ts`. Each view passes its own
-  message table and decides how to show or hide the element. A reason with
-  no copy in the table paints nothing. For `version-mismatch`, when the
+  message table. The helper also shows or hides the element: a reason with
+  no copy in the table empties and hides it. For `version-mismatch`, when the
   save's schema number maps to an archived release (`lookupArchiveVersion`),
   the banner links to `./v/<version>/` so the player can continue in the last
   build that could read that schema. Otherwise it shows
@@ -41,12 +55,43 @@ it hides the other routes' screens and shows or hides the global chrome
 - **Double-submit guard.** `_connectSubmitInFlight` ignores repeated
   submits, such as a double-click, once a CONNECT with the correct password
   is in progress. Each render resets it.
+- **Repeated renders.** The start screen renders again whenever the player
+  comes back to it (for example after "new daemons"). Each render aborts the
+  previous render's `AbortController` (`abortPreviousRender`). The login
+  form, BEGIN and password-mask listeners and the resize listener are added
+  with that signal, the uptime interval is cleared on abort, and every step
+  of the dial-up `setTimeout` chain checks it (`setTimeoutUnlessAborted`).
+  Without it each render added another set of listeners, and an animation
+  still typing from an earlier render kept writing into `#dial` over the new
+  one.
 - **Reusing the bootstrap.** If the player returns to the start screen,
-  `getPendingBootstrap()` gives back the bootstrap already in progress, so
-  generation does not restart.
-- **Generation failure.** A failure is shown here (`#cap-hit`) only while the
-  start screen is still visible. Once the player has moved to `#/game`, the
-  game route's loading flow handles it.
+  `startBootstrap` gives back the bootstrap already in progress, so generation
+  does not restart. A bootstrap that failed is kept too: a render of the start
+  screen while it is current shows its failure again (`#start-bootstrap-error`
+  or `#cap-hit`) and sends no request. Only `[ retry ]` and CONNECT start a
+  new one. Restarting on every render would re-send the generation calls
+  after a cap hit or a 401, which fail the same way every time. CONNECT used
+  to reuse the failed entry outright, so every later CONNECT went straight to
+  the game route's recovery banner. In practice `renderApp` hands a fresh
+  session with a pending bootstrap to the game route
+  (`pendingBootstrapOwnsFreshSession`), so closing the session picker or
+  pressing Escape after a failure lands on `#bootstrap-recovery`, which does
+  not restart generation either; the start-screen rule is what keeps any
+  other re-render from doing so. "Abandon and reconnect" clears the pending
+  bootstrap on purpose, so the start screen it leads to starts a new one.
+- **Generation failure.** A failure is shown here only while the start screen
+  is still visible, and only for the bootstrap that is still current (an
+  abandoned one is aborted, and its rejection must not paint anything). Once
+  the player has moved to `#/game`, the game route's loading flow handles it.
+  - `CapHitError` shows `#cap-hit` and hides the start screen, as before.
+  - Anything else shows `#start-bootstrap-error` under the login form, with the
+    upstream message when there is one (`HTTP 401: …`) and a `[ retry ]`
+    button that starts a new bootstrap. Every failure used to show the "AIs
+    are sleeping" cap screen, which told a player with a network blip or a bad
+    key to come back tomorrow.
+  - CONNECT with a failed bootstrap also starts a new one before routing to
+    the game, so the loading screen shows a fresh attempt.
+  - The returned promise still rejects; `main.ts` logs it.
 - **Skipped animation.** `renderDialTranscriptHtml()` includes the `.ok` /
   `.hot` status spans as markup, so it is assigned with `innerHTML`. As plain
   text the tags would show literally and the dial would lose its colours. The
@@ -75,15 +120,46 @@ it hides the other routes' screens and shows or hides the global chrome
 
 ### Structure
 
-- `renderGame` is a short entry point. Each entry builds one
-  `GameViewContext` holding the root, the composer elements, the search
-  params, the dev hooks, and the per-entry mutable state (persona lookups,
-  lockouts, `roundInFlight`, `connectionUnstable`). Top-level functions take
-  that context as a parameter, grouped by concern: bootstrap loading and
-  recovery, restore from storage, composer wiring, transcript painting,
-  round dispatch, and the endgame. State that must outlive one entry
-  (`session`, `hydratedSessionId`, `hydratedEpoch`, `gameEndHandled`) stays
-  at module level.
+- The endgame screen lives in `game-endgame.ts`. `game.ts` only disables
+  the composer, releases the cached session and calls `showEndgame` with the
+  ended state, the ended session's id, and `releaseSession` as the
+  `releaseEndedGame` callback, which clears the `cached` record when a
+  choice leaves the endgame. The endgame
+  never reads `game.ts`'s module state directly, so the two files do not
+  import each other in a cycle.
+  `transcript-lines.ts` builds the `.msg-line` elements (player and daemon
+  lines with mention highlighting) that both the panels and the endgame's
+  final lines use.
+- The bootstrap loading flow lives in `game-bootstrap-flow.ts`. `game.ts`
+  calls `enterBootstrapLoading` with its context (typed there as the
+  narrower `BootstrapFlowView`) and one `AdoptBootstrappedSession` callback.
+  The flow builds and saves the new game, then hands the session to that
+  callback, which sets the `cached` record and re-enters `renderGame`. The
+  flow never imports `game.ts`, so there is no cycle. The DOM helpers both
+  files need (route chrome, panel painting, spinners, topinfo, the stage load
+  state and the save warning) live in `game-chrome.ts`, which imports
+  neither.
+- `renderGame` is a short entry point. It works on one `GameViewContext`
+  holding the root, the composer elements, the search params, the dev hooks,
+  the persona lookups and lockouts, and the round state (`roundInFlight`,
+  `connectionUnstable`). Top-level functions take that context as a
+  parameter, grouped by concern: bootstrap loading and recovery, restore
+  from storage, composer wiring, transcript painting, round dispatch, and
+  the endgame. Other state that must outlive one entry (the `cached`
+  session record) stays at module level.
+- **One context per page.** The route is re-entered without a reload:
+  toggling the session picker, Escape, Load, the bootstrap handover and the
+  endgame choices all call `renderGame` again on the same persistent DOM.
+  `enterGameViewContext` therefore keeps the context in `viewCtx` and, while
+  the composer form is the same element, refreshes its per-entry fields in
+  place and keeps `roundInFlight` and `connectionUnstable`. The composer
+  `input`, `scroll` and `submit` listeners and the panel click listeners are
+  added only when the context is first created, so there is exactly one of
+  each. When each entry built a fresh context and added its own listeners, a
+  re-entry during a round (opening and closing the picker) got a context
+  whose `roundInFlight` was false: typing re-enabled Send, and a submit
+  started a second round on the same `GameSession` while the first was still
+  running. `submitRound` also returns early while `roundInFlight` is set.
 - **Dev hooks.** `__DEV__` is read once per entry, when the context picks
   `inspectorDevHooks` or `NOOP_DEV_HOOKS`. The rest of the view calls the
   hooks without testing `__DEV__`. In production builds the constant folds
@@ -93,14 +169,10 @@ it hides the other routes' screens and shows or hides the global chrome
 - Pure text logic lives outside the view: `splitMentionSegments` and
   `buildMentionRegex` in `mention-parser.ts`, and `fisherYatesShuffledCopy`
   (initiative order) in `shuffle.ts`. The view only turns segments into DOM.
-- Each entry adds its composer and form listeners to the same persistent
-  DOM, so a later entry's listeners sit beside an earlier entry's. A stale
-  submit handler is harmless in practice: whichever runs first resets the
-  composer to `*<addressee> `, and the other then finds an empty message.
 
 ### Test and dev affordances
 
-- `isDevHost()` is true only when `pnpm wrangler dev` serves both the SPA and
+- `isDevHost()` (`src/spa/dev-host.ts`) is true only when `pnpm wrangler dev` serves both the SPA and
   the worker on `http://localhost:8787`. Every other host fails it, including
   production on GitHub Pages and a separate static server pointed at a local
   worker, so dev affordances do nothing there. The check has two parts as
@@ -121,16 +193,79 @@ it hides the other routes' screens and shows or hides the global chrome
 
 ### Session cache and the active pointer
 
-- Module state: `session`, `hydratedSessionId`, `hydratedEpoch`.
-  `hydratedSessionId` is the id that `session` was loaded from. Clicking
+- Module state: `cached`, plus `viewCtx` and `crossTabListenerWired`.
+  `cached` is one `CachedSession` record, or null when no session is
+  cached: the `GameSession`, a token for the id it was loaded from, its
+  epoch, and the `lastSavedAt` it was loaded or last saved with. The four
+  are set and cleared together, so none can outlive the others. Clicking
   Load in the picker writes a new active id and re-enters this route without
   a page refresh. When the pointer has moved (`activePointerMoved`), the
   cached session is dropped so that the restore path loads the new session
   instead of re-rendering the old one.
-- `gameEndHandled` stops a second `game_ended` event from binding the endgame
-  handlers again. It is reset whenever a session is set up.
+- **Did the player leave?** Work that outlives an await (a round, the
+  bootstrap loading flow, an endgame choice) records which session it
+  belongs to with `captureActiveSession` (`session-storage.ts`), which
+  returns `{ id, stillActive() }`. It captures the active pointer, or an id
+  the caller already knows (the cached session's id, the ended session's
+  id), and `stillActive()` is true while the active pointer still
+  names that id. `playerLeftRoundSession`, `loadingFlowAbandoned` and
+  `playerLeftEndedSession` are built on it; the round check also compares
+  the cached `GameSession` object.
+- A round enters the endgame at most once without a guard flag:
+  `encodeRoundResult` emits at most one `game_ended` per round, and
+  `enterEndgame` releases the cached session, so no further round can run
+  until a new session is mounted.
+- **Two tabs on one session.** localStorage is shared by every tab of the
+  origin, but each tab caches its own `GameSession`. `cached.lastSavedAt`
+  records the `meta.lastSavedAt` the cached session was loaded (or last
+  saved) with, including the value a failed save had already written to
+  `meta.json` (persistence.md); the round save passes it as `expectedLastSavedAt`, so a save
+  from a tab that is behind is refused with `stale` instead of erasing the
+  other tab's rounds (persistence.md). A `storage` listener, added once per
+  page, notices another tab's writes under the cached session's directory.
+  It ignores them while a save is still in progress there (the `saving`
+  marker is present; the marker's removal fires the event that counts), and
+  when the stored `lastSavedAt` then differs it drops the cached session and
+  re-enters the route, which restores from storage without a warning. While
+  a round is in flight the listener does nothing: the round's save comes
+  back `stale`, and the view then paints nothing of that round, reloads from
+  storage and shows "This session changed in another tab — reloaded" in
+  `#persistence-warning`. The same reload and warning run at the end of a
+  round that failed, if the session changed meanwhile. The round played in
+  the tab that fell behind is lost, which is the point: only one tab's
+  history can survive, and the one already on disk wins.
+- **Two tabs on one finished game.** `enterEndgame` releases the cached
+  session, so the listener used to return early in a tab showing the
+  endgame, and that tab kept offering the choices after another tab had
+  pressed Continue and played on. "New daemons" there archived and removed
+  the other tab's live game, and "Continue" overwrote it with the stale
+  ended state. `enterEndgame` now passes the ended session's id and
+  `lastSavedAt` (`SessionSave`) to `showEndgame`, which records it
+  (`endedSessionSaveOnScreen` returns it while `#endgame` is shown on the
+  game route). The listener watches that save when nothing is cached, and
+  re-renders the tab when it changes, as it does for an idle game. Each
+  choice also carries the recorded `lastSavedAt`, because the storage event
+  can arrive after the click and a "same daemons" or "continue" generation
+  can outlast it: every choice checks `sessionChangedSince` before it
+  starts and again before it archives or removes anything, and "continue"
+  saves with `expectedLastSavedAt`. A refused choice changes nothing in
+  storage, re-renders from storage and shows "This game changed in another
+  tab — reloaded. Your endgame choice here was not applied." in
+  `#persistence-warning`. It stays silent only when the player has left the
+  ended game in this tab.
+- **A refused choice only touches the endgame it came from.** The refusal
+  releases the ended game (`cached` goes back to null) and re-renders, but
+  only while that endgame is still on screen (`endgameStillShows`). When the
+  storage listener has already reloaded the tab into the other tab's
+  continued room, `cached` holds that live room, and releasing it cleared the
+  session mid-round. A refusal that finds the endgame gone only shows the
+  warning, and only when the player has not left the ended session. The one
+  exception is a sessions picker covering the game route: the storage
+  listener ignores events while the view is not `game`, so `cached` still
+  holds the stale ended game. The refusal releases it without re-rendering,
+  and closing the picker then loads the continued room.
 
-### Bootstrap loading flow (`renderBootstrapLoadingFlow`)
+### Bootstrap loading flow (`game-bootstrap-flow.ts`)
 
 - This runs when the player has just pressed CONNECT and a bootstrap is
   pending. The session cannot be built until the content packs arrive, but
@@ -160,19 +295,55 @@ it hides the other routes' screens and shows or hides the global chrome
   (`removeAllPanelSpinners`) before the session is handed over.
 - **Timeout.** `BOOTSTRAP_LOADING_TIMEOUT_MS` (300 s) allows for a slow first
   persona-synthesis call (about 95 s observed on a cold start), its one
-  retry after failure, and a parallel outer retry of the content packs.
-- **A success that arrives after the timeout.** When the timeout fires, the
-  bootstrap promise keeps running. If it later succeeds,
+  retry after failure, and a parallel outer retry of the content packs. When
+  it fires, `failPendingBootstrap` aborts the stalled requests and marks the
+  entry `failed`, so they stop costing money and regenerate starts fresh.
+- **A success that arrives after the timeout.** The timeout aborts the
+  bootstrap, but a provider that ignores the signal (a mock, or a response
+  already fully read) can still resolve. If it later succeeds,
   `dismissStaleBootstrapRecovery` hides the recovery banner and replaces its
   buttons with clones that have no listeners. Otherwise the banner would sit
   on top of the working game, and its regenerate or abandon buttons could
   destroy the running session.
-- **Handover.** After saving, the flow sets the module-level `session` and
-  calls `renderGame` again. That second entry skips both the loading branch
+- **Handover.** After saving, the flow calls its `AdoptBootstrappedSession`
+  callback, which sets the module-level `cached` record in `game.ts` and
+  calls
+  `renderGame` again. That second entry skips both the loading branch
   and the localStorage restore, and runs the normal set-up path, where
-  `refreshComposerState` decides whether Send is enabled.
+  `refreshComposerState` decides whether Send is enabled. A failed save's
+  warning is shown after that entry, because each entry first hides
+  `#persistence-warning`.
+- **One flow per bootstrap and session.** `renderBootstrapLoadingFlow`
+  records a `LoadingFlow` (the session id active when it started, the pending
+  bootstrap, its timers, and what blocks the screen: the cap-hit panel, the
+  recovery banner, or nothing) in the module-level `loadingFlow`. The route
+  is re-entered during loading whenever the player toggles the picker. A
+  re-entry for the same pending bootstrap and session only reveals the route
+  chrome again (`revealRunningLoadingFlow`), restoring the cap-hit panel or
+  the recovery banner the flow was showing. Starting a second flow instead
+  added a second set of spinner and wipe timers and a second 300 s timeout.
+  Regenerate keeps the flow and swaps in the new pending bootstrap.
+- **A flow the player left behind does nothing.** The bootstrap promise
+  outlives the screen that started it: after a timeout the player can
+  abandon and land on the start screen with a fresh session and a fresh
+  bootstrap, and the old promise can still succeed later. Every step of the
+  flow (painting the personas, the handover, the failure paths) first checks
+  `loadingFlowAbandoned`: if the active pointer no longer names the flow's
+  session, it stops its timers and returns. Otherwise it saved the old game
+  into the new session, cleared the newer pending bootstrap and pulled the
+  player off the start screen. Regenerate keeps the session id, so it still
+  hands over.
+- **Epoch.** A new game starts at epoch 1. The loading topinfo always paints
+  `NEW_GAME_EPOCH` (exported from `game-bootstrap-flow.ts`), and the
+  handover's `cached` record starts at the same constant. When the epoch was
+  a separate variable that the handover did not reset, it still held the
+  epoch of the last session restored on this page, so topinfo showed that
+  session's epoch for the new game.
 - **Recovery.** A timeout shows "stuck" copy and any other failure shows
-  "broken" copy. Regenerate calls `restartContentPacks()`, which keeps the
+  "broken" copy (`paintRecoveryCopy`). When the error carries an upstream
+  message (`HttpStatusError`, `UpstreamErrorBodyError`) the copy names it,
+  for example `HTTP 402: Insufficient credits`, instead of calling the world
+  malformed. A failed regenerate repaints the copy for its own error. Regenerate calls `restartContentPacks()`, which keeps the
   cached personas. If the recovery DOM is missing, the flow clears the
   session and sends the player to the start route with reason `broken`.
 - `dropListenersByCloning` (in `dom.ts`, shared with the sessions picker's
@@ -234,13 +405,11 @@ it hides the other routes' screens and shows or hides the global chrome
   finishes that daemon's turn, including any retry (`onAiTurnComplete`). The
   coordinator awaits AIs one at a time in initiative order, so spinners stop
   one by one, as they did before #254, and the retry window is still
-  covered. All remaining spinners are removed in `catch` and `finally`.
+  covered. All remaining spinners are removed in `finally`.
 - **Events the view skips.**
   - `ai_start`: spinners are removed through `onAiTurnComplete`, and panel
     content comes from `message` events.
   - `ai_end`: message content already ends with `\n`.
-  - `system_broadcast`: it lives only in each daemon's `conversationLog` as
-    LLM context.
   - `action_log`: the dev inspector replaced it.
 - **`message` events.** A message from the player is skipped
   (`playerLineAlreadyPaintedAtSubmit`), because `beginRound` painted it at
@@ -251,13 +420,18 @@ it hides the other routes' screens and shows or hides the global chrome
   streaming feel better.
 - **One line per message.** A daemon message stays in a single `.msg-line`
   even if it contains `\n`, so the strip-card preview can show it as one
-  truncated line. The accumulated body is kept in `line.dataset.body`, so
-  each update re-renders the whole body with mention highlighting.
+  truncated line. A message arrives whole, so it is painted with the same
+  `transcriptMessageLine` that rebuilds restored transcripts and the
+  endgame's final lines. The view used to accumulate streamed tokens in
+  `line.dataset.body` and re-render the line on each one; that path went
+  with token streaming.
 - **`game_ended`.** The event only marks the round as the last one. After the
   events loop the final state is saved, topinfo is repainted so the turn
   counter shows the final round, and then `enterEndgame` runs with that state.
-  It captures the state for the endgame buttons and sets `session` to null, so
-  any later submit does nothing.
+  It captures the state for the endgame buttons and releases the cached
+  session (`cached` goes back to null), so any later submit does nothing. It also disables the prompt, and
+  `mountSessionView` enables it again on every entry, so the prompt works in
+  the game an endgame choice leads to.
 - **The endgame screen (#576).** The subtitle comes from `outcome`: a win says
   "You have completed the objectives." and the budget-exhausted ending says
   "You have hit your budget." Both lines are the product owner's wording. The
@@ -273,6 +447,42 @@ it hides the other routes' screens and shows or hides the global chrome
   Without that, each entry adds another click handler, and one click on
   download saves twice or one click on same daemons pays for two content-pack
   generations that race each other.
+- **A choice in flight survives re-entry.** `resetEndgameControls` runs on
+  every entry, so toggling the picker during a "same daemons" or "continue"
+  generation used to re-enable all three choices and clear the status,
+  inviting a second generation. `game-endgame.ts` keeps a module-level
+  `choiceInFlight` record (the ended session's id and the current status
+  text). While it names the ended session being shown, `showEndgame` keeps the
+  choices disabled and repaints the status. `runChoice` sets it on click and
+  clears it when the choice settles, whatever the exit path; a failed choice
+  clears it before enabling the buttons. The buttons and the status line are
+  looked up by selector each time, because the entry that started the choice
+  may have had its buttons replaced by clones since.
+- **Diagnostics submit once.** The submit button and the summary input are
+  disabled before the `fetch`, so a double or triple click sends one POST.
+- **Download and diagnostics stay used across re-entry.**
+  `resetEndgameControls` re-enables every endgame button on each entry, so
+  toggling the picker used to offer diagnostics again for a game already
+  reported, and re-enabled download, which also made the next diagnostics
+  POST say `downloaded: false` (it read the button's disabled state).
+  `game-endgame.ts` keeps a module-level record per ended game
+  (`downloaded`, `diagnosticsSubmitted`). `showEndgame` re-applies it after
+  the reset (buttons disabled, "Saved." and "Diagnostics submitted."
+  repainted), and the diagnostics POST reads `downloaded` from it.
+- **That record belongs to one ended game, not to a session id.** It used to
+  be keyed by the ended session id alone, which is null when the game was
+  never saved, so a later, different game ending under the same key opened
+  with download and diagnostics already used. A saved game is now keyed by
+  its id plus the `lastSavedAt` of its final save: re-entry restores the
+  same save and finds the record, and any later ending under the same id
+  (after Continue, say) is a newer save. A game with no id or no save cannot
+  be restored on re-entry, so its record is keyed by the ended `GameState`
+  object itself (a `WeakMap`). The record is still dropped when a choice
+  releases the ended game.
+- **Continue follows the stored key both ways.** On every entry
+  `continueBtn.hidden` is set from `readStoredByokKey()`, so clearing the key
+  in the BYOK dialog hides Continue at the next entry. It used to be only
+  ever shown.
 - **Reloading a finished game.** A restored session with `isComplete` goes
   straight to the endgame screen. Mounting it as a playable round would let the
   player send another round into a finished game. The active pointer is kept,
@@ -280,15 +490,82 @@ it hides the other routes' screens and shows or hides the global chrome
   (shown only when `readStoredByokKey()` finds a stored OpenRouter key) saves
   the new room under the same session id, because the active pointer is
   unchanged. "Same daemons" archives the old session and mints a new one.
+- **Endgame choices act on the ended session, not the active one.** "Same
+  daemons" and "continue" wait for a content-pack generation that can take
+  minutes, and meanwhile the player can open the picker and load another
+  session. Each choice therefore carries the ended session's id
+  (`EndgameChoice`) and, after every await, gives up without touching storage
+  or routing if the active pointer no longer names it
+  (`playerLeftEndedSession`). "Same daemons" builds the new room first, then
+  archives the ended session, saves the room under a freshly minted id
+  (`mintSessionId` plus `saveActiveSession`'s `sessionId` option), and only
+  then removes the ended session (`rmSession`, never `clearActiveSession`,
+  which deletes whatever is active) and moves the pointer. Building first
+  means giving up leaves nothing half-done. "Continue" saves under the ended
+  session's own id. It copies the ended game's conversation logs into the new
+  room through `continueLogsInNewRoom`, which also starts the room at the
+  round the old one would have played next, after every old log entry (so
+  the TURN in topinfo keeps counting without skipping a number), before
+  appending the new-room broadcast, and saves with
+  `saveActiveSession`'s `advanceEpoch` option, because CONTEXT.md defines
+  Continue as the same Session with its logs appended and its Epoch
+  incremented. A fresh room's empty logs saved under the old epoch would wipe
+  every Daemon's memory while the topinfo still showed the old epoch. "New daemons" removes the ended session only after
+  `archiveSession` succeeds.
+- **A torn final save is discarded, not archived.** `archiveSession` refuses
+  a session whose `saving` marker is still there, and nothing on the
+  endgame screen can clear it, so every click on "new daemons" or "same
+  daemons" used to fail with the same archive error, and "same daemons" paid
+  for a content-pack generation before finding that out. Both choices now ask
+  `isSessionComplete` first (`planArchive`), before building a room. An
+  incomplete session is not archived: the choice goes ahead, removes the torn
+  session as usual, and the status line says the last save was incomplete
+  (on "same daemons" alongside "spinning up a new room…"; "new daemons"
+  leaves the screen at once). The finished game is still in memory, so the
+  download button keeps working until the player chooses.
+- **A failed choice keeps the finished game.** If archiving throws (a full
+  storage quota, or an unreadable `meta.json`), the room cannot be built, or
+  the new room cannot be saved, `failEndgameChoice` writes the reason to
+  `#endgame-choice-status` and enables the choice buttons again. Before, a
+  failed archive still deleted the session, so the only copy of the finished
+  game was lost.
 - State is saved after the events loop, including on the round that ends the
   game. Before #576 the final round was not saved, so the stored session ended
   one round early, with `isComplete: false` and the winning Objective still
   pending.
+- **The player can leave the round's session while it runs.** A round takes
+  as long as the daemons do, and meanwhile the picker can `[ load ]` another
+  session, `[ + new session ]` can mint one, or `[ rm ]` can delete this one.
+  `submitRound` records the round's owner at submit: a copy of the `cached`
+  record (the `GameSession`, its id token and the `lastSavedAt` the save
+  expects). After `submitMessage` returns, `playerLeftRoundSession` checks
+  that `cached` and the active pointer still name that owner. If not, the view
+  paints nothing and enters no endgame, because the panels and the endgame
+  now belong to another session. `saveRoundLeftBehind` still saves the
+  finished round under the owner's own id (`saveActiveSession`'s `sessionId`
+  option), so the round is not lost, unless the session was removed, in which
+  case the round is dropped. If the cached session is still the owner's (the
+  player came back to it, or moved to a fresh session on the start route), it
+  is released so the next entry restores the saved round, and the route is
+  re-entered at once when the owner is on screen again. A failure in a round
+  the player left is not reported on the session they are now looking at.
+  `enterEndgame` takes the ended session's id from its caller for the same
+  reason, instead of reading the active pointer.
+- **A failed round gives the message back.** `beginRound` resets the prompt
+  to `*<addressee> ` and paints the player's `.msg-you` line before the round
+  runs. When the round throws (in the session the player is still on), the
+  line is removed, since the round never happened, and the prompt gets
+  `*<addressee> <message>` back so the player can resend it. The prompt is
+  only restored while it still holds exactly the reset prefix, so anything
+  the player typed during the round is kept.
 - **Round errors (#231).** Failures other than `CapHitError` (a transient
   upstream 502/503/504, a dropped network connection, a malformed response)
   used to stop the round with no sign in the UI. They now show `#round-error`
   and set the topinfo pip to `connection unstable`. Both clear when the next
-  round starts.
+  round starts. When the error carries an upstream message, `#round-error`
+  includes it. An error chunk inside a 200 stream counts when it arrives
+  before the turn received any content or tool call (see `streaming.ts` in
+  spa-shell.md).
 
 ## `sessions.ts`: the session picker
 
@@ -316,3 +593,38 @@ archived sessions, with one row per session.
   listener. It mints a session, makes it active and routes to start.
 - `dupSession` throws only on programmer error, so the dup handler swallows
   the error.
+- **`[ continue with new room ]` survives re-render.** It waits for a
+  content-pack generation, and meanwhile Escape or the sessions icon
+  re-renders the picker with fresh rows. The button used to come back
+  enabled, so a second click paid for a second generation, and when either
+  finished it moved the active pointer and re-rendered whatever the player
+  was doing. A failure was swallowed and only re-enabled the button.
+  `sessions.ts` now keeps a module-level record per archive id
+  (`archiveContinues`: in flight or not, and the status text), and every
+  render re-applies it to that archive's row: the button stays disabled and
+  `.session-continue-status` shows "spinning up a new room…". The row is
+  looked up by `data-session-id` each time, because the row that started
+  the generation may be gone. The click captures the active session
+  (`captureActiveSession`); when the room arrives and the pointer has moved
+  or the sessions screen is no longer showing, the room is still seeded (it
+  shows in the list), but the pointer stays and nothing is re-rendered except
+  the sessions screen itself, if it is up, and the row says "new room ready
+  as <id>". A failure writes "could not spin up a new room: <reason>" on the
+  row and enables the button.
+- **"Moved on" reads the screen, not the picker flag.** The sessions screen
+  is also shown with the picker closed, when the active session is broken or
+  version-mismatched and the dispatcher routes there. The check used to be
+  `!isPickerOpen()`, so on that forced screen every finished room counted as
+  moved on: it was seeded but the player was never taken into it. The check
+  is now `root.dataset.view !== "sessions"`. Closing the picker still counts
+  as moving on, because it re-renders the game or start route. The re-render
+  after a moved-on build goes through the last render's own closure
+  (`rerenderShownSessions`), which keeps its `RenderOpts`; calling
+  `renderSessions(root)` bare dropped the broken or version-mismatch banner.
+- **A hung build lets go.** `buildSameDaemonsSession` times out after
+  `BOOTSTRAP_LOADING_TIMEOUT_MS` (content-packs.md), so the in-flight record
+  cannot outlive a request that never answers: the timeout settles the
+  record, writes "could not spin up a new room: content-pack generation
+  timed out" on the row and enables the button. The endgame's "same daemons"
+  and "continue" builds share the same call and so the same timeout, which
+  ends in `failEndgameChoice`.

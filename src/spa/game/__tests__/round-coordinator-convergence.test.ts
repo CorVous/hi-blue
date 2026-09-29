@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { runRound } from "../round-coordinator";
-import type { ConvergenceObjective, WorldEntity } from "../types";
+import { MockRoundLLMProvider } from "../round-llm-provider";
+import type {
+	ConvergenceObjective,
+	ConversationEntry,
+	WorldEntity,
+} from "../types";
 import {
 	makeSilentProvider,
 	makeTestGame,
@@ -54,15 +59,40 @@ function makeBaseGame() {
 	return { ...withPackOrderedWorld(base), objectives: [CONVERGENCE_OBJECTIVE] };
 }
 
+function withRedWestOfAltar<T extends ReturnType<typeof makeBaseGame>>(
+	game: T,
+): T {
+	return {
+		...game,
+		personaSpatial: {
+			...game.personaSpatial,
+			red: { position: { row: 4, col: 3 } },
+		},
+	};
+}
+
+function makeRedStepsOntoAltarProvider(): MockRoundLLMProvider {
+	return new MockRoundLLMProvider([
+		{
+			assistantText: "",
+			toolCalls: [
+				{ id: "go-east", name: "go", argumentsJson: '{"direction":"east"}' },
+			],
+		},
+		{ assistantText: "", toolCalls: [] },
+		{ assistantText: "", toolCalls: [] },
+	]);
+}
+
 describe("runRound — end-of-round convergence evaluation", () => {
-	it("tier-1: one Daemon on the space → witnessed-convergence tier-1 entry in their log", async () => {
-		const game = makeBaseGame();
+	it("tier-1: one Daemon arriving on the space → witnessed-convergence tier-1 entry in their log", async () => {
+		const game = withRedWestOfAltar(makeBaseGame());
 
 		const { nextState } = await runRound(
 			game,
 			"red",
 			"hi",
-			makeSilentProvider(),
+			makeRedStepsOntoAltarProvider(),
 		);
 
 		const redLog = nextState.conversationLogs.red ?? [];
@@ -221,7 +251,7 @@ describe("runRound — end-of-round convergence evaluation", () => {
 
 describe("runRound — convergence split fan-out (actor vs witness) — #336", () => {
 	it("tier-1: the sole occupant gets the actor flavor; a non-occupant Vista-witness gets the witness flavor", async () => {
-		const baseGame = makeBaseGame();
+		const baseGame = withRedWestOfAltar(makeBaseGame());
 		const game = {
 			...baseGame,
 			personaSpatial: {
@@ -234,7 +264,7 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 			game,
 			"red",
 			"hi",
-			makeSilentProvider(),
+			makeRedStepsOntoAltarProvider(),
 		);
 
 		const redEntry = (nextState.conversationLogs.red ?? []).find(
@@ -299,14 +329,14 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 		}
 	});
 
-	it("no double-emission: a Daemon standing on the space receives exactly one entry (the actor variant)", async () => {
-		const game = makeBaseGame();
+	it("no double-emission: a Daemon arriving on the space receives exactly one entry (the actor variant)", async () => {
+		const game = withRedWestOfAltar(makeBaseGame());
 
 		const { nextState } = await runRound(
 			game,
 			"red",
 			"hi",
-			makeSilentProvider(),
+			makeRedStepsOntoAltarProvider(),
 		);
 
 		const redConvergence = (nextState.conversationLogs.red ?? []).filter(
@@ -321,7 +351,7 @@ describe("runRound — convergence split fan-out (actor vs witness) — #336", (
 
 describe("runRound — convergence Vista boundary (ADR 0015)", () => {
 	it("a Daemon at offset (2, 0) from the space is a witness; one at (2, 1) is not — the occupant stays the actor", async () => {
-		const baseGame = makeBaseGame();
+		const baseGame = withRedWestOfAltar(makeBaseGame());
 		const game = {
 			...baseGame,
 			personaSpatial: {
@@ -335,7 +365,7 @@ describe("runRound — convergence Vista boundary (ADR 0015)", () => {
 			game,
 			"red",
 			"hi",
-			makeSilentProvider(),
+			makeRedStepsOntoAltarProvider(),
 		);
 
 		const redEntries = (nextState.conversationLogs.red ?? []).filter(
@@ -365,5 +395,181 @@ describe("runRound — convergence Vista boundary (ADR 0015)", () => {
 				(e) => e.kind === "witnessed-convergence",
 			),
 		).toHaveLength(0);
+	});
+});
+
+describe("runRound — convergence emits on tier changes only", () => {
+	it("a Daemon that stays on the space adds no new entry in the following round", async () => {
+		const { nextState: afterArrival } = await runRound(
+			withRedWestOfAltar(makeBaseGame()),
+			"red",
+			"hi",
+			makeRedStepsOntoAltarProvider(),
+		);
+		const countAfterArrival = (afterArrival.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "witnessed-convergence",
+		).length;
+		expect(countAfterArrival).toBe(1);
+
+		const { nextState: afterStaying } = await runRound(
+			afterArrival,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
+		const countAfterStaying = (afterStaying.conversationLogs.red ?? []).filter(
+			(e) => e.kind === "witnessed-convergence",
+		).length;
+		expect(countAfterStaying).toBe(countAfterArrival);
+	});
+
+	it("tier-2 marks the convergence space entity satisfied", async () => {
+		const baseGame = makeBaseGame();
+		const game = {
+			...baseGame,
+			personaSpatial: {
+				...baseGame.personaSpatial,
+				green: { position: { row: 4, col: 4 } },
+			},
+		};
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
+
+		const space = nextState.world.entities.find((e) => e.id === "altar_space");
+		expect(space?.satisfactionState).toBe("satisfied");
+	});
+});
+
+type ConvergenceEntry = Extract<
+	ConversationEntry,
+	{ kind: "witnessed-convergence" }
+>;
+
+function convergenceEntriesOf(
+	log: readonly ConversationEntry[] | undefined,
+): ConvergenceEntry[] {
+	return (log ?? []).filter(
+		(e): e is ConvergenceEntry => e.kind === "witnessed-convergence",
+	);
+}
+
+describe("runRound — convergence emits when the set of occupants changes", () => {
+	it("an occupant swap (one Daemon leaves as another arrives) tells the newcomer and the witnesses", async () => {
+		const baseGame = makeBaseGame();
+		const game = {
+			...baseGame,
+			round: 3,
+			personaSpatial: {
+				...baseGame.personaSpatial,
+				green: { position: { row: 3, col: 4 } },
+			},
+		};
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{ id: "red-west", name: "go", argumentsJson: '{"direction":"west"}' },
+				],
+			},
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "green-south",
+						name: "go",
+						argumentsJson: '{"direction":"south"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { nextState } = await runRound(game, "red", "hi", provider);
+
+		expect(nextState.personaSpatial.green?.position).toEqual({
+			row: 4,
+			col: 4,
+		});
+		expect(nextState.personaSpatial.red?.position).toEqual({ row: 4, col: 3 });
+
+		const greenEntries = convergenceEntriesOf(nextState.conversationLogs.green);
+		expect(greenEntries).toHaveLength(1);
+		expect(greenEntries[0]?.tier).toBe(1);
+		expect(greenEntries[0]?.audience).toBe("actor");
+
+		const redEntries = convergenceEntriesOf(nextState.conversationLogs.red);
+		expect(redEntries).toHaveLength(1);
+		expect(redEntries[0]?.audience).toBe("witness");
+		expect(redEntries[0]?.flavor).toBe(
+			CONVERGENCE_SPACE.convergenceTier1Flavor,
+		);
+	});
+
+	it("a Daemon that stays alone on the space after the first round gets no new entry", async () => {
+		const game = { ...makeBaseGame(), round: 3 };
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
+
+		expect(convergenceEntriesOf(nextState.conversationLogs.red)).toHaveLength(
+			0,
+		);
+	});
+
+	it("a Daemon whose start cell is the space gets its tier-1 actor flavor in the first round", async () => {
+		const game = makeBaseGame();
+		expect(game.round).toBe(0);
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
+
+		const redEntries = convergenceEntriesOf(nextState.conversationLogs.red);
+		expect(redEntries).toHaveLength(1);
+		expect(redEntries[0]?.tier).toBe(1);
+		expect(redEntries[0]?.audience).toBe("actor");
+		expect(redEntries[0]?.flavor).toBe(
+			CONVERGENCE_SPACE.convergenceTier1ActorFlavor,
+		);
+	});
+});
+
+describe("runRound — convergence satisfaction reaches the perception delta", () => {
+	it("the next round tells an occupant that the space is now satisfied", async () => {
+		const baseGame = makeBaseGame();
+		const game = {
+			...baseGame,
+			personaSpatial: {
+				...baseGame.personaSpatial,
+				green: { position: { row: 4, col: 4 } },
+			},
+		};
+
+		const { nextState, diskEntities } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
+
+		const provider = makeSilentProvider();
+		await runRound(nextState, "red", "hi", provider, {
+			priorDiskEntities: diskEntities,
+		});
+
+		const redPrompt = JSON.stringify(provider.calls[0]?.messages ?? []);
+		expect(redPrompt).toContain("Stone Altar is now");
 	});
 });

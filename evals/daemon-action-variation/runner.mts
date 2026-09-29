@@ -347,13 +347,18 @@ async function runOneRepetition(
 	try {
 		result = await callModel(messages, tools);
 	} catch (err) {
+		console.error(
+			`  ${scenario.name} / ${variant.displayName} rep ${repetition}: model call failed:`,
+			err,
+		);
 		return {
 			repetition,
 			scenario: scenario.name,
 			personaLabel: variant.displayName,
 			temperaments: variant.temperaments,
-			assistantText: `[ERROR: ${(err as Error).message}]`,
+			assistantText: "",
 			toolCalls: [],
+			error: err instanceof Error ? err.message : String(err),
 		};
 	}
 
@@ -402,6 +407,7 @@ async function runAll(withActionProfile: boolean): Promise<RunResult> {
 					withActionProfile,
 				);
 				bucket.push(rec);
+				if (rec.error !== undefined) continue;
 				const toolNames = rec.toolCalls.map((tc) => tc.name).join(", ") || "—";
 				console.log(
 					`  rep ${r.toString().padStart(2)}: ` +
@@ -456,7 +462,8 @@ function renderReport(
 		"",
 		"| Metric | Value |",
 		"|---|---|",
-		`| Total repetitions | ${runSummary.totalRepetitions} |`,
+		`| Total repetitions (scored) | ${runSummary.totalRepetitions} |`,
+		`| Errored repetitions (excluded from scoring) | ${runSummary.totalErrors} |`,
 		`| Any action emission | ${wholePercent(runSummary.overall.anyActionRate)} |`,
 		`| Any \`message\` emission | ${wholePercent(runSummary.overall.anyMessageRate)} |`,
 		`| Parallel (message + action) | ${wholePercent(runSummary.overall.parallelRate)} |`,
@@ -510,6 +517,12 @@ function renderReport(
 
 	lines.push("", "## Per-repetition transcripts", "");
 	for (const rec of run.repetitions) {
+		if (rec.error !== undefined) {
+			lines.push(
+				`- \`${rec.scenario}\` / ${rec.personaLabel} / rep ${rec.repetition}: model call failed (not scored): ${rec.error}`,
+			);
+			continue;
+		}
 		const toolBits = rec.toolCalls
 			.map((tc) => `${tc.name}(${tc.argumentsJson})`)
 			.join("; ");
@@ -583,6 +596,12 @@ async function main(): Promise<void> {
 	console.log("");
 	console.log(`Markdown report: ${mdPath}`);
 	console.log(`Raw data (JSON): ${jsonPath}`);
+	if (runSummary.totalErrors > 0) {
+		console.error(
+			`${runSummary.totalErrors} model calls failed; those repetitions were excluded from scoring.`,
+		);
+		process.exitCode = 1;
+	}
 }
 
 main().catch((err) => {

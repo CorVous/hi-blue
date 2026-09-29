@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GAME_SAVE_VERSION } from "../../save-serializer";
+import { BOOTSTRAP_LOADING_TIMEOUT_MS } from "../game/bootstrap.js";
 import {
 	installLocalStorageStub,
 	type LocalStorageStub,
@@ -12,13 +13,9 @@ import {
 } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-vi.mock("../../content", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("../../content")>();
-	return {
-		...actual,
-		generatePersonas: async () => STATIC_PERSONAS,
-	};
-});
+vi.mock("../../content/persona-generator", () => ({
+	generatePersonas: async () => STATIC_PERSONAS,
+}));
 
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({
@@ -31,6 +28,7 @@ vi.mock("../../content/content-pack-generator", () => ({
 const IDENTITY_SHUFFLE_RANDOM = 0.9;
 
 const INDEX_BODY_HTML = `
+<div id="stage"></div>
 <main>
   <div id="topinfo">
     <span id="topinfo-left"></span>
@@ -105,6 +103,12 @@ function getEl<T extends HTMLElement>(selector: string): T {
 	const el = document.querySelector<T>(selector);
 	if (!el) throw new Error(`Element not found: ${selector}`);
 	return el;
+}
+
+async function waitForRoundToSettle(): Promise<void> {
+	await vi.waitFor(() =>
+		expect(getEl("#stage").hasAttribute("data-round-in-flight")).toBe(false),
+	);
 }
 
 function setSearch(query: string): void {
@@ -516,20 +520,6 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage two";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage three";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
 		const panelsEl = document.querySelector<HTMLElement>("#panels");
 		await vi.waitFor(() => expect(panelsEl?.hidden).toBe(true));
 
@@ -577,20 +567,6 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage two";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage three";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
 
 		const endgameEl2 = getEl<HTMLElement>("#endgame");
 		await vi.waitFor(() =>
@@ -626,20 +602,6 @@ describe("renderGame (game route — three-AI)", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		promptInput.value = "*Sage one";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage two";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage three";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -683,20 +645,6 @@ describe("renderGame (game route — three-AI)", () => {
 		const promptInput = getEl<HTMLInputElement>("#prompt");
 
 		promptInput.value = "*Sage one";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage two";
-		promptInput.dispatchEvent(new Event("input"));
-		form.dispatchEvent(
-			new Event("submit", { bubbles: true, cancelable: true }),
-		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
-
-		promptInput.value = "*Sage three";
 		promptInput.dispatchEvent(new Event("input"));
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
@@ -1011,6 +959,106 @@ describe("renderGame — localStorage persistence", () => {
 	});
 });
 
+describe("renderGame — a round still in flight when the player loads another session", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	function makeHeldMessageToolCallFetchMock() {
+		let releaseRound: () => void = () => undefined;
+		const roundReleased = new Promise<void>((resolve) => {
+			releaseRound = resolve;
+		});
+		const replies = makeMessageToolCallFetchMock();
+		const fetchMock = vi.fn(async (...args: unknown[]) => {
+			await roundReleased;
+			return replies(...args);
+		});
+		return { fetchMock, releaseRound };
+	}
+
+	async function startHeldRoundThenLoadSessionB(stub: LocalStorageStub) {
+		const { fetchMock, releaseRound } = makeHeldMessageToolCallFetchMock();
+		vi.stubGlobal("fetch", fetchMock);
+		vi.stubGlobal("localStorage", stub);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
+
+		vi.resetModules();
+		const { renderGame } = await import("../views/game.js");
+		const storage = await import("../persistence/session-storage.js");
+		const sessionAId = storage.getActiveSessionId();
+		await renderGame(getEl<HTMLElement>("main"));
+		getEl<HTMLElement>("main").dataset.view = "game";
+
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		promptInput.value = "*Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		getEl<HTMLFormElement>("#composer").dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+		const { buildSessionFromAssets } = await import("../game/bootstrap.js");
+		storage.setActiveSessionId("0xB000");
+		storage.saveActiveSession(
+			buildSessionFromAssets({
+				personas: STATIC_PERSONAS,
+				contentPacksA: STATIC_CONTENT_PACKS,
+				contentPacksB: STATIC_CONTENT_PACKS,
+			}).getState(),
+		);
+		await renderGame(getEl<HTMLElement>("main"));
+		return { storage, sessionAId, releaseRound };
+	}
+
+	it("saves the round under its own session and paints nothing into the loaded one", async () => {
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
+		const { storage, sessionAId, releaseRound } =
+			await startHeldRoundThenLoadSessionB(stub);
+
+		releaseRound();
+		await waitForRoundToSettle();
+
+		for (const aiId of ["red", "green", "cyan"]) {
+			expect(
+				document.querySelector<HTMLElement>(`[data-transcript="${aiId}"]`)
+					?.textContent ?? "",
+			).not.toMatch(/RESPONSE_UNIQUE_TAG|hello/);
+		}
+		expect(storage.getActiveSessionId()).toBe("0xB000");
+		const sessionB = storage.loadSession("0xB000");
+		expect(sessionB.kind === "ok" && sessionB.state.round).toBe(0);
+		const sessionA = storage.loadSession(sessionAId ?? "");
+		expect(sessionA.kind === "ok" && sessionA.state.round).toBe(1);
+		expect(getEl("#round-error").hasAttribute("hidden")).toBe(true);
+	});
+
+	it("drops the round when its session was removed meanwhile", async () => {
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
+		const { storage, sessionAId, releaseRound } =
+			await startHeldRoundThenLoadSessionB(stub);
+		storage.rmSession(sessionAId ?? "");
+
+		releaseRound();
+		await waitForRoundToSettle();
+
+		expect(storage.listSessions()).toEqual(["0xB000"]);
+		const sessionB = storage.loadSession("0xB000");
+		expect(sessionB.kind === "ok" && sessionB.state.round).toBe(0);
+	});
+});
+
 describe("renderGame — chat_lockout event", () => {
 	beforeEach(async () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
@@ -1070,6 +1118,7 @@ describe("renderGame — chat_lockout event", () => {
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 
 		const redPanel = document.querySelector<HTMLElement>(
 			'.ai-panel[data-ai="red"]',
@@ -1206,6 +1255,7 @@ describe("renderGame — mention-based addressing", () => {
 		);
 
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 
 		promptInput.value = "*Sage hi";
 		promptInput.dispatchEvent(new Event("input"));
@@ -1405,9 +1455,61 @@ describe("renderGame — addressee persistence after send", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 		expect(promptInput.selectionStart).toBe(6);
 		expect(promptInput.selectionEnd).toBe(6);
 		expect(sendBtn.disabled).toBe(true);
+	});
+
+	it("re-entering the game route mid-round keeps Send disabled and ignores a second submit", async () => {
+		let releaseFirstCall: () => void = () => undefined;
+		const firstCallHeld = new Promise<void>((resolve) => {
+			releaseFirstCall = resolve;
+		});
+		const mockFetch = vi.fn(async () => {
+			if (mockFetch.mock.calls.length === 1) await firstCallHeld;
+			return {
+				ok: true,
+				status: 200,
+				statusText: "OK",
+				body: makePassSseStream(),
+			};
+		});
+		vi.stubGlobal("fetch", mockFetch);
+		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
+
+		vi.resetModules();
+		const { renderGame } = await import("../views/game.js");
+		const root = getEl<HTMLElement>("main");
+		await renderGame(root);
+
+		const form = getEl<HTMLFormElement>("#composer");
+		const promptInput = getEl<HTMLInputElement>("#prompt");
+		const sendBtn = getEl<HTMLButtonElement>("#send");
+
+		promptInput.value = "*Sage hello";
+		promptInput.dispatchEvent(new Event("input"));
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+		await renderGame(root);
+		promptInput.value = "*Sage again";
+		promptInput.dispatchEvent(new Event("input"));
+		expect(sendBtn.disabled).toBe(true);
+
+		form.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		expect(promptInput.value).toBe("*Sage again");
+
+		releaseFirstCall();
+		await waitForRoundToSettle();
+		expect(mockFetch).toHaveBeenCalledTimes(3);
+		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
+		expect(greenTranscript.textContent).not.toContain("> again");
+		expect(sendBtn.disabled).toBe(false);
 	});
 
 	it("typing body text after a successful send re-enables Send", async () => {
@@ -1459,6 +1561,7 @@ describe("renderGame — addressee persistence after send", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 
 		promptInput.value = "*Sage how are you";
 		promptInput.dispatchEvent(new Event("input"));
@@ -1466,6 +1569,7 @@ describe("renderGame — addressee persistence after send", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		expect(greenTranscript.textContent).toContain("> hello");
@@ -1490,6 +1594,7 @@ describe("renderGame — addressee persistence after send", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitForRoundToSettle();
 	});
 
 	it("locked-AI at round-completion: mention prefix persists but Send stays disabled", async () => {
@@ -2379,7 +2484,6 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
-		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../views/game.js");
 		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
 		await vi.runAllTimersAsync();
 
@@ -2391,6 +2495,101 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		expect(titleEl?.textContent).toBe("the room is taking too long");
 		const bodyEl = document.querySelector("#bootstrap-recovery-body");
 		expect(bodyEl?.textContent).toContain("the world generation timed out");
+	});
+
+	it("aborts the stalled bootstrap and marks it failed when the timeout fires", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		let bootstrapSignal: AbortSignal | undefined;
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: (opts?: { signal?: AbortSignal }) => {
+					bootstrapSignal = opts?.signal;
+					return {
+						personasPromise: new Promise(() => {}),
+						contentPacksPromise: new Promise(() => {}),
+					};
+				},
+			};
+		});
+
+		vi.resetModules();
+		installLocalStorageStub();
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap, getPendingBootstrap } = await import(
+			"../game/pending-bootstrap.js"
+		);
+		const stalled = startBootstrap();
+
+		const { renderGame } = await import("../views/game.js");
+		const renderPromise = renderGame(getEl<HTMLElement>("main"));
+		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+		await renderPromise;
+
+		expect(bootstrapSignal?.aborted).toBe(true);
+		expect((bootstrapSignal?.reason as Error).name).toBe(
+			"BootstrapTimeoutError",
+		);
+		expect(stalled.status).toBe("failed");
+		expect(getPendingBootstrap()).toBe(stalled);
+	});
+
+	it("names the upstream error in the recovery copy", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			const { HttpStatusError } = await import("../llm-client.js");
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: Promise.reject(
+						new HttpStatusError({
+							status: 402,
+							statusText: "Payment Required",
+							upstreamMessage: "Insufficient credits",
+							retryAfterSec: null,
+						}),
+					),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		installLocalStorageStub();
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../views/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		expect(
+			document.querySelector("#bootstrap-recovery")?.hasAttribute("hidden"),
+		).toBe(false);
+		expect(
+			document.querySelector("#bootstrap-recovery-body")?.textContent,
+		).toContain("HTTP 402: Insufficient credits");
 	});
 
 	it("hides #bootstrap-recovery when bootstrap promise resolves after timeout has fired", async () => {
@@ -2438,7 +2637,6 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
-		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../views/game.js");
 		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
 		await vi.runAllTimersAsync();
 		await renderPromise;
@@ -2465,6 +2663,123 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		regenBtn?.click();
 		expect(regenClicked).toBe(true);
 		expect(recoveryEl?.hasAttribute("hidden")).toBe(true);
+	});
+});
+
+describe("renderBootstrapLoadingFlow — re-entry and a moved active pointer", () => {
+	type ContentPacks = {
+		packsA: unknown;
+		packsB: unknown;
+		objectiveTypes: unknown;
+	};
+
+	let resolveContentPacks: (value: ContentPacks) => void = () => undefined;
+
+	beforeEach(() => {
+		vi.restoreAllMocks();
+		vi.resetModules();
+		vi.useRealTimers();
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+		const heldContentPacks = new Promise<ContentPacks>((resolve) => {
+			resolveContentPacks = resolve;
+		});
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: heldContentPacks,
+				}),
+			};
+		});
+	});
+
+	afterEach(() => {
+		vi.doUnmock("../game/bootstrap.js");
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	function releaseContentPacks(): void {
+		resolveContentPacks({
+			packsA: [STATIC_CONTENT_PACKS[0]],
+			packsB: [STATIC_CONTENT_PACKS[0]],
+			objectiveTypes: STATIC_OBJECTIVE_TYPES,
+		});
+	}
+
+	async function startLoadingFlow() {
+		const storage = await import("../persistence/session-storage.js");
+		storage.mintAndActivateNewSession();
+		const pendingBootstrap = await import("../game/pending-bootstrap.js");
+		pendingBootstrap.startBootstrap();
+		const game = await import("../views/game.js");
+		const flowPromise = game.renderGame(getEl<HTMLElement>("main"));
+		return { storage, pendingBootstrap, game, flowPromise };
+	}
+
+	it("re-entering the route during loading reveals the screen without a second loading flow", async () => {
+		installLocalStorageStub();
+		const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+		const { storage, game, flowPromise } = await startLoadingFlow();
+
+		getEl("#panels").setAttribute("hidden", "");
+		await game.renderGame(getEl<HTMLElement>("main"));
+
+		expect(getEl("#panels").hasAttribute("hidden")).toBe(false);
+		const loadingTimeouts = setTimeoutSpy.mock.calls.filter(
+			([, delay]) => delay === BOOTSTRAP_LOADING_TIMEOUT_MS,
+		);
+		expect(loadingTimeouts).toHaveLength(1);
+
+		releaseContentPacks();
+		await flowPromise;
+		expect(storage.listSessions()).toHaveLength(1);
+		expect(getEl<HTMLInputElement>("#prompt").disabled).toBe(false);
+	});
+
+	it("a flow whose session is no longer active hands nothing over when its packs arrive", async () => {
+		installLocalStorageStub();
+		const { storage, pendingBootstrap, flowPromise } = await startLoadingFlow();
+		const flowSessionId = storage.getActiveSessionId();
+
+		const newerSessionId = storage.mintSessionId();
+		storage.setActiveSessionId(newerSessionId);
+		releaseContentPacks();
+		await flowPromise;
+
+		expect(storage.listSessions()).toEqual([]);
+		expect(storage.getActiveSessionId()).toBe(newerSessionId);
+		expect(newerSessionId).not.toBe(flowSessionId);
+		expect(pendingBootstrap.getPendingBootstrap()).toBeDefined();
+		expect(getEl<HTMLElement>("main").dataset.view).toBeUndefined();
+	});
+
+	it("a new game starts at epoch 01 after a session with a later epoch was open", async () => {
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
+		vi.stubGlobal("localStorage", stub);
+		const storage = await import("../persistence/session-storage.js");
+		const seededId = storage.getActiveSessionId() ?? "";
+		const metaKey = `hi-blue:sessions/${seededId}/meta.json`;
+		const meta = JSON.parse(localStorage.getItem(metaKey) ?? "{}");
+		localStorage.setItem(metaKey, JSON.stringify({ ...meta, epoch: 3 }));
+
+		const game = await import("../views/game.js");
+		await game.renderGame(getEl<HTMLElement>("main"));
+		expect(getEl("#topinfo-left").textContent).toContain("EPOCH 03");
+
+		const { flowPromise } = await startLoadingFlow();
+		expect(getEl("#topinfo-left").textContent).toContain("EPOCH 01");
+		releaseContentPacks();
+		await flowPromise;
+		expect(getEl("#topinfo-left").textContent).toContain("EPOCH 01");
 	});
 });
 
@@ -2843,7 +3158,7 @@ describe("renderGame — endgame outcome and final round (issue #576)", () => {
 	});
 
 	it("endgameSubtitle maps each outcome to its line", async () => {
-		const { endgameSubtitle } = await import("../views/game.js");
+		const { endgameSubtitle } = await import("../views/game-endgame.js");
 		expect(endgameSubtitle("win")).toBe(WIN_LINE);
 		expect(endgameSubtitle("lose")).toBe(BUDGET_EXHAUSTED_LINE);
 	});

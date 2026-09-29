@@ -181,7 +181,10 @@ async function generateVersionList() {
 </body>
 </html>`;
 
-		const versionsDir = path.join(root, "dist", "v");
+		const distDir = process.env.SPA_DIST_DIR
+			? path.resolve(process.env.SPA_DIST_DIR)
+			: path.join(root, "dist");
+		const versionsDir = path.join(distDir, "v");
 		await fs.mkdir(versionsDir, { recursive: true });
 
 		await fs.writeFile(path.join(versionsDir, "index.html"), html);

@@ -23,6 +23,13 @@ import type {
 	WorldEntity,
 } from "./types";
 
+export function personaName(
+	game: Pick<GameState, "personas">,
+	aiId: AiId,
+): string {
+	return game.personas[aiId]?.name ?? aiId;
+}
+
 export const FAREWELL_LINE = (name: string): string =>
 	`${name}'s daemon is winding down — goodbye, blue.`;
 
@@ -138,6 +145,7 @@ function reprojectEntitiesOnto(
 	}
 	for (const space of boundSpaces(bPack)) byId.set(space.id, space);
 	for (const obj of interestingObjects(bPack)) byId.set(obj.id, obj);
+	for (const obj of standaloneObjectives(bPack)) byId.set(obj.id, obj);
 	for (const obs of obstacles(bPack)) byId.set(obs.id, obs);
 
 	return entities.map((entity) => {
@@ -250,44 +258,16 @@ export function appendMessage(
 	return { ...game, conversationLogs: logs };
 }
 
-export function appendWitnessedEvent(
+export function appendLogEntry(
 	game: GameState,
-	witnessId: AiId,
-	entry: Extract<ConversationEntry, { kind: "witnessed-event" }>,
+	aiId: AiId,
+	entry: ConversationEntry,
 ): GameState {
 	return {
 		...game,
 		conversationLogs: {
 			...game.conversationLogs,
-			[witnessId]: [...(game.conversationLogs[witnessId] ?? []), entry],
-		},
-	};
-}
-
-export function appendWitnessedConvergence(
-	game: GameState,
-	witnessId: AiId,
-	entry: Extract<ConversationEntry, { kind: "witnessed-convergence" }>,
-): GameState {
-	return {
-		...game,
-		conversationLogs: {
-			...game.conversationLogs,
-			[witnessId]: [...(game.conversationLogs[witnessId] ?? []), entry],
-		},
-	};
-}
-
-export function appendWitnessedObstacleShift(
-	game: GameState,
-	witnessId: AiId,
-	entry: Extract<ConversationEntry, { kind: "witnessed-obstacle-shift" }>,
-): GameState {
-	return {
-		...game,
-		conversationLogs: {
-			...game.conversationLogs,
-			[witnessId]: [...(game.conversationLogs[witnessId] ?? []), entry],
+			[aiId]: [...(game.conversationLogs[aiId] ?? []), entry],
 		},
 	};
 }
@@ -305,26 +285,65 @@ export function appendBroadcast(game: GameState, content: string): GameState {
 	return { ...game, conversationLogs: logs };
 }
 
-export function setWeather(game: GameState, weather: string): GameState {
-	return {
-		...game,
-		weather,
-		contentPack: { ...game.contentPack, weather },
-	};
+export const NEW_ROOM_BROADCAST = "The sysadmin has created a new room.";
+
+function latestLoggedRound(
+	conversationLogs: GameState["conversationLogs"],
+): number {
+	let latest = -1;
+	for (const log of Object.values(conversationLogs)) {
+		for (const entry of log) {
+			if (entry.round > latest) latest = entry.round;
+		}
+	}
+	return latest;
 }
 
-export function appendActionFailure(
-	game: GameState,
-	actorId: AiId,
-	entry: Extract<ConversationEntry, { kind: "action-failure" }>,
+function fileUnplayedEntriesUnderLastPlayedRound(
+	ended: Pick<GameState, "round" | "conversationLogs">,
+): GameState["conversationLogs"] {
+	const logs = structuredClone(ended.conversationLogs);
+	const lastPlayedRound = ended.round - 1;
+	if (lastPlayedRound < 0) return logs;
+	for (const aiId of Object.keys(logs)) {
+		logs[aiId] = (logs[aiId] ?? []).map((entry) =>
+			entry.round > lastPlayedRound
+				? { ...entry, round: lastPlayedRound }
+				: entry,
+		);
+	}
+	return logs;
+}
+
+export function continueLogsInNewRoom(
+	newRoom: GameState,
+	ended: Pick<GameState, "round" | "conversationLogs">,
 ): GameState {
-	return {
-		...game,
-		conversationLogs: {
-			...game.conversationLogs,
-			[actorId]: [...(game.conversationLogs[actorId] ?? []), entry],
+	const conversationLogs = fileUnplayedEntriesUnderLastPlayedRound(ended);
+	return appendBroadcast(
+		{
+			...newRoom,
+			round: Math.max(ended.round, latestLoggedRound(conversationLogs) + 1),
+			conversationLogs,
 		},
-	};
+		NEW_ROOM_BROADCAST,
+	);
+}
+
+export function isFirstRoundOfRoom(game: GameState): boolean {
+	if (game.round === 0) return true;
+	return Object.values(game.conversationLogs).some((log) =>
+		log.some(
+			(entry) =>
+				entry.kind === "broadcast" &&
+				entry.round === game.round &&
+				entry.content === NEW_ROOM_BROADCAST,
+		),
+	);
+}
+
+export function setWeather(game: GameState, weather: string): GameState {
+	return { ...game, weather };
 }
 
 export function appendPrivateSystemNotice(
@@ -332,37 +351,43 @@ export function appendPrivateSystemNotice(
 	recipientId: AiId,
 	content: string,
 ): GameState {
-	const entry: ConversationEntry = {
+	return appendLogEntry(game, recipientId, {
 		kind: "broadcast",
 		round: game.round,
 		content,
-	};
-	return {
-		...game,
-		conversationLogs: {
-			...game.conversationLogs,
-			[recipientId]: [...(game.conversationLogs[recipientId] ?? []), entry],
-		},
-	};
+	});
+}
+
+export function partitionExpired<K extends ActiveComplication["kind"]>(
+	game: GameState,
+	kind: K,
+): {
+	game: GameState;
+	expired: Array<Extract<ActiveComplication, { kind: K }>>;
+} {
+	const expired: Array<Extract<ActiveComplication, { kind: K }>> = [];
+	const kept: ActiveComplication[] = [];
+	for (const complication of game.activeComplications) {
+		if (
+			complication.kind === kind &&
+			game.round >= complication.resolveAtRound
+		) {
+			expired.push(complication as Extract<ActiveComplication, { kind: K }>);
+		} else {
+			kept.push(complication);
+		}
+	}
+	if (expired.length === 0) return { game, expired };
+	return { game: { ...game, activeComplications: kept }, expired };
 }
 
 export function resolveToolDisables(game: GameState): {
 	game: GameState;
 	resolved: Array<{ target: AiId; tool: ToolName }>;
 } {
-	const resolved: Array<{ target: AiId; tool: ToolName }> = [];
-	const kept: ActiveComplication[] = [];
-
-	for (const complication of game.activeComplications) {
-		if (
-			complication.kind === "tool_disable" &&
-			game.round >= complication.resolveAtRound
-		) {
-			resolved.push({ target: complication.target, tool: complication.tool });
-		} else {
-			kept.push(complication);
-		}
-	}
-
-	return { game: { ...game, activeComplications: kept }, resolved };
+	const { game: nextGame, expired } = partitionExpired(game, "tool_disable");
+	return {
+		game: nextGame,
+		resolved: expired.map(({ target, tool }) => ({ target, tool })),
+	};
 }

@@ -55,8 +55,9 @@ itself fires, never `page.request.*`.
 - A request body's `messages[0]` is the system prompt and `messages[1]` the
   user message. A call is JSON mode when `stream === false` or it sets
   `response_format`. `classifyJsonRequest` tells the new-game callers apart by
-  their user-message preamble: persona synthesis, dual A/B content pack, or
-  single content pack.
+  their user-message preamble: persona synthesis or dual A/B content pack. The
+  game has no single-pack caller any more, so a single-pack preamble falls
+  through to the throw below.
 - An unrecognised JSON-mode call **throws**. Silently answering it with a
   persona-shaped reply was the bug this helper was written to prevent, so a new
   caller must fail loudly until the stub learns it.
@@ -73,7 +74,7 @@ itself fires, never `page.request.*`.
   pacing, so the stub does not throttle.
 - `toolCallSseBody` drives one live action (`go`, `pick_up`) for a chosen
   Daemon. The parser in `src/spa/streaming.ts` flushes tool calls on
-  `finish_reason: "tool_calls"` or `[DONE]`.
+  `finish_reason: "tool_calls"`, `[DONE]` or the end of the stream.
 - `isRequestForDaemon` finds a Daemon's request by the identity line of its
   system prompt, `You are the author writing *<name>, a Daemon.`
   (`prompt-builder.ts`).
@@ -81,6 +82,23 @@ itself fires, never `page.request.*`.
   stub everything, navigate, wait for `#begin`, log in, wait for the game view,
   and return the handles. Its 10s budgets are enough because the stubs answer
   instantly. Start-screen specs must drive the start screen themselves.
+  `reachEndgame` builds on it: it opens the game with `?winImmediately=1`,
+  sends one round and waits for `#endgame`.
+- **Complications are random unless a spec pins them.** A new game draws its
+  first complication countdown from [1, 5], so the second round a spec plays
+  has about a two-in-five chance of following a complication, and a chat
+  lockout on the Daemon the spec addresses next leaves `#send` disabled (a
+  lockout lasts 3 to 5 rounds). A spec that plays several rounds, or asserts
+  on what a round logged, calls `setComplicationCountdown(page, countdown)`
+  right after `goToGame`: it rewrites the countdown in `engine.dat` and
+  reloads. `COMPLICATION_COUNTDOWN_BEYOND_ANY_SPEC` keeps complications out of
+  the spec altogether; a countdown of 1 fires one in the next round.
+- `holdChatCompletions(page, matches, { holdFirst })` layers a route on top
+  of the general stub that parks every request `matches` accepts (only the
+  first `holdFirst` of them, when given) until `release()` is called, then
+  falls back to the stub below. `requestCount()` counts every matching
+  request, held or not. Specs pass `isDualContentPackRequest` to hold a
+  content-pack generation and `isGameplayRequest` to hold Daemon turns.
 - **Save order.** A save writes `meta.json` first and `engine.dat` last.
   `waitForRound` polls `meta.json`, so it proves a round was saved but not that
   the engine state is in. When an assertion needs engine data, wait with
@@ -95,13 +113,25 @@ itself fires, never `page.request.*`.
 - `page.waitForFunction` takes `(pageFunction, arg, options)`. A poll with no
   argument must pass `undefined` second and `{ timeout }` third: passed second,
   the object becomes the page function's argument and no timeout applies.
-  `getAiHandles`, `waitForFirstRoundSaved` and `start-screen.spec.ts`'s
-  `waitForActiveSession` follow this form.
-- `SealedContentPack.entities` is the flat entity list of session v11 and later.
-  `obstacles` is the bucketed list of older blobs, and `obstacleCellsOf` uses it
-  only as a fallback.
+  `getAiHandles` and `start-screen.spec.ts`'s `waitForActiveSession`
+  follow this form.
+- `SealedContentPack.entities` is the flat entity list of session v11 and later,
+  and `obstacleCellsOf` reads obstacles from it alone. The bucketed `obstacles`
+  list of older blobs is gone from the type: every spec seals a fresh session,
+  so the fallback that read it could never run.
 - `stubs.ts` re-exports `engine-blob.ts` and `vista-geometry.ts`, so specs
   import from one place.
+
+### `sessions.ts`: session storage keys
+
+`ACTIVE_SESSION_KEY`, `SESSIONS_PREFIX`, `ARCHIVE_PREFIX`, `sessionDir` and
+`sessionFileKey` spell the localStorage layout once. Code inside
+`page.evaluate` runs in the browser and cannot close over them, so helpers
+build the key on the Node side and pass it in as the argument.
+`activeSessionId` / `requireActiveSessionId` read the active pointer,
+`listSessionIds` lists the session (or, with `ARCHIVE_PREFIX`, archive) ids
+in sorted order, and `seedOkSession` writes the picker's "ok" session under
+a given id.
 
 ### `engine-blob.ts` and `vista-geometry.ts`: deliberate mirrors
 
@@ -170,6 +200,8 @@ specs that assert on generation failure check `#cap-hit` themselves.
   microtask or a timer can arrive after the test's last `await`, so a
   synchronous `expect(pageErrors).toEqual([])` misses it.
   `expectNoPageErrors` lets such errors settle for 100 ms before it asserts.
+  Specs collect the errors with `collectPageErrors(page)`, which registers
+  the listener and returns the array it fills.
   `smoke.spec.ts` checks that the helper catches a late microtask error.
 
 ## What each spec guards
@@ -184,19 +216,31 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `think-toggle` | Daemon turns leave thinking on, so requests carry no `reasoning` field, and the dev-host-only `?think=0` adds `reasoning: { enabled: false }`. Unit tests lock the body shape; this spec covers the wiring from URL to `isDevHost()` to `BrowserLLMProvider` to the request. | ADR 0017 |
 | `persona-synthesis` | Synthesized blurbs flow from the persona record through `prompt-builder` into each Daemon's streaming system prompt. | |
 | `chat-lockout` | A lockout restored from storage mutes its panel before any typing, disables Send for that Daemon, and says nothing in the transcript. | |
+| `exhausted-daemon-reload` | A Daemon that spends its last budget and then skips a round shows the same panel lines live as after a reload: one "is unresponsive…" line, no bracketed duplicate. The budget is lowered through `engine.dat` and a reload. | |
 | `endgame-current-behaviour` | `game_ended` disables the composer, shows the choices, and keeps the URL. The active-session pointer survives until the player chooses. | #80, #101, #307 |
 | `endgame-outcome` | The endgame subtitle follows the outcome (win or budget exhausted), topinfo shows the final turn, the final round's Daemon lines appear on the endgame screen, and the finished round is saved so a reload reopens the endgame. The budget ending is reached by lowering every saved budget and reloading. Re-entering the endgame by toggling the picker must not stack button handlers: one click downloads once and starts one content-pack request. | #576 |
-| `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. | #307 |
-| `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. | #380 |
-| `bootstrap-failure-bounce` | A content-pack failure after CONNECT, whether a network abort or an HTTP 200 with an error body, shows `#bootstrap-recovery` inside the game view instead of bouncing to start. | #380 |
-| `start-screen` | Start-screen boot, login, restore on refresh, cap-hit, refresh during generation, and an empty active pointer. | ADR 0011 |
-| `sessions-picker` | Picker rows for ok, broken and version-mismatch saves; load, dup and rm; the sessions icon; sticky routing; archived-build links. | ADR 0011 |
+| `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. After each choice (Same Daemons, Continue, and New Daemons followed by a new login) `#endgame` is hidden and `#prompt` is enabled again. The first request after Continue is checked twice, once with a quiet final round and once with a weather change in it, because a complication in the final round logs an entry for the round after it; the spec sets the complication countdown with `setComplicationCountdown` and pins `Math.random` to 0 for the final round (the weather change is always first in the draw pool), so neither variant depends on the random first countdown. | #307 |
+| `endgame-choice-safety` | Same Daemons and Continue leave a session the player loaded while the new room was generating untouched: no pointer move, no overwrite, no archive. When archiving the finished game fails, New Daemons and Same Daemons keep it, say why in `#endgame-choice-status` and re-enable the button. When the final save is torn (its `saving` marker is left), both go ahead without archiving and drop the torn session; Same Daemons shows the note before the new room is generated. | |
+| `round-session-switch` | A round still running when the player loads another session paints nothing into it and is saved under its own session; a round whose session was removed meanwhile is dropped without a warning. | |
+| `bootstrap-session-switch` | The loading timeout aborts the held content-pack request; a loading flow that timed out and was abandoned does not take over the start screen when its held response is later released, and a new game starts at epoch 01 after a later-epoch session was open. | |
+| `cross-tab-session` | Two pages in one context on the same session: an idle tab re-renders another tab's round without a warning and its next round keeps both tabs' messages; a round held in flight while the other tab saves is refused as stale, shows "changed in another tab", and reloads the other tab's round. Each test addresses a different Daemon in each round, so it pins complications out with `setComplicationCountdown`: a chat lockout on the next addressee used to leave `#send` disabled in a few runs in a hundred. | |
+| `endgame-cross-tab` | Two pages in one context on one finished game. An idle endgame tab re-renders into the game when the other tab presses Continue and plays a round. A tab that still shows the stale endgame (its `storage` events muted) and then presses New daemons or Continue, or one whose Same daemons or Continue generation was held while the other tab continued, is refused: nothing is archived, removed or overwritten, the epoch stays at 02, and the tab shows "changed in another tab" over the other tab's game. | |
+| `round-failure-draft` | A round that fails with an HTTP 500 puts `*Name <message>` back in `#prompt` and removes the player's `.msg-you` line. | |
+| `endgame-controls` | Toggling the picker while "same daemons" is generating keeps the choices disabled and the status shown, with one content-pack request; a triple-clicked diagnostics submit sends one POST; Continue hides again after the key is cleared in the BYOK dialog. | |
+| `round-reentry` | Opening and closing the session picker while a round is in flight keeps Send disabled, a forced submit starts no second round, and the held round still completes with one request per Daemon. | |
+| `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. The start screen's "broken" banner is hidden once the next login reaches the game. | #380 |
+| `bootstrap-failure-bounce` | A content-pack failure after CONNECT, whether a network abort or an HTTP 200 with an error body, shows `#bootstrap-recovery` inside the game view instead of bouncing to start. A 402 is not retried, and the recovery copy names the upstream message. | #380 |
+| `start-screen` | Start-screen boot, login, restore on refresh, cap-hit (and a provider 429 that is not one), a non-cap failure that shows the retryable `#start-bootstrap-error` whose retry recovers, toggling the session picker (and Escape) after a failure without a new request, refresh during generation, and an empty active pointer. | ADR 0011 |
+| `stream-error` | An `error` chunk inside a 200 SSE stream before any content or tool call fails the round and shows `#round-error` with the upstream message. One that arrives after a message tool call keeps the message and completes the round. | |
+| `sessions-picker` | Picker rows for ok, broken and version-mismatch saves; load, dup and rm; the sessions icon; sticky routing; archived-build links; Escape closes the picker even while the hidden `#prompt` holds focus, but not from a visible text field. | ADR 0011 |
+| `sessions-archive-continue` | An archived row's `[ continue with new room ]` with the content-pack request held: Escape and reopening keep the button disabled and "spinning up a new room…" on the row, one request is sent, and the room that arrives after the player went back to their game is seeded without moving the active pointer. A 402 shows the reason on the row and enables the button. When a broken active session forced the sessions screen with the picker closed, a finished room takes the player into it. | |
 | `persistence-reload` | Transcripts and budgets survive a reload, and a live-schema session round-trips position, inventory, content state, conversation and perception changes. | #173, #214 |
 | `witnessed-event-reload` | A live `go` produces a witnessed-event entry that survives reloads and appears in the witness's turns but never the actor's. | #196, #195, PRD #157, ADR 0015 |
 | `whisper-tampering` | Each Daemon's `<aiId>.txt` is the only source of its message history, and an entry injected into one Daemon's file appears in no other Daemon's prompt. | #213 |
-| `dev-inspector` | The dev world map in a real browser: a 5×5 room-only board, markers that carry identity only, the focus Vista tint, and narrow viewports. | #540, ADR 0015 |
+| `dev-inspector` | The dev world map in a real browser: a 5×5 room-only board, markers that carry identity only, the focus Vista tint, and narrow viewports; and daemon footers that are filled as soon as a restored session renders. | #540, ADR 0015 |
 | `mobile-overflow` | The app shell does not overflow horizontally at phone widths. | #554 |
 | `responsive-bento` | The ≤720px bento layout, strip-card previews, and the mobile header. | |
+| `byok-validation` | A key validation whose `/api/v1/auth/key` request never answers: a second click says "Validation in progress…" and sends nothing, the request is aborted after 15 s (fast-forwarded with `page.clock`) and offers Save unverified, and the button validates again afterwards. A validated key the browser refuses to store says so and keeps the dialog open. | |
 
 ### Notes on individual specs
 
@@ -226,13 +270,43 @@ specs that assert on generation failure check `#cap-hit` themselves.
   game view is attached. That way the loading-flow catch in `game.ts`, which
   shows the recovery UI, handles it, and not the start screen's catch, which
   bounces to start with `reason=broken`.
+- **endgame-choice-safety and bootstrap-session-switch.** What they guard is
+  that nothing happens when a held generation is finally released, and there
+  is no event for "nothing happened". They wait for the released response
+  and then a fixed settle delay before asserting on storage and the view.
+  The failed-archive tests make `archiveSession` throw by overwriting the
+  session's `meta.json` with text that is not JSON. The torn-save tests write
+  the session's `saving` marker, the same state an interrupted save leaves.
+- **endgame-cross-tab.** A storage event reaches the other tab within
+  milliseconds, so the stale-click ordering cannot be produced by timing.
+  Tab B installs a capturing `storage` listener in an init script, ahead of
+  the app's own, that calls `stopImmediatePropagation` once the spec sets
+  `window.__muteStorageEvents`. That stands in for a click that lands before
+  the event is processed. Tab A reaches the endgame with `?winImmediately=1`
+  and then reloads without it, so the round it plays after Continue does not
+  end the game again.
+- **bootstrap-session-switch.** The loading timeout is 300 s, so the spec
+  installs Playwright's clock before navigation and fast-forwards past it.
+  The timeout aborts the held request (counted through `requestfailed`), so
+  the response released afterwards goes to the new start screen's bootstrap;
+  the old flow can no longer succeed late, and the spec still checks that
+  nothing of it reaches the new session.
 - **start-screen.**
   - The mobile media query's `#panels.row { display: grid }` outranked
     `[hidden]` and leaked the chat panels onto the start screen.
   - JetBrains Mono ligates `**` and `***`, which misaligns a masked password,
     hence `font-variant-ligatures: none`.
-  - The SPA deliberately re-throws `CapHitError` after showing `#cap-hit`, for
-    dev-console diagnostics, so the cap-hit spec filters that one error out.
+  - The start view's promise still rejects with `CapHitError` after showing
+    `#cap-hit`. `main.ts` now catches and logs it, so it no longer arrives as
+    a `pageerror`; the cap-hit spec's filter for it is left as a guard.
+  - The non-cap failure spec answers persona synthesis with a 401, which is
+    not retried, so exactly one synthesis request precedes the error and the
+    retry click sends the second.
+  - The cap-hit stub sends the proxy's exact cap body (`rate_limit_exceeded`,
+    `per-ip-daily`); a bare 429 is not a cap hit. A companion spec sends a
+    provider-style 429 once and checks that generation retries and
+    `#cap-hit` stays hidden, because the proxy now passes upstream 429s
+    through.
   - The refresh-during-generation spec holds generation on a promise that never
     settles. Reloading aborts the in-flight request, so the test does not
     stall. The fast stub is installed before the reload.
@@ -256,11 +330,12 @@ specs that assert on generation failure check `#cap-hit` themselves.
     destination already lies in another Daemon's Vista. If the layout has
     none, it moves a witness to the cell behind the actor, opposite the step.
     The destination is then two steps from the witness (`2² = 4 ≤ 4`).
-  - The spec reloads before the action round. After a fresh new game,
-    `renderGame` runs twice (once for bootstrap loading, once after
-    generation), which registers two input listeners, and the first
-    closure's `personaNamesToId` is never populated, so `page.fill` may not
-    enable `#send`. The restore path renders once.
+  - The spec reloads before the action round. It was written when each
+    `renderGame` entry registered its own input listener: after a fresh new
+    game the first entry's closure never got `personaNamesToId`, so
+    `page.fill` might not enable `#send`. The view now keeps one context and
+    one listener per page, and the reload stays because the spec is about
+    what survives it.
   - The first round dispatched after that reload is round 0, so the witness
     sees `[Round 0] You watch *<actorId> walk <direction>.`. The write-time
     fan-out appends only to witnesses, never to the actor.
@@ -271,6 +346,10 @@ specs that assert on generation failure check `#cap-hit` themselves.
 - **dev-inspector.**
   - This is the only coverage of the real inspector DOM. The jsdom tests
     live under `src/spa/dev-inspector/__tests__/`.
+  - The footer test seals a `chat_lockout` into `engine.dat` and reloads,
+    because a complication chip is the one footer field that has content
+    before any round runs. Before the fix the footer was built empty on every
+    session render and filled only after the next round.
   - A persona handle can itself be `east` or `left`, or contain `v`, so
     direction checks run against the tooltip minus the handle and never
     against the handle text.

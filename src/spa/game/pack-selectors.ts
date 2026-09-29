@@ -45,11 +45,6 @@ export function standaloneObjectives(pack: ContentPack): WorldEntity[] {
 	);
 }
 
-export function objectiveSpaces(pack: ContentPack): WorldEntity[] {
-	const pairedSpaces = carryPairs(pack).map((p) => p.space);
-	return [...pairedSpaces, ...boundSpaces(pack)];
-}
-
 export function carryObjectById(
 	id: string,
 	pack: ContentPack,

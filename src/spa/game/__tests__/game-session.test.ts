@@ -421,7 +421,7 @@ describe("parallel tool calls integration (#238)", () => {
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
 		const startingBudgetUsd = 0.5;
-		const singleCallCostUsd = 1;
+		const singleCallCostUsd = 0.1;
 		let providerCallCount = 0;
 		const trackingProvider: RoundLLMProvider = {
 			async streamRound(_messages, _tools) {

@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,9 +9,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 
 const LOCAL_WORKER_BASE_URL = "http://localhost:8787";
-const WORKER_BASE_URL = process.env.WORKER_BASE_URL ?? LOCAL_WORKER_BASE_URL;
+const WORKER_BASE_URL = process.env.WORKER_BASE_URL || LOCAL_WORKER_BASE_URL;
 const IS_DEV_BUILD = WORKER_BASE_URL === LOCAL_WORKER_BASE_URL;
-const ASSETS_DIR = path.join(root, "dist", "assets");
+const DIST_DIR = process.env.SPA_DIST_DIR
+	? path.resolve(process.env.SPA_DIST_DIR)
+	: path.join(root, "dist");
+const ASSETS_DIR = path.join(DIST_DIR, "assets");
 const watchMode = process.argv.includes("--watch");
 
 const COMMIT_SHA = (() => {
@@ -38,7 +42,7 @@ const COMMIT_TIMESTAMP_MS = (() => {
 const PKG_VERSION = (() => {
 	try {
 		const raw = JSON.parse(
-			execSync("cat package.json", { cwd: root }).toString(),
+			readFileSync(path.join(root, "package.json"), "utf8"),
 		);
 		return typeof raw.version === "string" ? raw.version : "0.0.0";
 	} catch {
@@ -90,13 +94,18 @@ async function deleteStaleHashedAssets() {
 }
 await deleteStaleHashedAssets();
 
+function reportTemplateFailure(...details) {
+	console.error("[template-html]", ...details);
+	if (!watchMode) process.exitCode = 1;
+}
+
 const wireHashedAssetsIntoIndexHtmlPlugin = {
 	name: "template-html",
 	setup(build) {
 		build.onEnd(async (result) => {
 			try {
 				if (!result.metafile) {
-					console.error("[template-html] missing metafile in build result");
+					reportTemplateFailure("missing metafile in build result");
 					return;
 				}
 				let jsName = null;
@@ -108,7 +117,7 @@ const wireHashedAssetsIntoIndexHtmlPlugin = {
 					else if (base.endsWith(".css")) cssName = base;
 				}
 				if (!jsName || !cssName) {
-					console.error("[template-html] could not find hashed entry outputs", {
+					reportTemplateFailure("could not find hashed entry outputs", {
 						jsName,
 						cssName,
 					});
@@ -121,9 +130,9 @@ const wireHashedAssetsIntoIndexHtmlPlugin = {
 				const html = src
 					.replace("./assets/index.css", `./assets/${cssName}`)
 					.replace("./assets/index.js", `./assets/${jsName}`);
-				await fs.writeFile(path.join(root, "dist/index.html"), html);
+				await fs.writeFile(path.join(DIST_DIR, "index.html"), html);
 			} catch (err) {
-				console.error("[template-html] failed:", err);
+				reportTemplateFailure("failed:", err);
 			}
 		});
 	},
@@ -158,9 +167,12 @@ if (watchMode) {
 } else {
 	await ctx.rebuild();
 	await ctx.dispose();
-	console.log("Build complete: dist/index.html + dist/assets/index.{js,css}");
-
-	generateVersionListPage();
+	if (process.exitCode) {
+		console.error("Build failed: dist/index.html was not written");
+	} else {
+		console.log("Build complete: dist/index.html + dist/assets/index.{js,css}");
+		generateVersionListPage();
+	}
 }
 
 function generateVersionListPage() {

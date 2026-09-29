@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame } from "./helpers";
+import { collectPageErrors, expectNoPageErrors, goToGame } from "./helpers";
 
 const TWENTY_WORD_REPLY_CHUNKS = [
 	"one ",
@@ -29,8 +29,7 @@ const FULL_REPLY_TEXT = TWENTY_WORD_REPLY_CHUNKS.join("");
 test("AI message content lands in the addressed panel after the round", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page, {
 		sse: TWENTY_WORD_REPLY_CHUNKS,

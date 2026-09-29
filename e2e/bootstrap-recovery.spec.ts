@@ -158,3 +158,45 @@ test("abandon path: recovery UI visible, click abandon to return to start with b
 	});
 	await expect(page.locator("main")).toHaveAttribute("data-reason", "broken");
 });
+
+test("the start screen's reason banner does not follow the player into the game", async ({
+	page,
+}) => {
+	let failContentPacks = true;
+	await stubNewGameLLM(page, { sse: ["stub", "reply"] });
+	await page.route("**/v1/chat/completions", async (route, request) => {
+		const body = JSON.parse(request.postData() ?? "null") as Parameters<
+			typeof classifyJsonRequest
+		>[0];
+		if (failContentPacks && classifyJsonRequest(body) === "dual-content-pack") {
+			await route.abort("failed");
+			return;
+		}
+		await route.fallback();
+	});
+
+	await page.goto("/?skipDialup=1");
+	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
+	await page.locator("#password").fill("password");
+	await page.locator("#begin").click();
+	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
+		timeout: 30_000,
+	});
+	await page.locator("#bootstrap-recovery-abandon").click();
+
+	const warning = page.locator("#persistence-warning");
+	await expect(page.locator('main[data-view="start"]')).toBeAttached({
+		timeout: 5_000,
+	});
+	await expect(warning).toBeVisible();
+
+	failContentPacks = false;
+	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
+	await page.locator("#password").fill("password");
+	await page.locator("#begin").click();
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 10_000,
+	});
+	await expect(page.locator("#composer")).toBeVisible({ timeout: 30_000 });
+	await expect(warning).toBeHidden();
+});

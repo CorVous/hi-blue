@@ -160,18 +160,6 @@ export type RoundActionRecord = {
 	kind: "tool_success" | "tool_failure" | "message" | "pass" | "lockout";
 };
 
-export interface PhysicalActionRecord {
-	round: number;
-	actor: AiId;
-	actorCellAtAction: GridPosition;
-	kind: "go" | "pick_up" | "put_down" | "use";
-	item?: string;
-	useOutcome?: string;
-	placementFlavorRaw?: string;
-	direction?: CardinalDirection;
-	witnessSpatial: Record<AiId, PersonaSpatialState>;
-}
-
 export type ConversationEntry =
 	| {
 			kind: "message";
@@ -195,7 +183,7 @@ export type ConversationEntry =
 	| {
 			kind: "action-failure";
 			round: number;
-			tool: ActionFailureTool;
+			tool: ToolName;
 			reason: string;
 	  }
 	| {
@@ -259,8 +247,6 @@ export interface GameState {
 }
 
 export type ToolName = "pick_up" | "put_down" | "use" | "go" | "message";
-
-export type ActionFailureTool = ToolName;
 
 export interface ToolCall {
 	name: ToolName;

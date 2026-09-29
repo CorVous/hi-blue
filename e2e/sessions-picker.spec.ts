@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
+	activeSessionId,
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	obfuscateEngineBlob,
@@ -59,8 +61,7 @@ function expectedSeededEngineBytes(schemaVersion: number): string {
 test("picker renders ok/broken/version-mismatch rows with correct tags and buttons", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		localStorage.setItem("hi-blue:active-session", "0xAAAA");
@@ -119,8 +120,7 @@ test("picker renders ok/broken/version-mismatch rows with correct tags and butto
 test("[ load ] flow: click load on non-active row → game view", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
@@ -147,9 +147,7 @@ test("[ load ] flow: click load on non-active row → game view", async ({
 
 	await expect(page.locator('main[data-view="game"]')).toBeAttached();
 
-	const activeId = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
+	const activeId = await activeSessionId(page);
 	expect(activeId).toBe("0xBBBB");
 
 	await expectNoPageErrors(page, pageErrors);
@@ -158,8 +156,7 @@ test("[ load ] flow: click load on non-active row → game view", async ({
 test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		localStorage.setItem("hi-blue:active-session", "0xAAAA");
@@ -181,17 +178,14 @@ test("[ dup ] flow: click dup → two rows, active pointer unchanged", async ({
 
 	await expect(page.locator(".session-row")).toHaveCount(2);
 
-	const activeId = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
+	const activeId = await activeSessionId(page);
 	expect(activeId).toBe("0xAAAA");
 
 	await expectNoPageErrors(page, pageErrors);
 });
 
 test("[ rm ] confirm/cancel flow", async ({ page }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		localStorage.setItem("hi-blue:active-session", "0xAAAA");
@@ -230,8 +224,7 @@ test("[ rm ] confirm/cancel flow", async ({ page }) => {
 });
 
 test("sessions-icon click → sessions view", async ({ page }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await goToGame(page);
 
@@ -246,8 +239,7 @@ test("sessions-icon click → sessions view", async ({ page }) => {
 });
 
 test("sessions-icon toggles back to game on second click", async ({ page }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await goToGame(page);
 	const sessionsIcon = page.locator("#sessions-icon");
@@ -265,8 +257,7 @@ test("sessions-icon toggles back to game on second click", async ({ page }) => {
 test("refresh while picker is open lands on the game view (picker state is in-memory)", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await goToGame(page);
 	await page.locator("#sessions-icon").click();
@@ -286,8 +277,7 @@ test("refresh while picker is open lands on the game view (picker state is in-me
 });
 
 test("Escape on the picker returns to the game view", async ({ page }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await goToGame(page);
 	await page.locator("#sessions-icon").click();
@@ -303,8 +293,7 @@ test("Escape on the picker returns to the game view", async ({ page }) => {
 test("broken-session banner: active session with missing engine.dat → sessions view with reason", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		localStorage.setItem("hi-blue:active-session", "0xBROK");
@@ -328,8 +317,7 @@ test("broken-session banner: active session with missing engine.dat → sessions
 test("version-mismatch banner: active session with stale schema → sessions view with reason", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		localStorage.setItem("hi-blue:active-session", "0xSTAL");
@@ -356,8 +344,7 @@ test("version-mismatch banner: active session with stale schema → sessions vie
 test("version-mismatch archive link: a session stamped with retired schema 11 links to the archived build", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		localStorage.setItem("hi-blue:active-session", "0xV11X");
@@ -410,8 +397,7 @@ test("version-mismatch archive link: a session stamped with retired schema 11 li
 test("[ + new session ] flow: click → start view, new active pointer", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
@@ -433,11 +419,53 @@ test("[ + new session ] flow: click → start view, new active pointer", async (
 	await expect(page.locator('main[data-view="start"]')).toBeAttached();
 	await expect(page.locator("#start-screen")).toBeVisible();
 
-	const activeId = await page.evaluate(() =>
-		localStorage.getItem("hi-blue:active-session"),
-	);
+	const activeId = await activeSessionId(page);
 	expect(activeId).not.toBe("0xAAAA");
 	expect(activeId).toMatch(/^0x[0-9A-Fa-f]{4}$/i);
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("Escape closes the picker while the hidden prompt still holds focus", async ({
+	page,
+}) => {
+	const pageErrors = collectPageErrors(page);
+
+	await goToGame(page);
+	await page.locator("#sessions-icon").click();
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+	await expect(page.locator("#composer")).toBeHidden();
+
+	await page.evaluate(() => {
+		document
+			.querySelector("#prompt")
+			?.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+			);
+	});
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
+	await expect(page.locator("#composer")).toBeVisible();
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("Escape in a visible text field on the picker leaves the picker open", async ({
+	page,
+}) => {
+	const pageErrors = collectPageErrors(page);
+
+	await goToGame(page);
+	await page.locator("#sessions-icon").click();
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+
+	await page.evaluate(() => {
+		const field = document.createElement("input");
+		document.querySelector("#sessions-screen")?.appendChild(field);
+		field.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+		);
+	});
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
 
 	await expectNoPageErrors(page, pageErrors);
 });

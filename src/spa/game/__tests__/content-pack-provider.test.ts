@@ -1,52 +1,39 @@
 import { describe, expect, it, vi } from "vitest";
-import { CapHitError } from "../../llm-client.js";
+import { CapHitError, HttpStatusError } from "../../llm-client.js";
+import { validateBoundDualContentPack } from "../binding-aware-validator.js";
 import {
 	BrowserContentPackProvider,
-	CONTENT_PACK_SYSTEM_PROMPT,
+	buildCorrectiveFeedback,
 	DUAL_CONTENT_PACK_SYSTEM_PROMPT,
 } from "../content-pack-provider.js";
 
 const OUTER_ATTEMPT_BUDGET = 3;
 const FIRST_RETRY_BACKOFF_MS = 1_000;
 
-describe("CONTENT_PACK_SYSTEM_PROMPT", () => {
+describe("DUAL_CONTENT_PACK_SYSTEM_PROMPT — prose tells", () => {
 	it("requires the prose tell at MUST strength (issue #253)", () => {
-		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
+		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(
 			/examineDescription[\s\S]*MUST[\s\S]*paired space/,
 		);
 	});
 
-	it("includes a worked example so the model knows what a tell looks like", () => {
-		expect(CONTENT_PACK_SYSTEM_PROMPT.toLowerCase()).toContain("carry-0");
-	});
-});
-
-describe("CONTENT_PACK_SYSTEM_PROMPT — convergence actor + prose-tell rules", () => {
-	it("documents the new convergenceTier1ActorFlavor and convergenceTier2ActorFlavor fields", () => {
-		expect(CONTENT_PACK_SYSTEM_PROMPT).toContain("convergenceTier1ActorFlavor");
-		expect(CONTENT_PACK_SYSTEM_PROMPT).toContain("convergenceTier2ActorFlavor");
+	it("documents convergenceTier1ActorFlavor and convergenceTier2ActorFlavor", () => {
+		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toContain(
+			"convergenceTier1ActorFlavor",
+		);
+		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toContain(
+			"convergenceTier2ActorFlavor",
+		);
 	});
 
 	it("requires the convergence shared-presence prose-tell hint on examineDescription", () => {
-		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
+		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(
 			/MUST[\s\S]*(shared occupancy|another presence)/,
 		);
 	});
-});
 
-describe("CONTENT_PACK_SYSTEM_PROMPT — issue #335 rules", () => {
-	it("describes activationFlavor as a field on objective_space", () => {
-		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(/activationFlavor/);
-	});
-
-	it("requires the objective_space prose tell at MUST strength", () => {
-		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
-			/use_space[\s\S]*examineDescription[\s\S]*MUST/i,
-		);
-	});
-
-	it("forbids {actor} in activationFlavor at MUST strength", () => {
-		expect(CONTENT_PACK_SYSTEM_PROMPT).toMatch(
+	it("forbids {actor} in activationFlavor", () => {
+		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(
 			/activationFlavor[\s\S]*no.*\{actor\}/i,
 		);
 	});
@@ -65,307 +52,6 @@ describe("DUAL_CONTENT_PACK_SYSTEM_PROMPT — issue #335 rules", () => {
 		expect(DUAL_CONTENT_PACK_SYSTEM_PROMPT).toMatch(
 			/use_space[\s\S]*examineDescription[\s\S]*MUST/i,
 		);
-	});
-});
-
-describe("BrowserContentPackProvider — outer-retry layer", () => {
-	const baseInput: import("../content-pack-provider.js").BindingContentPackInput =
-		{
-			phases: [
-				{
-					setting: "abandoned subway station",
-					theme: "mundane",
-					weather: "overcast",
-					timeOfDay: "night",
-					bindings: [
-						{
-							type: "carry",
-							objectId: "carry-0-obj",
-							spaceId: "carry-0-space",
-						},
-					],
-					decoyIds: ["decoy-0", "decoy-1"],
-					obstacleCount: 1,
-				},
-			],
-		};
-
-	function buildValidPack(): unknown {
-		return {
-			pack: {
-				setting: "abandoned subway station",
-				wallName: "concrete barrier",
-				bindings: [
-					{
-						id: "carry-0",
-						type: "carry",
-						object: {
-							id: "carry-0-obj",
-							name: "Iron Key",
-							examineDescription:
-								"An iron key. It looks like it belongs on the brass pedestal.",
-							useOutcome: "You turn the key over in your hands.",
-							placementFlavor: "{actor} sets the key on its mount.",
-							proximityFlavor: "The key hums faintly near the pedestal.",
-						},
-						space: {
-							id: "carry-0-space",
-							name: "Brass Pedestal",
-							examineDescription:
-								"A sturdy brass mount with a subtle indentation on its surface.",
-							proximityFlavor: "The pedestal thrums softly nearby.",
-						},
-					},
-				],
-				decoys: [
-					{
-						id: "decoy-0",
-						name: "Brass Disc",
-						examineDescription: "A small decorative disc of tarnished brass.",
-						proximityFlavor: "The disc gleams faintly.",
-						useOutcome: "Nothing happens.",
-					},
-					{
-						id: "decoy-1",
-						name: "Old Coin",
-						examineDescription: "A weathered coin from a past era.",
-						proximityFlavor: "The coin catches the light.",
-						useOutcome: "Nothing happens.",
-					},
-				],
-				obstacles: [
-					{
-						id: "obstacle-0",
-						name: "Rusted Gate",
-						examineDescription: "An old rusted gate blocking the path.",
-						shiftFlavor:
-							"The rusted gate scrapes along the floor with a grinding shriek.",
-					},
-				],
-			},
-		};
-	}
-
-	it("Test 1 — Invalid binding pack on first call → corrective feedback → success on second call", async () => {
-		const mockChatFn = vi.fn();
-
-		const brokenPack = buildValidPack();
-		const packObj = (brokenPack as Record<string, unknown>).pack as
-			| Record<string, unknown>
-			| undefined;
-		if (packObj) {
-			const bindings = packObj.bindings as
-				| Record<string, unknown>[]
-				| undefined;
-			if (bindings?.[0]) {
-				const space = bindings[0].space as Record<string, unknown>;
-				delete space.examineDescription;
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack),
-			reasoning: null,
-		});
-
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(buildValidPack()),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const result = await provider.generateContentPacks(baseInput);
-
-		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(
-			result.phases[0]?.rawPack.bindings?.[0]?.space?.examineDescription,
-		).toBe("A sturdy brass mount with a subtle indentation on its surface.");
-
-		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
-			| Array<{ role: string; content: string }>
-			| undefined;
-		expect(call2Messages).toBeDefined();
-		const correctionTurn = call2Messages?.find((msg) =>
-			msg.content.includes("Your previous attempt failed validation"),
-		);
-		expect(correctionTurn).toBeDefined();
-	});
-
-	it("Test 2 — Two consecutive invalid responses → success on third call", async () => {
-		const mockChatFn = vi.fn();
-
-		const brokenPack1 = buildValidPack();
-		const packObj1 = (brokenPack1 as Record<string, unknown>).pack as
-			| Record<string, unknown>
-			| undefined;
-		if (packObj1) {
-			const bindings = packObj1.bindings as
-				| Record<string, unknown>[]
-				| undefined;
-			if (bindings?.[0]) {
-				const obj = bindings[0].object as Record<string, unknown>;
-				obj.placementFlavor = "Sets the key on its mount.";
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack1),
-			reasoning: null,
-		});
-
-		const brokenPack2 = buildValidPack();
-		const packObj2 = (brokenPack2 as Record<string, unknown>).pack as
-			| Record<string, unknown>
-			| undefined;
-		if (packObj2) {
-			const bindings = packObj2.bindings as
-				| Record<string, unknown>[]
-				| undefined;
-			if (bindings?.[0]) {
-				const obj = bindings[0].object as Record<string, unknown>;
-				delete obj.useOutcome;
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack2),
-			reasoning: null,
-		});
-
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(buildValidPack()),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const result = await provider.generateContentPacks(baseInput);
-
-		expect(mockChatFn).toHaveBeenCalledTimes(3);
-		expect(result.phases[0]?.rawPack.bindings?.[0]?.object?.useOutcome).toBe(
-			"You turn the key over in your hands.",
-		);
-	});
-
-	it("Test 3 — Budget exhaustion after three invalid responses → throws ContentPackError", async () => {
-		const mockChatFn = vi.fn();
-
-		const brokenPack = buildValidPack();
-		const packObj = (brokenPack as Record<string, unknown>).pack as
-			| Record<string, unknown>
-			| undefined;
-		if (packObj) {
-			const bindings = packObj.bindings as
-				| Record<string, unknown>[]
-				| undefined;
-			if (bindings?.[0]) {
-				const obj = bindings[0].object as Record<string, unknown>;
-				delete obj.examineDescription;
-			}
-		}
-		mockChatFn.mockResolvedValue({
-			content: JSON.stringify(brokenPack),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-
-		await expect(provider.generateContentPacks(baseInput)).rejects.toThrow(
-			/exhausted retry budget/,
-		);
-		expect(mockChatFn).toHaveBeenCalledTimes(OUTER_ATTEMPT_BUDGET);
-	});
-
-	it("Test 4 — corrective feedback message is present on second outer attempt", async () => {
-		const mockChatFn = vi.fn();
-
-		const brokenPack = buildValidPack();
-		const packObj = (brokenPack as Record<string, unknown>).pack as
-			| Record<string, unknown>
-			| undefined;
-		if (packObj) {
-			const bindings = packObj.bindings as
-				| Record<string, unknown>[]
-				| undefined;
-			if (bindings?.[0]) {
-				const obj = bindings[0].object as Record<string, unknown>;
-				delete obj.name;
-			}
-		}
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack),
-			reasoning: null,
-		});
-
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(buildValidPack()),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const result = await provider.generateContentPacks(baseInput);
-
-		expect(mockChatFn).toHaveBeenCalledTimes(2);
-
-		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
-			| Array<{ role: string; content: string }>
-			| undefined;
-		expect(call2Messages).toBeDefined();
-		const correctionTurn = call2Messages?.find((msg) =>
-			msg.content.includes("Your previous attempt failed validation"),
-		);
-		expect(correctionTurn).toBeDefined();
-
-		expect(result.phases[0]?.rawPack.bindings?.[0]?.object?.name).toBe(
-			"Iron Key",
-		);
-	});
-
-	it("Test 5 — JSON parse failure on initial response → backoff → success", async () => {
-		vi.useFakeTimers();
-
-		const mockChatFn = vi.fn();
-
-		mockChatFn.mockResolvedValueOnce({
-			content: "{not valid json",
-			reasoning: null,
-		});
-
-		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(buildValidPack()),
-			reasoning: null,
-		});
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		const promise = provider.generateContentPacks(baseInput);
-
-		await vi.waitFor(() => expect(mockChatFn).toHaveBeenCalledTimes(1));
-
-		await vi.advanceTimersByTimeAsync(FIRST_RETRY_BACKOFF_MS);
-
-		const result = await promise;
-
-		vi.useRealTimers();
-
-		expect(mockChatFn).toHaveBeenCalledTimes(2);
-		expect(result.phases[0]?.rawPack.bindings?.[0]?.object?.name).toBe(
-			"Iron Key",
-		);
-	});
-
-	it("Test 6 — CapHitError short-circuits", async () => {
-		const mockChatFn = vi.fn();
-
-		mockChatFn.mockRejectedValueOnce(
-			new CapHitError({
-				message: "rate limit exceeded",
-				reason: "global-daily",
-				retryAfterSec: 3600,
-			}),
-		);
-
-		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-
-		await expect(provider.generateContentPacks(baseInput)).rejects.toThrow(
-			CapHitError,
-		);
-		expect(mockChatFn).toHaveBeenCalledTimes(1);
 	});
 });
 
@@ -571,6 +257,77 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 		expect(mockChatFn).toHaveBeenCalledTimes(1);
 	});
 
+	it.each([
+		400, 401, 402, 403,
+	])("an HTTP %i rethrows at once without retrying", async (status) => {
+		const mockChatFn = vi.fn().mockRejectedValue(
+			new HttpStatusError({
+				status,
+				statusText: "",
+				upstreamMessage: "No auth credentials found",
+				retryAfterSec: null,
+			}),
+		);
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+
+		await expect(
+			provider.generateDualContentPacks(dualInput),
+		).rejects.toMatchObject({
+			status,
+			upstreamMessage: "No auth credentials found",
+		});
+		expect(mockChatFn).toHaveBeenCalledTimes(1);
+	});
+
+	it("passes its abort signal to every call and stops retrying once aborted", async () => {
+		const controller = new AbortController();
+		const mockChatFn = vi.fn().mockImplementation(async () => {
+			controller.abort();
+			throw new DOMException("aborted", "AbortError");
+		});
+
+		const provider = new BrowserContentPackProvider({
+			chatFn: mockChatFn,
+			signal: controller.signal,
+		});
+
+		await expect(provider.generateDualContentPacks(dualInput)).rejects.toThrow(
+			"aborted",
+		);
+		expect(mockChatFn).toHaveBeenCalledTimes(1);
+		expect(mockChatFn.mock.calls[0]?.[0]?.signal).toBe(controller.signal);
+	});
+
+	it("waits for a longer Retry-After before retrying a retryable HTTP error", async () => {
+		vi.useFakeTimers();
+		const mockChatFn = vi.fn();
+		mockChatFn.mockRejectedValueOnce(
+			new HttpStatusError({
+				status: 429,
+				statusText: "Too Many Requests",
+				upstreamMessage: "Provider rate limited",
+				retryAfterSec: 3,
+			}),
+		);
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(buildDualResponse()),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const promise = provider.generateDualContentPacks(dualInput);
+
+		await vi.waitFor(() => expect(mockChatFn).toHaveBeenCalledTimes(1));
+		await vi.advanceTimersByTimeAsync(FIRST_RETRY_BACKOFF_MS);
+		expect(mockChatFn).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(2_000);
+		await promise;
+		vi.useRealTimers();
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
+	});
+
 	it("Test 4 — budget exhaustion bubbles the last ContentPackError", async () => {
 		const mockChatFn = vi.fn();
 
@@ -629,46 +386,41 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 });
 
 describe("BrowserContentPackProvider — corrective feedback strengthening", () => {
-	const carryInput: import("../content-pack-provider.js").BindingContentPackInput =
-		{
+	function dualInputFor(
+		bindings: import("../binding-prompt-builder.js").BindingSkeleton[],
+	): import("../content-pack-provider.js").DualBindingContentPackInput {
+		return {
 			phases: [
 				{
-					setting: "abandoned subway station",
+					settingA: "abandoned subway station",
+					settingB: "sun-baked salt flat",
 					theme: "mundane",
-					weather: "overcast",
-					timeOfDay: "night",
-					bindings: [
-						{
-							type: "carry",
-							objectId: "carry-0-obj",
-							spaceId: "carry-0-space",
-						},
-					],
+					weatherA: "overcast",
+					weatherB: "clear",
+					timeOfDayA: "night",
+					timeOfDayB: "midday",
+					bindings,
 					decoyIds: ["decoy-0", "decoy-1"],
 					obstacleCount: 1,
 				},
 			],
 		};
+	}
 
-	const useSpaceInput: import("../content-pack-provider.js").BindingContentPackInput =
-		{
-			phases: [
-				{
-					setting: "abandoned subway station",
-					theme: "mundane",
-					weather: "overcast",
-					timeOfDay: "night",
-					bindings: [
-						{
-							type: "use_space",
-							spaceId: "useSpace-0-space",
-						},
-					],
-					decoyIds: ["decoy-0", "decoy-1"],
-					obstacleCount: 1,
-				},
-			],
+	function asDualResponse(response: unknown): unknown {
+		const pack = (response as { pack: unknown }).pack;
+		return {
+			phases: [{ packA: pack, packB: structuredClone(pack) }],
 		};
+	}
+
+	const carryInput = dualInputFor([
+		{ type: "carry", objectId: "carry-0-obj", spaceId: "carry-0-space" },
+	]);
+
+	const useSpaceInput = dualInputFor([
+		{ type: "use_space", spaceId: "useSpace-0-space" },
+	]);
 
 	function buildValidCarryPack(): unknown {
 		return {
@@ -790,16 +542,16 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 		];
 		decoys[0].examineDescription =
 			"An old switch you might find in a forgotten panel.";
-		const brokenRaw = JSON.stringify(brokenPack);
+		const brokenRaw = JSON.stringify(asDualResponse(brokenPack));
 		mockChatFn.mockResolvedValueOnce({ content: brokenRaw, reasoning: null });
 
 		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(buildValidCarryPack()),
+			content: JSON.stringify(asDualResponse(buildValidCarryPack())),
 			reasoning: null,
 		});
 
 		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		await provider.generateContentPacks(carryInput);
+		await provider.generateDualContentPacks(carryInput);
 
 		expect(mockChatFn).toHaveBeenCalledTimes(2);
 
@@ -822,6 +574,32 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 		expect(correctiveIdx).toBeGreaterThan(assistantIdx);
 	});
 
+	it("groups identical errors from packA and packB under separate pack labels", () => {
+		const brokenPack = buildValidCarryPack();
+		const packObj = (brokenPack as Record<string, unknown>).pack as Record<
+			string,
+			unknown
+		>;
+		const bindings = packObj.bindings as [
+			Record<string, unknown>,
+			...Record<string, unknown>[],
+		];
+		delete (bindings[0].object as Record<string, unknown>).name;
+		const result = validateBoundDualContentPack(asDualResponse(brokenPack), {
+			skeletons: carryInput.phases[0]?.bindings ?? [],
+			decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
+			obstacleCount: 1,
+		});
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+
+		const feedback = buildCorrectiveFeedback(result.errors);
+		expect(feedback).toContain("For packA carry binding carry-0:");
+		expect(feedback).toContain("For packB carry binding carry-0:");
+		const missingName = /missing required field "name"/g;
+		expect(feedback.match(missingName)).toHaveLength(2);
+	});
+
 	it("names the offending keyword in the corrective feedback for a forbidden-use-cue decoy", async () => {
 		const mockChatFn = vi.fn();
 
@@ -837,17 +615,17 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 		decoys[0].examineDescription =
 			"An old switch you might find in a forgotten panel.";
 		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack),
+			content: JSON.stringify(asDualResponse(brokenPack)),
 			reasoning: null,
 		});
 
 		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(buildValidCarryPack()),
+			content: JSON.stringify(asDualResponse(buildValidCarryPack())),
 			reasoning: null,
 		});
 
 		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		await provider.generateContentPacks(carryInput);
+		await provider.generateDualContentPacks(carryInput);
 
 		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
 			| Array<{ role: string; content: string }>
@@ -876,17 +654,17 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 		const space = bindings[0].space as Record<string, unknown>;
 		space.examineDescription = "A featureless surface set into the wall.";
 		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(brokenPack),
+			content: JSON.stringify(asDualResponse(brokenPack)),
 			reasoning: null,
 		});
 
 		mockChatFn.mockResolvedValueOnce({
-			content: JSON.stringify(buildValidUseSpacePack()),
+			content: JSON.stringify(asDualResponse(buildValidUseSpacePack())),
 			reasoning: null,
 		});
 
 		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
-		await provider.generateContentPacks(useSpaceInput);
+		await provider.generateDualContentPacks(useSpaceInput);
 
 		const call2Messages = mockChatFn.mock.calls[1]?.[0]?.messages as
 			| Array<{ role: string; content: string }>

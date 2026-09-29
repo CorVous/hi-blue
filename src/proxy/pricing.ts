@@ -1,6 +1,6 @@
 import { PINNED_MODEL, PINNED_PROVIDER } from "../model.js";
 
-export const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
+const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 
 export function modelEndpointsUrl(model: string): string {
 	return `${OPENROUTER_MODELS_URL}/${model}/endpoints`;
@@ -45,13 +45,29 @@ function usdPerToken(value: string | undefined): number {
 		: Number.NaN;
 }
 
-function peakPricing(endpoint: EndpointRow): ModelPricing {
-	const rows = [endpoint.pricing ?? {}, ...(endpoint.pricing?.overrides ?? [])];
-	const promptUsd = Math.max(...rows.map((r) => usdPerToken(r.prompt)));
-	const completionUsd = Math.max(...rows.map((r) => usdPerToken(r.completion)));
-	if (!Number.isFinite(promptUsd) || !Number.isFinite(completionUsd)) {
+function peakUsdPerToken(
+	base: string | undefined,
+	overrides: (string | undefined)[],
+): number {
+	const baseUsd = usdPerToken(base);
+	if (!Number.isFinite(baseUsd)) {
 		throw new Error("pricing parse failed");
 	}
+	const overrideUsd = overrides.map(usdPerToken).filter(Number.isFinite);
+	return Math.max(baseUsd, ...overrideUsd);
+}
+
+function peakPricing(endpoint: EndpointRow): ModelPricing {
+	const base = endpoint.pricing ?? {};
+	const overrides = endpoint.pricing?.overrides ?? [];
+	const promptUsd = peakUsdPerToken(
+		base.prompt,
+		overrides.map((r) => r.prompt),
+	);
+	const completionUsd = peakUsdPerToken(
+		base.completion,
+		overrides.map((r) => r.completion),
+	);
 	return {
 		promptMicroUsdPerToken: promptUsd * USD_TO_MICRO_USD,
 		completionMicroUsdPerToken: completionUsd * USD_TO_MICRO_USD,

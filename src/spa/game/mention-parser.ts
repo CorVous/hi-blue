@@ -3,7 +3,6 @@ import type { AiId } from "./types.js";
 const MENTION_SIGIL = "*";
 const MENTION_PATTERN = /(?:^|\s)\*([A-Za-z0-9]+)/g;
 const TRAILING_PUNCTUATION = /[.,!?;:]/;
-const ENDS_WITH_PUNCTUATION = /[.,!?;:]$/;
 
 export interface MentionMatch {
 	aiId: AiId;
@@ -33,13 +32,6 @@ export function findFirstMention(
 	return null;
 }
 
-export function parseFirstMention(
-	text: string,
-	personaNamesToId: ReadonlyMap<string, AiId>,
-): AiId | null {
-	return findFirstMention(text, personaNamesToId)?.aiId ?? null;
-}
-
 export function applyAddresseeChange({
 	text,
 	selectionStart,
@@ -59,14 +51,11 @@ export function applyAddresseeChange({
 	for (const match of text.matchAll(MENTION_PATTERN)) {
 		const mentionedName = match[1];
 		if (!mentionedName) continue;
-		const name = ENDS_WITH_PUNCTUATION.test(mentionedName)
-			? mentionedName.slice(0, -1)
-			: mentionedName;
-		const id = personaNamesToId.get(name.toLowerCase());
+		const id = personaNamesToId.get(mentionedName.toLowerCase());
 		if (id !== undefined) {
 			const atStart = (match.index ?? 0) + match[0].indexOf(MENTION_SIGIL);
 			foundAtStart = atStart;
-			foundNameEnd = atStart + MENTION_SIGIL.length + name.length;
+			foundNameEnd = atStart + MENTION_SIGIL.length + mentionedName.length;
 			break;
 		}
 	}
@@ -100,43 +89,36 @@ export function applyAddresseeChange({
 	}
 }
 
+function mapPersonas<P, K, V>(
+	personas: Record<AiId, P>,
+	entryFor: (id: AiId, persona: P) => [K, V],
+): Map<K, V> {
+	return new Map(
+		(Object.entries(personas) as [AiId, P][]).map(([id, persona]) =>
+			entryFor(id, persona),
+		),
+	);
+}
+
 export function buildPersonaNameMap(
 	personas: Record<AiId, { name: string }>,
 ): Map<string, AiId> {
-	const map = new Map<string, AiId>();
-	for (const [id, persona] of Object.entries(personas) as [
-		AiId,
-		{ name: string },
-	][]) {
-		map.set(persona.name.toLowerCase(), id);
-	}
-	return map;
+	return mapPersonas(personas, (id, persona) => [
+		persona.name.toLowerCase(),
+		id,
+	]);
 }
 
 export function buildPersonaColorMap(
 	personas: Record<AiId, { color: string }>,
 ): Map<AiId, string> {
-	const map = new Map<AiId, string>();
-	for (const [id, persona] of Object.entries(personas) as [
-		AiId,
-		{ color: string },
-	][]) {
-		map.set(id, persona.color);
-	}
-	return map;
+	return mapPersonas(personas, (id, persona) => [id, persona.color]);
 }
 
 export function buildPersonaDisplayNameMap(
 	personas: Record<AiId, { name: string }>,
 ): Map<AiId, string> {
-	const map = new Map<AiId, string>();
-	for (const [id, persona] of Object.entries(personas) as [
-		AiId,
-		{ name: string },
-	][]) {
-		map.set(id, persona.name);
-	}
-	return map;
+	return mapPersonas(personas, (id, persona) => [id, persona.name]);
 }
 
 export type MentionSegment =

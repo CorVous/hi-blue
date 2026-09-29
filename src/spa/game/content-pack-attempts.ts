@@ -10,7 +10,7 @@ const FAILED_ATTEMPT_LOG_PREFIX = "[content-pack:attempt]";
 
 export type AttemptOutcome = "ok" | "validation-failed" | "hard-error";
 
-export interface AttemptValidationError {
+interface AttemptValidationError {
 	retryUnitKind: string;
 	rule: string;
 	entityId: string;

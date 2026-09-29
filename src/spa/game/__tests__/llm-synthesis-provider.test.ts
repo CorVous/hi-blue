@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CapHitError } from "../../llm-client.js";
+import { CapHitError, HttpStatusError } from "../../llm-client.js";
 import type { SynthesisInput } from "../llm-synthesis-provider.js";
 import {
 	BrowserSynthesisProvider,
@@ -189,9 +189,12 @@ describe("BrowserSynthesisProvider", () => {
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 		vi.stubGlobal("__DEV__", true);
 		vi.stubGlobal("localStorage", { getItem: () => null });
+		vi.useFakeTimers();
+		vi.setTimerTickMode("nextTimerAsync");
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
 	});
@@ -253,6 +256,106 @@ describe("BrowserSynthesisProvider", () => {
 			provider.synthesizePersonas(THREE_INPUTS),
 		).rejects.toBeInstanceOf(CapHitError);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		400, 401, 402, 403,
+	])("throws an HTTP %i at once with OpenRouter's message, without retry", async (status) => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(
+				new Response(
+					JSON.stringify({ error: { message: "Insufficient credits" } }),
+					{ status, headers: { "Content-Type": "application/json" } },
+				),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const error = await new BrowserSynthesisProvider()
+			.synthesizePersonas(THREE_INPUTS)
+			.catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(HttpStatusError);
+		expect((error as HttpStatusError).upstreamMessage).toBe(
+			"Insufficient credits",
+		);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("backs off before its one retry, for longer when Retry-After asks", async () => {
+		vi.setTimerTickMode("manual");
+		const chatFn = vi
+			.fn()
+			.mockRejectedValueOnce(
+				new HttpStatusError({
+					status: 429,
+					statusText: "Too Many Requests",
+					upstreamMessage: "Provider rate limited",
+					retryAfterSec: 4,
+				}),
+			)
+			.mockResolvedValueOnce({
+				content: JSON.stringify({ personas: CANNED_PERSONAS }),
+				reasoning: null,
+			});
+
+		const promise = new BrowserSynthesisProvider({
+			chatFn,
+		}).synthesizePersonas(THREE_INPUTS);
+
+		await vi.waitFor(() => expect(chatFn).toHaveBeenCalledTimes(1));
+		await vi.advanceTimersByTimeAsync(3_900);
+		expect(chatFn).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(100);
+		const result = await promise;
+
+		expect(chatFn).toHaveBeenCalledTimes(2);
+		expect(result.personas).toEqual(CANNED_PERSONAS);
+	});
+
+	it("caps a huge Retry-After so the retry still happens soon", async () => {
+		vi.setTimerTickMode("manual");
+		const chatFn = vi
+			.fn()
+			.mockRejectedValueOnce(
+				new HttpStatusError({
+					status: 503,
+					statusText: "Service Unavailable",
+					upstreamMessage: null,
+					retryAfterSec: 3_600,
+				}),
+			)
+			.mockResolvedValueOnce({
+				content: JSON.stringify({ personas: CANNED_PERSONAS }),
+				reasoning: null,
+			});
+
+		const promise = new BrowserSynthesisProvider({
+			chatFn,
+		}).synthesizePersonas(THREE_INPUTS);
+
+		await vi.waitFor(() => expect(chatFn).toHaveBeenCalledTimes(1));
+		await vi.advanceTimersByTimeAsync(10_000);
+		await promise;
+
+		expect(chatFn).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not retry once its signal is aborted, and passes the signal on", async () => {
+		const controller = new AbortController();
+		const chatFn = vi.fn().mockImplementation(async () => {
+			controller.abort();
+			throw new DOMException("aborted", "AbortError");
+		});
+
+		await expect(
+			new BrowserSynthesisProvider({
+				chatFn,
+				signal: controller.signal,
+			}).synthesizePersonas(THREE_INPUTS),
+		).rejects.toThrow("aborted");
+		expect(chatFn).toHaveBeenCalledTimes(1);
+		expect(chatFn.mock.calls[0]?.[0]?.signal).toBe(controller.signal);
 	});
 
 	it("throws SynthesisError when both content and reasoning are null", async () => {
@@ -519,6 +622,40 @@ describe("BrowserSynthesisProvider", () => {
 	it("throws SynthesisError when voiceExamples contains an empty string", async () => {
 		const badPersonas = [
 			{ id: "a1b2", blurb: "blurb1", voiceExamples: ["ok", "", "ok"] },
+			{ id: "c3d4", blurb: "blurb2", voiceExamples: ["ok", "ok", "ok"] },
+			{ id: "e5f6", blurb: "blurb3", voiceExamples: ["ok", "ok", "ok"] },
+		];
+		const makeBody = () =>
+			JSON.stringify({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({ personas: badPersonas }),
+							reasoning: null,
+						},
+					},
+				],
+			});
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
+		);
+		const provider = new BrowserSynthesisProvider();
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
+	});
+
+	it.each([
+		["empty", ""],
+		["whitespace-only", "   \n\t"],
+	])("throws SynthesisError when a blurb is %s", async (_label, blurb) => {
+		const badPersonas = [
+			{ id: "a1b2", blurb, voiceExamples: ["ok", "ok", "ok"] },
 			{ id: "c3d4", blurb: "blurb2", voiceExamples: ["ok", "ok", "ok"] },
 			{ id: "e5f6", blurb: "blurb3", voiceExamples: ["ok", "ok", "ok"] },
 		];

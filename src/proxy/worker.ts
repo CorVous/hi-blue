@@ -16,6 +16,7 @@ interface Env {
 }
 
 const CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
+const MAX_DIAGNOSTICS_SUMMARY_LENGTH = 2_000;
 
 export default {
 	async fetch(
@@ -25,22 +26,15 @@ export default {
 	): Promise<Response> {
 		const url = new URL(request.url);
 
-		if (
-			url.pathname === CHAT_COMPLETIONS_PATH &&
-			request.method === "OPTIONS"
-		) {
-			return buildPreflightResponse(request, parseAllowedOrigins(env));
-		}
-
-		if (url.pathname === CHAT_COMPLETIONS_PATH && request.method === "POST") {
+		if (url.pathname === CHAT_COMPLETIONS_PATH) {
 			const allowed = parseAllowedOrigins(env);
-			const resp = await handleChatCompletions(
-				request,
-				env,
-				env.RATE_GUARD_KV,
-				ctx,
-			);
-			return withCorsHeaders(resp, request, allowed);
+			if (request.method === "OPTIONS") {
+				return buildPreflightResponse(request, allowed);
+			}
+			if (request.method === "POST") {
+				const resp = await chatCompletionsOrBadGateway(request, env, ctx);
+				return withCorsHeaders(resp, request, allowed);
+			}
 		}
 
 		if (url.pathname === "/diagnostics") {
@@ -50,6 +44,28 @@ export default {
 		return withAssetCacheHeaders(url, await env.ASSETS.fetch(request));
 	},
 } satisfies ExportedHandler<Env>;
+
+async function chatCompletionsOrBadGateway(
+	request: Request,
+	env: Env,
+	ctx: ExecutionContext,
+): Promise<Response> {
+	try {
+		return await handleChatCompletions(request, env, env.RATE_GUARD_KV, ctx);
+	} catch (err) {
+		console.error("[proxy] chat completions handler failed", err);
+		return new Response(
+			JSON.stringify({
+				error: {
+					message: "Proxy error handling the request",
+					type: "upstream_error",
+					code: null,
+				},
+			}),
+			{ status: 502, headers: { "Content-Type": "application/json" } },
+		);
+	}
+}
 
 async function handleDiagnostics(request: Request): Promise<Response> {
 	if (request.method !== "POST") {
@@ -76,8 +92,9 @@ async function handleDiagnostics(request: Request): Promise<Response> {
 		});
 	}
 
+	const summary = payload.summary.slice(0, MAX_DIAGNOSTICS_SUMMARY_LENGTH);
 	console.log(
-		`[diagnostics] downloaded=${payload.downloaded} summary=${payload.summary}`,
+		`[diagnostics] downloaded=${payload.downloaded} summary=${summary}`,
 	);
 
 	return new Response(null, { status: 200 });

@@ -2,11 +2,19 @@ import type {
 	RawBinding,
 	RawBoundPack,
 } from "../spa/game/binding-aware-validator.js";
-import { buildDualBindingPrompt } from "../spa/game/binding-prompt-builder.js";
+import {
+	buildDualBindingPrompt,
+	obstacleIds,
+} from "../spa/game/binding-prompt-builder.js";
 import type {
 	ContentPackProvider,
 	DualBindingContentPackInput,
 } from "../spa/game/content-pack-provider.js";
+import {
+	cellAtIndex,
+	everyOpenCellReachable,
+	TOTAL_CELLS,
+} from "../spa/game/direction.js";
 import { rollObjectiveTypes } from "../spa/game/objective-type-roll.js";
 import {
 	boundSpaces,
@@ -29,22 +37,11 @@ export interface SingleGameConfig {
 
 import { THEME_POOL, TIME_OF_DAY_POOL, WEATHER_POOL } from "./pools.js";
 
-const GRID_ROWS = 5;
-const GRID_COLS = 5;
-const TOTAL_CELLS = GRID_ROWS * GRID_COLS;
 const MAX_PLACEMENT_ATTEMPTS = 200;
 const OBJECTIVES_PER_GAME = 3;
 
 function rollInt(rng: () => number, lo: number, hi: number): number {
 	return lo + Math.floor(rng() * (hi - lo + 1));
-}
-
-function posKey(pos: GridPosition): number {
-	return pos.row * GRID_COLS + pos.col;
-}
-
-function keyToPos(key: number): GridPosition {
-	return { row: Math.floor(key / GRID_COLS), col: key % GRID_COLS };
 }
 
 function drawDistinct<T>(
@@ -65,52 +62,6 @@ function drawDistinct<T>(
 
 function pickOne(rng: () => number, pool: readonly string[]): string {
 	return pool[Math.floor(rng() * pool.length)] as string;
-}
-
-function reachableCellsFrom(
-	start: GridPosition,
-	obstacleSet: Set<number>,
-): Set<number> {
-	const startKey = posKey(start);
-	const visited = new Set<number>([startKey]);
-	const queue: number[] = [startKey];
-
-	while (queue.length > 0) {
-		const current = queue.shift() as number;
-		const pos = keyToPos(current);
-		const neighbors: GridPosition[] = [
-			{ row: pos.row - 1, col: pos.col },
-			{ row: pos.row + 1, col: pos.col },
-			{ row: pos.row, col: pos.col - 1 },
-			{ row: pos.row, col: pos.col + 1 },
-		];
-		for (const nb of neighbors) {
-			if (
-				nb.row < 0 ||
-				nb.row >= GRID_ROWS ||
-				nb.col < 0 ||
-				nb.col >= GRID_COLS
-			)
-				continue;
-			const nbKey = posKey(nb);
-			if (obstacleSet.has(nbKey)) continue;
-			if (visited.has(nbKey)) continue;
-			visited.add(nbKey);
-			queue.push(nbKey);
-		}
-	}
-	return visited;
-}
-
-function everyOpenCellReachable(
-	startPositions: GridPosition[],
-	obstacleSet: Set<number>,
-	openCells: number[],
-): boolean {
-	return startPositions.every((start) => {
-		const reachable = reachableCellsFrom(start, obstacleSet);
-		return openCells.every((cellKey) => reachable.has(cellKey));
-	});
 }
 
 function tryPlacePhase(
@@ -147,7 +98,7 @@ function tryPlacePhase(
 	const aiStarts: Record<AiId, PersonaSpatialState> = {};
 	for (let i = 0; i < aiIds.length; i++) {
 		const key = aiStartKeys[i] as number;
-		const pos = keyToPos(key);
+		const pos = cellAtIndex(key);
 		aiStarts[aiIds[i] as AiId] = { position: pos };
 	}
 
@@ -174,26 +125,24 @@ function tryPlacePhase(
 		interestingCount,
 	);
 
-	const aiStartPositions = aiStartKeys.map(keyToPos);
-	if (
-		!everyOpenCellReachable(aiStartPositions, obstacleSet, nonObstacleCells)
-	) {
+	const aiStartPositions = aiStartKeys.map(cellAtIndex);
+	if (!everyOpenCellReachable(aiStartPositions, obstacleSet)) {
 		return null;
 	}
 
 	const holderById = new Map<string, GridPosition>();
 	packCarryPairs.forEach((pair, i) => {
-		holderById.set(pair.object.id, keyToPos(objectKeys[i] as number));
-		holderById.set(pair.space.id, keyToPos(carrySpaceKeys[i] as number));
+		holderById.set(pair.object.id, cellAtIndex(objectKeys[i] as number));
+		holderById.set(pair.space.id, cellAtIndex(carrySpaceKeys[i] as number));
 	});
 	packBoundSpaces.forEach((space, i) => {
-		holderById.set(space.id, keyToPos(standaloneSpaceKeys[i] as number));
+		holderById.set(space.id, cellAtIndex(standaloneSpaceKeys[i] as number));
 	});
 	packInteresting.forEach((obj, i) => {
-		holderById.set(obj.id, keyToPos(interestingKeys[i] as number));
+		holderById.set(obj.id, cellAtIndex(interestingKeys[i] as number));
 	});
 	packObstacles.forEach((obs, i) => {
-		holderById.set(obs.id, keyToPos(obstacleKeys[i] as number));
+		holderById.set(obs.id, cellAtIndex(obstacleKeys[i] as number));
 	});
 
 	const updatedEntities = pack.entities.map((entity) => {
@@ -208,26 +157,36 @@ function tryPlacePhase(
 	};
 }
 
-function placePhases(
+function placePhase(
 	rng: () => number,
-	packs: ContentPack[],
+	pack: ContentPack,
 	aiIds: AiId[],
-): ContentPack[] {
-	return packs.map((pack, i) => {
-		for (let attempt = 0; attempt < MAX_PLACEMENT_ATTEMPTS; attempt++) {
-			const result = tryPlacePhase(rng, pack, aiIds);
-			if (result !== null) return result;
-		}
-		throw new Error(
-			`generateDualContentPacks: could not place phase ${i + 1} after ${MAX_PLACEMENT_ATTEMPTS} attempts. ` +
-				`Check that m (${obstacleEntities(pack).length}) obstacles leave enough room for AI starts and entities.`,
-		);
-	});
+): ContentPack {
+	for (let attempt = 0; attempt < MAX_PLACEMENT_ATTEMPTS; attempt++) {
+		const result = tryPlacePhase(rng, pack, aiIds);
+		if (result !== null) return result;
+	}
+	throw new Error(
+		`generateDualContentPacks: could not place phase 1 after ${MAX_PLACEMENT_ATTEMPTS} attempts. ` +
+			`Check that m (${obstacleEntities(pack).length}) obstacles leave enough room for AI starts and entities.`,
+	);
+}
+
+function copyDefined<K extends keyof WorldEntity>(
+	entity: WorldEntity,
+	src: { [P in K]?: WorldEntity[P] },
+	fields: readonly K[],
+): void {
+	for (const field of fields) {
+		const value = src[field];
+		if (value !== undefined) entity[field] = value;
+	}
 }
 
 function rawBoundPackToContentPack(
 	rawPack: RawBoundPack,
 	objectiveTypes: ObjectiveType[],
+	obstacleCount: number,
 	weather: string,
 	timeOfDay: string,
 ): ContentPack {
@@ -276,14 +235,12 @@ function rawBoundPackToContentPack(
 						proximityFlavor: spc.proximityFlavor ?? "",
 						holder: { row: 0, col: 0 },
 					};
-					if (spc.activationFlavor !== undefined)
-						entity.activationFlavor = spc.activationFlavor;
-					if (spc.satisfactionFlavor !== undefined)
-						entity.satisfactionFlavor = spc.satisfactionFlavor;
-					if (spc.postExamineDescription !== undefined)
-						entity.postExamineDescription = spc.postExamineDescription;
-					if (spc.postLookFlavor !== undefined)
-						entity.postLookFlavor = spc.postLookFlavor;
+					copyDefined(entity, spc, [
+						"activationFlavor",
+						"satisfactionFlavor",
+						"postExamineDescription",
+						"postLookFlavor",
+					]);
 					entities.push(entity);
 				}
 				break;
@@ -299,16 +256,12 @@ function rawBoundPackToContentPack(
 						proximityFlavor: spc.proximityFlavor ?? "",
 						holder: { row: 0, col: 0 },
 					};
-					if (spc.convergenceTier1Flavor !== undefined)
-						entity.convergenceTier1Flavor = spc.convergenceTier1Flavor;
-					if (spc.convergenceTier2Flavor !== undefined)
-						entity.convergenceTier2Flavor = spc.convergenceTier2Flavor;
-					if (spc.convergenceTier1ActorFlavor !== undefined)
-						entity.convergenceTier1ActorFlavor =
-							spc.convergenceTier1ActorFlavor;
-					if (spc.convergenceTier2ActorFlavor !== undefined)
-						entity.convergenceTier2ActorFlavor =
-							spc.convergenceTier2ActorFlavor;
+					copyDefined(entity, spc, [
+						"convergenceTier1Flavor",
+						"convergenceTier2Flavor",
+						"convergenceTier1ActorFlavor",
+						"convergenceTier2ActorFlavor",
+					]);
 					entities.push(entity);
 				}
 				break;
@@ -324,14 +277,12 @@ function rawBoundPackToContentPack(
 						proximityFlavor: item.proximityFlavor ?? "",
 						holder: { row: 0, col: 0 },
 					};
-					if (item.useOutcome !== undefined)
-						entity.useOutcome = item.useOutcome;
-					if (item.activationFlavor !== undefined)
-						entity.activationFlavor = item.activationFlavor;
-					if (item.postExamineDescription !== undefined)
-						entity.postExamineDescription = item.postExamineDescription;
-					if (item.postLookFlavor !== undefined)
-						entity.postLookFlavor = item.postLookFlavor;
+					copyDefined(entity, item, [
+						"useOutcome",
+						"activationFlavor",
+						"postExamineDescription",
+						"postLookFlavor",
+					]);
 					entities.push(entity);
 				}
 				break;
@@ -348,13 +299,15 @@ function rawBoundPackToContentPack(
 			proximityFlavor: decoy.proximityFlavor ?? "",
 			holder: { row: 0, col: 0 },
 		};
-		if (decoy.useOutcome !== undefined) entity.useOutcome = decoy.useOutcome;
+		copyDefined(entity, decoy, ["useOutcome"]);
 		entities.push(entity);
 	}
 
-	for (const obs of rawPack.obstacles ?? []) {
+	for (const [i, obstacleId] of obstacleIds(obstacleCount).entries()) {
+		const obs = rawPack.obstacles?.[i];
+		if (!obs) continue;
 		entities.push({
-			id: obs.id ?? "obstacle-unknown",
+			id: obstacleId,
 			kind: "obstacle",
 			name: obs.name ?? "",
 			examineDescription: obs.examineDescription ?? "",
@@ -444,20 +397,19 @@ export async function generateDualContentPacks(
 	const unplacedPackA = rawBoundPackToContentPack(
 		phase.rawPackA,
 		objectiveTypes,
+		obstacleCount,
 		weatherA,
 		timeOfDayA,
 	);
 	const unplacedPackB = rawBoundPackToContentPack(
 		phase.rawPackB,
 		objectiveTypes,
+		obstacleCount,
 		weatherB,
 		timeOfDayB,
 	);
 
-	const placedPacksA = placePhases(rng, [unplacedPackA], aiIds);
-	const placedPackA = placedPacksA[0];
-	if (!placedPackA)
-		throw new Error("generateDualContentPacks: placement failed");
+	const placedPackA = placePhase(rng, unplacedPackA, aiIds);
 
 	const packB = copyPlacementsById(placedPackA, unplacedPackB);
 	return { packA: placedPackA, packB, objectiveTypes };

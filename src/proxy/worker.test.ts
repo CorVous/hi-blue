@@ -1,7 +1,15 @@
-import { reset, SELF } from "cloudflare:test";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+	createExecutionContext,
+	env,
+	reset,
+	SELF,
+	waitOnExecutionContext,
+} from "cloudflare:test";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import worker from "./worker";
 
 afterEach(async () => {
+	vi.restoreAllMocks();
 	await reset();
 });
 
@@ -100,11 +108,60 @@ describe("POST /diagnostics endpoint (issue #19)", () => {
 		expect(response.status).toBe(400);
 	});
 
+	it("logs at most 2000 characters of an oversized summary", async () => {
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const response = await SELF.fetch("https://example.com/diagnostics", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ downloaded: true, summary: "x".repeat(50_000) }),
+		});
+
+		expect(response.status).toBe(200);
+		const diagnosticsLine = logSpy.mock.calls
+			.map(([line]) => String(line))
+			.find((line) => line.startsWith("[diagnostics]"));
+		expect(diagnosticsLine).toBe(
+			`[diagnostics] downloaded=true summary=${"x".repeat(2_000)}`,
+		);
+	});
+
 	it("returns 405 for non-POST methods on /diagnostics", async () => {
 		const response = await SELF.fetch("https://example.com/diagnostics", {
 			method: "GET",
 		});
 
 		expect(response.status).toBe(405);
+	});
+});
+
+describe("POST /v1/chat/completions — a handler that throws", () => {
+	it("answers a CORS-wrapped 502 instead of an uncaught error", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => undefined);
+		const brokenKv = {
+			get: () => Promise.reject(new Error("KV unavailable")),
+			put: () => Promise.reject(new Error("KV unavailable")),
+		} as unknown as KVNamespace;
+		const ctx = createExecutionContext();
+
+		const response = await worker.fetch(
+			new Request("https://example.com/v1/chat/completions", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Origin: "https://app.example",
+				},
+				body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+			}),
+			{ ...env, RATE_GUARD_KV: brokenKv } as Parameters<typeof worker.fetch>[1],
+			ctx,
+		);
+		await waitOnExecutionContext(ctx);
+
+		expect(response.status).toBe(502);
+		expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+			"https://app.example",
+		);
+		const body = (await response.json()) as { error?: { type?: string } };
+		expect(body.error?.type).toBe("upstream_error");
 	});
 });
