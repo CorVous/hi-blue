@@ -220,6 +220,12 @@ day:
   decimal strings and are scaled to micro-USD per token. Per-token values may
   be fractional. `computeCostMicroUsd` always rounds a request total **up**, so
   the caps are never silently under-charged.
+- Each field (prompt, completion) takes the highest price across the pinned
+  endpoint's base row and its time-of-day `overrides`, so peak hours are never
+  under-charged. Only the base row has to parse. An override row missing a
+  field, or holding a non-numeric one, is skipped for that field: one partial
+  row used to turn the whole max into `NaN` and drop the proxy to cold-start
+  pricing.
 - The result is memoised per isolate for 24 hours, and the fetch times out
   after 3 s.
 - On fetch failure, stale cached pricing wins. On a cold start with no cache,

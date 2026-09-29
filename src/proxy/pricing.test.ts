@@ -14,7 +14,7 @@ interface PriceRow {
 }
 
 function endpointsResponse(
-	rows: Array<{ tag: string; overrides?: PriceRow[] } & PriceRow>,
+	rows: Array<{ tag: string; overrides?: Partial<PriceRow>[] } & PriceRow>,
 ) {
 	return Promise.resolve(
 		new Response(
@@ -83,6 +83,46 @@ describe("getModelPricing", () => {
 		const pricing = await getModelPricing(MODEL, Date.now(), "deepseek");
 		expect(pricing.promptMicroUsdPerToken).toBeCloseTo(0.3, 10);
 		expect(pricing.completionMicroUsdPerToken).toBeCloseTo(1.2, 10);
+	});
+
+	it("ignores an override row that is missing a field instead of falling back to cold-start pricing", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				endpointsResponse([
+					{
+						tag: "deepseek",
+						prompt: "0.00000015",
+						completion: "0.0000006",
+						overrides: [{ prompt: "0.0000003" }, { completion: "0.0000012" }],
+					},
+				]),
+			),
+		);
+
+		const pricing = await getModelPricing(MODEL, Date.now(), "deepseek");
+		expect(pricing.promptMicroUsdPerToken).toBeCloseTo(0.3, 10);
+		expect(pricing.completionMicroUsdPerToken).toBeCloseTo(1.2, 10);
+	});
+
+	it("falls back to the overestimated cold-start pricing when the base row does not parse", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				endpointsResponse([
+					{
+						tag: "deepseek",
+						prompt: "",
+						completion: "0.0000006",
+						overrides: [{ prompt: "0.0000003", completion: "0.0000012" }],
+					},
+				]),
+			),
+		);
+
+		const pricing = await getModelPricing(MODEL, Date.now(), "deepseek");
+		expect(pricing.promptMicroUsdPerToken).toBe(1);
+		expect(pricing.completionMicroUsdPerToken).toBe(5);
 	});
 
 	it("falls back to the overestimated cold-start pricing when the pinned provider is missing", async () => {
