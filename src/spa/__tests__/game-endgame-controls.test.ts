@@ -1,10 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BOOTSTRAP_LOADING_TIMEOUT_MS } from "../game/bootstrap.js";
 import { startGame } from "../game/engine.js";
 import type { GameState } from "../game/types.js";
+import {
+	saveActiveSession,
+	setActiveSessionId,
+} from "../persistence/session-storage.js";
 import { type SessionSave, showEndgame } from "../views/game-endgame.js";
 import { installLocalStorageStub } from "./fixtures/local-storage";
-import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
+import {
+	STATIC_CONTENT_PACKS,
+	STATIC_OBJECTIVE_TYPES,
+} from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
+
+const generateDualContentPacks = vi.hoisted(() => vi.fn());
+
+vi.mock("../../content/content-pack-generator", () => ({
+	generateDualContentPacks,
+}));
 
 vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
 
@@ -28,6 +42,7 @@ const ENDGAME_HTML = `
     <button type="button" id="submit-diagnostics-btn">Submit diagnostics</button>
     <output id="diagnostics-status"></output>
   </section>
+  <aside id="persistence-warning" hidden></aside>
 </main>
 `;
 
@@ -134,3 +149,96 @@ describe("showEndgame — download and diagnostics belong to one ended game", ()
 		expect(controlsUsed()).toEqual({ download: false, diagnostics: false });
 	});
 });
+
+describe("showEndgame — a choice that outlives the endgame screen", () => {
+	beforeEach(() => {
+		installLocalStorageStub();
+		document.body.innerHTML = ENDGAME_HTML;
+		generateDualContentPacks.mockReset();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+		document.body.innerHTML = "";
+	});
+
+	it("leaves the room another tab continued alone when a stale Continue lands after the endgame was replaced", async () => {
+		const sessionId = "0xCCCC";
+		const game = endedGame();
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		setActiveSessionId(sessionId);
+		const firstSave = saveActiveSession(game, { sessionId });
+		if (!firstSave.ok) throw new Error("test: could not save the ended game");
+		let releasePacks: () => void = () => undefined;
+		generateDualContentPacks.mockReturnValue(
+			new Promise((resolve) => {
+				releasePacks = () =>
+					resolve({
+						packA: STATIC_CONTENT_PACKS[0],
+						packB: STATIC_CONTENT_PACKS[0],
+						objectiveTypes: STATIC_OBJECTIVE_TYPES,
+					});
+			}),
+		);
+		const releaseEndedGame = vi.fn();
+		showEndgame(
+			root(),
+			game,
+			{ sessionId, lastSavedAt: firstSave.lastSavedAt },
+			releaseEndedGame,
+		);
+
+		button("#endgame-continue-btn").click();
+		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		vi.setSystemTime(new Date("2026-01-01T00:01:00.000Z"));
+		const otherTabSave = saveActiveSession(
+			{ ...game, isComplete: false },
+			{ sessionId, createdAt: "2026-01-01T00:00:00.000Z" },
+		);
+		if (!otherTabSave.ok) throw new Error("test: other tab could not save");
+		setHiddenEndgame();
+		releasePacks();
+
+		await vi.waitFor(() =>
+			expect(
+				document.querySelector<HTMLElement>("#persistence-warning")?.hidden,
+			).toBe(false),
+		);
+		expect(releaseEndedGame).not.toHaveBeenCalled();
+		expect(root().dataset.view).toBe("game");
+	});
+
+	it("gives up on a same-daemons build that never finishes and offers the choices again", async () => {
+		vi.useFakeTimers();
+		generateDualContentPacks.mockReturnValue(new Promise(() => undefined));
+		show(endedGame(), UNSAVED);
+
+		button("#endgame-same-daemons-btn").click();
+		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		expect(button("#endgame-new-daemons-btn").disabled).toBe(true);
+		const provider = generateDualContentPacks.mock.calls[0]?.[3] as {
+			signal?: AbortSignal;
+		};
+
+		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+
+		expect(document.querySelector("#endgame-choice-status")?.textContent).toBe(
+			"could not spin up a new room: content-pack generation timed out",
+		);
+		expect(provider.signal?.aborted).toBe(true);
+		for (const selector of [
+			"#endgame-new-daemons-btn",
+			"#endgame-same-daemons-btn",
+			"#endgame-continue-btn",
+		]) {
+			expect(button(selector).disabled).toBe(false);
+		}
+	});
+});
+
+function setHiddenEndgame(): void {
+	const endgameEl = document.querySelector<HTMLElement>("#endgame");
+	if (endgameEl) endgameEl.hidden = true;
+}

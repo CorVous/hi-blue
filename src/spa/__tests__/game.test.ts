@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GAME_SAVE_VERSION } from "../../save-serializer";
-import { BOOTSTRAP_LOADING_TIMEOUT_MS } from "../views/game-bootstrap-flow.js";
+import { BOOTSTRAP_LOADING_TIMEOUT_MS } from "../game/bootstrap.js";
 import {
 	installLocalStorageStub,
 	type LocalStorageStub,

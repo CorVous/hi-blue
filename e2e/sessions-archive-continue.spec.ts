@@ -10,6 +10,7 @@ import {
 	parseRequestBody,
 	reachEndgame,
 	requireActiveSessionId,
+	sessionFileKey,
 } from "./helpers";
 
 const SPINNING_UP = "spinning up a new room…";
@@ -143,6 +144,36 @@ test("continue with new room says why on the row when the content pack is refuse
 	expect(await activeSessionId(page)).toBe(playingId);
 	expect(await listSessionIds(page)).toEqual([playingId]);
 	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("continue with new room takes the player in when a broken active session forced the sessions screen", async ({
+	page,
+}) => {
+	const pageErrors = collectPageErrors(page);
+	const { archivedId, playingId } = await archiveOneGameAndStartAnother(page);
+	await page.evaluate(
+		(key) => localStorage.removeItem(key),
+		sessionFileKey(playingId, "engine.dat"),
+	);
+	await page.goto("/?skipDialup=1");
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+	await expect(page.locator("main")).toHaveAttribute("data-reason", "broken");
+	await expect(page.locator("#sessions-banner")).toContainText("unreadable");
+
+	await archivedRow(page, archivedId).locator(".session-continue-btn").click();
+
+	await expect(page.locator('main[data-view="game"]')).toBeAttached({
+		timeout: 15_000,
+	});
+	await expect(page.locator("#composer")).toBeVisible();
+	const enteredId = await requireActiveSessionId(page);
+	expect(enteredId).not.toBe(playingId);
+	expect(await listSessionIds(page)).toEqual(
+		expect.arrayContaining([playingId, enteredId]),
+	);
+	expect(await listSessionIds(page, ARCHIVE_PREFIX)).toEqual([archivedId]);
 
 	await expectNoPageErrors(page, pageErrors);
 });

@@ -253,6 +253,14 @@ it hides the other routes' screens and shows or hides the global chrome
   tab — reloaded. Your endgame choice here was not applied." in
   `#persistence-warning`. It stays silent only when the player has left the
   ended game in this tab.
+- **A refused choice only touches the endgame it came from.** The refusal
+  releases the ended game (`cached` goes back to null) and re-renders, but
+  only while that endgame is still on screen (`endgameStillShows`). When the
+  storage listener has already reloaded the tab into the other tab's
+  continued room, `cached` holds that live room, and releasing it cleared the
+  session mid-round. A refusal that finds the endgame gone changes nothing
+  and only shows the warning, and only when the player has not left the
+  ended session.
 
 ### Bootstrap loading flow (`game-bootstrap-flow.ts`)
 
@@ -595,8 +603,25 @@ archived sessions, with one row per session.
   looked up by `data-session-id` each time, because the row that started
   the generation may be gone. The click captures the active session
   (`captureActiveSession`); when the room arrives and the pointer has moved
-  or the picker is closed, the room is still seeded (it shows in the list),
-  but the pointer stays and nothing is re-rendered except the open picker
-  itself, and the row says "new room ready as <id>". A failure writes
-  "could not spin up a new room: <reason>" on the row and enables the
-  button.
+  or the sessions screen is no longer showing, the room is still seeded (it
+  shows in the list), but the pointer stays and nothing is re-rendered except
+  the sessions screen itself, if it is up, and the row says "new room ready
+  as <id>". A failure writes "could not spin up a new room: <reason>" on the
+  row and enables the button.
+- **"Moved on" reads the screen, not the picker flag.** The sessions screen
+  is also shown with the picker closed, when the active session is broken or
+  version-mismatched and the dispatcher routes there. The check used to be
+  `!isPickerOpen()`, so on that forced screen every finished room counted as
+  moved on: it was seeded but the player was never taken into it. The check
+  is now `root.dataset.view !== "sessions"`. Closing the picker still counts
+  as moving on, because it re-renders the game or start route. The re-render
+  after a moved-on build goes through the last render's own closure
+  (`rerenderShownSessions`), which keeps its `RenderOpts`; calling
+  `renderSessions(root)` bare dropped the broken or version-mismatch banner.
+- **A hung build lets go.** `buildSameDaemonsSession` times out after
+  `BOOTSTRAP_LOADING_TIMEOUT_MS` (content-packs.md), so the in-flight record
+  cannot outlive a request that never answers: the timeout settles the
+  record, writes "could not spin up a new room: content-pack generation
+  timed out" on the row and enables the button. The endgame's "same daemons"
+  and "continue" builds share the same call and so the same timeout, which
+  ends in `failEndgameChoice`.

@@ -106,16 +106,71 @@ export function generateContentPacksOnlySplit(
 	return { personasPromise: Promise.resolve(personas), contentPacksPromise };
 }
 
+export const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
+
+export class NewRoomTimeoutError extends Error {
+	constructor() {
+		super("content-pack generation timed out");
+		this.name = "NewRoomTimeoutError";
+	}
+}
+
+export interface SameDaemonsOpts {
+	rng?: () => number;
+	signal?: AbortSignal;
+	timeoutMs?: number;
+}
+
+function rejectOnAbort<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+	suppressUnhandledRejection(work);
+	if (signal.aborted) return Promise.reject(signal.reason);
+	return new Promise<T>((resolve, reject) => {
+		const rejectWithReason = (): void => reject(signal.reason);
+		signal.addEventListener("abort", rejectWithReason, { once: true });
+		work.then(resolve, reject).finally(() => {
+			signal.removeEventListener("abort", rejectWithReason);
+		});
+	});
+}
+
+function followCallerAbort(
+	callerSignal: AbortSignal | undefined,
+	controller: AbortController,
+): () => void {
+	if (!callerSignal) return () => undefined;
+	const abortWithCallerReason = (): void =>
+		controller.abort(callerSignal.reason);
+	if (callerSignal.aborted) abortWithCallerReason();
+	callerSignal.addEventListener("abort", abortWithCallerReason, {
+		once: true,
+	});
+	return () => callerSignal.removeEventListener("abort", abortWithCallerReason);
+}
+
 export async function buildSameDaemonsSession(
 	personas: Record<AiId, AiPersona>,
-	opts?: { rng?: () => number },
+	opts: SameDaemonsOpts = {},
 ): Promise<GameSession> {
-	const packs = await generateContentPacks(
-		opts?.rng ?? Math.random,
-		new BrowserContentPackProvider(),
-		Object.keys(personas),
+	const controller = new AbortController();
+	const stopFollowingCaller = followCallerAbort(opts.signal, controller);
+	const timeoutId = setTimeout(
+		() => controller.abort(new NewRoomTimeoutError()),
+		opts.timeoutMs ?? BOOTSTRAP_LOADING_TIMEOUT_MS,
 	);
-	return buildSessionFromAssets(newGameAssets(personas, packs), opts);
+	try {
+		const packs = await rejectOnAbort(
+			generateContentPacks(
+				opts.rng ?? Math.random,
+				new BrowserContentPackProvider({ signal: controller.signal }),
+				Object.keys(personas),
+			),
+			controller.signal,
+		);
+		return buildSessionFromAssets(newGameAssets(personas, packs), opts);
+	} finally {
+		clearTimeout(timeoutId);
+		stopFollowingCaller();
+	}
 }
 
 export function newGameAssets(

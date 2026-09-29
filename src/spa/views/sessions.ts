@@ -17,12 +17,7 @@ import {
 	seedFromArchive,
 	setActiveSessionId,
 } from "../persistence/session-storage.js";
-import {
-	isPickerOpen,
-	type RenderOpts,
-	renderApp,
-	setPickerOpen,
-} from "../render-app.js";
+import { type RenderOpts, renderApp, setPickerOpen } from "../render-app.js";
 import {
 	buildArchivedBuildLink,
 	renderReasonBanner,
@@ -150,6 +145,7 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 	if (!listEl) return;
 
 	const reRender = (): void => renderSessions(root, opts);
+	rerenderShownSessions = reRender;
 	const activeId = getActiveSessionId();
 
 	const activeRows: ActiveRow[] = listSessions().map((id) => ({
@@ -338,6 +334,8 @@ interface ArchiveContinue {
 
 const archiveContinues = new Map<string, ArchiveContinue>();
 
+let rerenderShownSessions: (() => void) | null = null;
+
 const SPINNING_UP_STATUS = "spinning up a new room…";
 
 function failureMessage(err: unknown): string {
@@ -418,10 +416,11 @@ async function continueArchiveInNewRoom(
 		return;
 	}
 
-	const playerMovedOn = !startedFrom.stillActive() || !isPickerOpen();
+	const sessionsStillShown = root.dataset.view === "sessions";
+	const playerMovedOn = !startedFrom.stillActive() || !sessionsStillShown;
 	if (playerMovedOn) {
 		settleArchiveContinue(doc, archiveId, `new room ready as ${newId}`);
-		if (root.dataset.view === "sessions") renderSessions(root);
+		if (sessionsStillShown) rerenderShownSessions?.();
 		return;
 	}
 	archiveContinues.delete(archiveId);

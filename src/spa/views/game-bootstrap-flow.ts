@@ -1,5 +1,6 @@
 import { type LoadState, topInfoStatus } from "../bbs-chrome.js";
 import {
+	BOOTSTRAP_LOADING_TIMEOUT_MS,
 	buildSessionFromAssets,
 	type NewGameAssets,
 	newGameAssets,
@@ -37,8 +38,6 @@ import {
 	showPersistenceWarning,
 	UNKNOWN_SESSION_ID,
 } from "./game-chrome.js";
-
-export const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
 
 const LOADING_PLACEHOLDER = "loading…";
 const PANEL_SPINNER_SELECTOR = ".panel-name .panel-spinner";

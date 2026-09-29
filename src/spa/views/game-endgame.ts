@@ -328,17 +328,22 @@ function endgameStillShows(choice: EndgameChoice): boolean {
 	);
 }
 
+function showStaleChoiceWarning(root: HTMLElement): void {
+	showPersistenceWarning(
+		root.ownerDocument.querySelector<HTMLElement>("#persistence-warning"),
+		"stale-endgame-choice",
+	);
+}
+
 function refuseChangedEndedSession(choice: EndgameChoice): void {
-	if (playerLeftEndedSession(choice) && !endgameStillShows(choice)) return;
+	if (!endgameStillShows(choice)) {
+		if (!playerLeftEndedSession(choice)) showStaleChoiceWarning(choice.root);
+		return;
+	}
 	choiceInFlight = null;
 	choice.releaseEndedGame();
 	renderApp(choice.root);
-	showPersistenceWarning(
-		choice.root.ownerDocument.querySelector<HTMLElement>(
-			"#persistence-warning",
-		),
-		"stale-endgame-choice",
-	);
+	showStaleChoiceWarning(choice.root);
 }
 
 function refusedAsChangedElsewhere(choice: EndgameChoice): boolean {

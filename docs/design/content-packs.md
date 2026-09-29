@@ -247,7 +247,16 @@ player clicks BEGIN.
   `generateContentPacksOnlySplit`) is handed to the default browser providers,
   so aborting it cancels the in-flight request and any pending retry.
 - `buildSameDaemonsSession` implements the end-game "Same Daemons, New Room" and
-  "Continue" choices (#307).
+  "Continue" choices (#307), and the picker's `[ continue with new room ]`.
+  It gives up after `BOOTSTRAP_LOADING_TIMEOUT_MS` (300 s, the same budget as
+  the new-game bootstrap, which now lives here and is imported by
+  `game-bootstrap-flow.ts`): the timer aborts the provider's signal, which
+  cancels the in-flight request and any pending retry, and the build rejects
+  with `NewRoomTimeoutError` ("content-pack generation timed out") even if a
+  provider ignores the signal. Without it a hung request kept the picker row
+  and the endgame choices locked for good, since both only unlock when the
+  build settles. A caller can also pass its own `signal`; aborting it aborts
+  the build the same way.
 - `BootstrapOpts`:
   - `personasRng` and `contentPackRng` (spike #239) take precedence over `rng`.
     The two generators run concurrently, so each needs its own stream for a
