@@ -15,6 +15,7 @@ import {
 	appendPrivateSystemNotice,
 	FAREWELL_LINE,
 	isDaemonExhausted,
+	personaName,
 	resolveToolDisables,
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
@@ -132,7 +133,7 @@ function assertInitiativePermutes(initiative: AiId[], aiOrder: AiId[]): void {
 }
 
 function unresponsiveLine(state: GameState, aiId: AiId): string {
-	return `${state.personas[aiId]?.name ?? aiId} is unresponsive…`;
+	return `${personaName(state, aiId)} is unresponsive…`;
 }
 
 export async function runRound(
@@ -171,7 +172,7 @@ export async function runRound(
 				round: state.round,
 				actor: aiId,
 				kind: "lockout",
-				description: `${state.personas[aiId]?.name ?? aiId} has exhausted its budget`,
+				description: `${personaName(state, aiId)} has exhausted its budget`,
 			});
 			onAiTurnComplete?.(aiId);
 			continue;
@@ -225,7 +226,7 @@ export async function runRound(
 		let messageAssigned = false;
 
 		const round = state.round;
-		const actorName = state.personas[aiId]?.name ?? aiId;
+		const actorName = personaName(state, aiId);
 
 		function rejectToolCall(tc: EmittedToolCall, description: string) {
 			roundActions.push({
@@ -290,8 +291,6 @@ export async function runRound(
 			action.pass = true;
 		}
 
-		const exhaustedBeforeDispatch = new Set(state.exhausted);
-
 		const dispatchResult = dispatchAiTurn(
 			state,
 			action,
@@ -299,11 +298,8 @@ export async function runRound(
 		);
 		state = dispatchResult.game;
 
-		const budgetJustExhausted =
-			!exhaustedBeforeDispatch.has(aiId) && state.exhausted.has(aiId);
-		if (budgetJustExhausted) {
-			const personaName = state.personas[aiId]?.name ?? aiId;
-			const farewellContent = FAREWELL_LINE(personaName);
+		if (dispatchResult.justExhausted) {
+			const farewellContent = FAREWELL_LINE(personaName(state, aiId));
 			state = appendMessage(state, aiId, "blue", farewellContent);
 			roundActions.push({
 				round: state.round,
@@ -445,7 +441,7 @@ export async function runRound(
 	}
 
 	state = expireSysadminDirectives(state);
-	state = evaluateConvergenceObjectives(state);
+	state = evaluateConvergenceObjectives(state, game.personaSpatial);
 
 	let gameEnded = false;
 	if (checkWinCondition(state.world, state.objectives)) {
@@ -583,7 +579,10 @@ function expireSysadminDirectives(game: GameState): GameState {
 	return state;
 }
 
-function evaluateConvergenceObjectives(game: GameState): GameState {
+function evaluateConvergenceObjectives(
+	game: GameState,
+	personaSpatialAtRoundStart: GameState["personaSpatial"],
+): GameState {
 	let state = game;
 	for (const objective of state.objectives) {
 		if (objective.kind !== "convergence") continue;
@@ -596,6 +595,14 @@ function evaluateConvergenceObjectives(game: GameState): GameState {
 		);
 
 		if (tier === 0) continue;
+
+		const tierAtRoundStart = checkConvergenceTier(
+			objective,
+			state.world,
+			personaSpatialAtRoundStart,
+		).tier;
+		const convergenceComplete = tier === 2;
+		if (tier === tierAtRoundStart && !convergenceComplete) continue;
 
 		const spaceEntity = state.world.entities.find((e) => e.id === spaceId);
 		const spaceCell =
@@ -639,10 +646,17 @@ function evaluateConvergenceObjectives(game: GameState): GameState {
 			state = appendLogEntry(state, daemonId, entry);
 		}
 
-		const convergenceComplete = tier === 2;
 		if (convergenceComplete) {
 			state = {
 				...state,
+				world: {
+					...state.world,
+					entities: state.world.entities.map((e) =>
+						e.id === spaceId
+							? { ...e, satisfactionState: "satisfied" as const }
+							: e,
+					),
+				},
 				objectives: state.objectives.map((o) =>
 					o.id === objective.id
 						? { ...o, satisfactionState: "satisfied" as const }
