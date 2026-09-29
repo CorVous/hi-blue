@@ -143,6 +143,13 @@ describe("looksLikeFreeTextAction", () => {
 		expect(looksLikeFreeTextAction("I walk left.")).toBe(true);
 	});
 
+	it("reads the I'm contraction as first person", () => {
+		expect(looksLikeFreeTextAction("I'm use the panel now.")).toBe(true);
+		expect(looksLikeFreeTextMessage("I'm tell blue about the door.")).toBe(
+			true,
+		);
+	});
+
 	it("does not flag declarative non-action prose", () => {
 		expect(looksLikeFreeTextAction("The lantern flickers.")).toBe(false);
 		expect(looksLikeFreeTextAction("I am puzzled by this.")).toBe(false);
@@ -340,9 +347,54 @@ describe("summarizeRun", () => {
 		expect(summary.windows.length).toBe(2);
 	});
 
+	it("excludes errored turns from rates, leak counts and windows", () => {
+		const turns: TurnRecord[] = [
+			{
+				round: 1,
+				aiId: "red",
+				assistantText: "",
+				toolCalls: [],
+				error: "Model request failed 502: bad gateway",
+			},
+			{
+				round: 2,
+				aiId: "red",
+				assistantText: "I tell blue I see a door.",
+				toolCalls: [],
+				error: "timeout",
+			},
+			{
+				round: 3,
+				aiId: "red",
+				assistantText: "",
+				toolCalls: [
+					{ id: "g", name: "go", argumentsJson: '{"direction":"north"}' },
+				],
+			},
+		];
+		const summary = summarizeRun(turns, ["red"], 5);
+		expect(summary.totalTurns).toBe(1);
+		expect(summary.errorCount).toBe(2);
+		expect(summary.silenceRate).toBe(0);
+		expect(summary.freeTextMessageLeakCount).toBe(0);
+		expect(summary.windows).toEqual([
+			{
+				startRound: 3,
+				endRound: 3,
+				silenceRate: 0,
+				messageSilenceRate: 1,
+				n: 1,
+			},
+		]);
+		const series = buildPerRoundSeries(turns, ["red"]);
+		expect(series.rounds).toEqual([3]);
+		expect(series.silence).toEqual([0]);
+	});
+
 	it("handles an empty turn list without dividing by zero", () => {
 		const summary = summarizeRun([], ["red"], 5);
 		expect(summary.totalTurns).toBe(0);
+		expect(summary.errorCount).toBe(0);
 		expect(summary.silenceRate).toBe(0);
 		expect(summary.messageSilenceRate).toBe(0);
 		expect(summary.windows).toEqual([]);

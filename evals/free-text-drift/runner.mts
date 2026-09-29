@@ -328,9 +328,10 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 			turns.push({
 				round,
 				aiId: REAL_AI,
-				assistantText: `[ERROR: ${(err as Error).message}]`,
+				assistantText: "",
 				toolCalls: [],
 				injectedFrom: incoming.from,
+				error: err instanceof Error ? err.message : String(err),
 			});
 			continue;
 		}
@@ -392,7 +393,8 @@ function renderReport(turns: TurnRecord[], date: string): string {
 		"",
 		"| Metric | Value |",
 		"|---|---|",
-		`| Total turns | ${summary.totalTurns} |`,
+		`| Total turns (scored) | ${summary.totalTurns} |`,
+		`| Errored turns (excluded from scoring) | ${summary.errorCount} |`,
 		`| Silence rate (no tool call) | ${(summary.silenceRate * 100).toFixed(0)}% |`,
 		`| Message-silence rate (no \`message\` tool) | ${(summary.messageSilenceRate * 100).toFixed(0)}% |`,
 		`| Free-text *message* leaks (prose looked like dialog, no tool emitted) | ${summary.freeTextMessageLeakCount} |`,
@@ -454,6 +456,11 @@ function renderReport(turns: TurnRecord[], date: string): string {
 			`### Round ${turn.round} — incoming from \`${turn.injectedFrom ?? "—"}\``,
 		);
 		lines.push("");
+		if (turn.error !== undefined) {
+			lines.push(`**Model call failed (not scored):** ${turn.error}`);
+			lines.push("");
+			continue;
+		}
 		if (turn.assistantText) {
 			lines.push("**Assistant text:**");
 			lines.push("");
@@ -526,6 +533,12 @@ async function main(): Promise<void> {
 	console.log("");
 	console.log(`Markdown report: ${mdPath}`);
 	console.log(`Graph data (JSON): ${jsonPath}`);
+	if (summary.errorCount > 0) {
+		console.error(
+			`${summary.errorCount} of ${turns.length} model calls failed; those turns were excluded from scoring.`,
+		);
+		process.exitCode = 1;
+	}
 }
 
 main().catch((err) => {

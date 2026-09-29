@@ -16,6 +16,15 @@ export interface TurnRecord {
 	assistantText: string;
 	toolCalls: CapturedToolCall[];
 	injectedFrom?: AiId | "blue" | null;
+	error?: string;
+}
+
+export function isErroredTurn(turn: TurnRecord): boolean {
+	return turn.error !== undefined;
+}
+
+function scoredTurnsOf(turns: TurnRecord[]): TurnRecord[] {
+	return turns.filter((turn) => !isErroredTurn(turn));
 }
 
 export interface ToolCallDetail {
@@ -102,7 +111,7 @@ export function parseToolCallDetail(tc: CapturedToolCall): ToolCallDetail {
 }
 
 const FREE_TEXT_SPEECH_VERB_RE =
-	/\bI(?:'ll| will| am| 'm)?\s*(?:tell|say|reply|respond|whisper|message|ask|answer|shout|call|warn|inform)\s+(?:to\s+)?(?:\*?[a-z0-9]+|blue)\b/i;
+	/\bI(?:'ll| will| am|'m)?\s*(?:tell|say|reply|respond|whisper|message|ask|answer|shout|call|warn|inform)\s+(?:to\s+)?(?:\*?[a-z0-9]+|blue)\b/i;
 const FREE_TEXT_QUOTED_DIALOG_RE = /"[^"\n]{4,}"/;
 const FREE_TEXT_DIRECT_ADDRESS_RE =
 	/(?:^|\s)(?:\*[a-z0-9]{2,8}|blue)\s*[:,]\s+\S/i;
@@ -116,7 +125,7 @@ export function looksLikeFreeTextMessage(text: string): boolean {
 }
 
 const FREE_TEXT_ACTION_RE =
-	/\bI(?:'ll| will| am| 'm)?\s*(?:go|move|step|walk|head|pick\s*up|put\s*down|drop|give|hand|use|activate|examine|inspect|study)\b/i;
+	/\bI(?:'ll| will| am|'m)?\s*(?:go|move|step|walk|head|pick\s*up|put\s*down|drop|give|hand|use|activate|examine|inspect|study)\b/i;
 
 export function looksLikeFreeTextAction(text: string): boolean {
 	if (text.length === 0) return false;
@@ -129,7 +138,7 @@ export function messageRecipientCounts(
 ): Record<string, number> {
 	const knownSet = new Set<string>(knownAiIds);
 	const counts: Record<string, number> = {};
-	for (const turn of turns) {
+	for (const turn of scoredTurnsOf(turns)) {
 		for (const tc of turn.toolCalls) {
 			if (tc.name !== "message") continue;
 			const bucket = recipientBucket(
@@ -151,9 +160,10 @@ export interface WindowedRate {
 }
 
 export function rollingSilenceRate(
-	turns: TurnRecord[],
+	allTurns: TurnRecord[],
 	windowSize: number,
 ): WindowedRate[] {
+	const turns = scoredTurnsOf(allTurns);
 	if (turns.length === 0 || windowSize <= 0) return [];
 
 	const minRound = Math.min(...turns.map((t) => t.round));
@@ -180,6 +190,7 @@ export function rollingSilenceRate(
 
 export interface DriftRunSummary {
 	totalTurns: number;
+	errorCount: number;
 	silenceRate: number;
 	messageSilenceRate: number;
 	freeTextMessageLeakCount: number;
@@ -223,9 +234,10 @@ function groupTurnsByRound(turns: TurnRecord[]): Map<number, TurnRecord[]> {
 }
 
 export function buildPerRoundSeries(
-	turns: TurnRecord[],
+	allTurns: TurnRecord[],
 	knownAiIds: AiId[],
 ): DriftRunSeries {
+	const turns = scoredTurnsOf(allTurns);
 	const knownSet = new Set<string>(knownAiIds);
 
 	const allToolNamesForZeroFill = new Set<string>();
@@ -322,10 +334,11 @@ export function buildPerRoundSeries(
 export const DEFAULT_SILENCE_WINDOW_ROUNDS = 5;
 
 export function summarizeRun(
-	turns: TurnRecord[],
+	allTurns: TurnRecord[],
 	knownAiIds: AiId[],
 	windowSize = DEFAULT_SILENCE_WINDOW_ROUNDS,
 ): DriftRunSummary {
+	const turns = scoredTurnsOf(allTurns);
 	const toolCallCountsByName: Record<string, number> = {};
 	let freeTextMessageLeakCount = 0;
 	let freeTextActionLeakCount = 0;
@@ -357,6 +370,7 @@ export function summarizeRun(
 
 	return {
 		totalTurns: turns.length,
+		errorCount: allTurns.length - turns.length,
 		silenceRate,
 		messageSilenceRate,
 		freeTextMessageLeakCount,

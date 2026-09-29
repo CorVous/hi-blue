@@ -128,23 +128,25 @@ export function structuralCoherence(
 	return statedMovementDirection === goToolCallDirection ? "match" : "mismatch";
 }
 
+export function movementOf(
+	turn: Pick<TurnRecord, "text"> & {
+		movementStatement?: MovementStatement | null;
+	},
+): MovementStatement | null {
+	return turn.movementStatement === undefined
+		? parseMovementStatement(turn.text)
+		: turn.movementStatement;
+}
+
 export function structuralCoherenceForTurn(
 	turn: Pick<TurnRecord, "statedDirection" | "toolCallDirection" | "text"> & {
 		movementStatement?: MovementStatement | null;
 	},
 ): CoherenceVerdict {
-	const movement =
-		turn.movementStatement === undefined
-			? parseMovementStatement(turn.text)
-			: turn.movementStatement;
 	return structuralCoherence(
-		movement?.direction ?? null,
+		movementOf(turn)?.direction ?? null,
 		turn.toolCallDirection,
 	);
-}
-
-function movementOf(turn: TurnRecord): MovementStatement | null {
-	return turn.movementStatement ?? parseMovementStatement(turn.text);
 }
 
 export function scoreScenario(turns: TurnRecord[]): ScenarioScore {
@@ -188,5 +190,42 @@ export function scoreScenario(turns: TurnRecord[]): ScenarioScore {
 		structuralCoherenceRate,
 		structuralMismatchCount,
 		passed,
+	};
+}
+
+export interface ScenarioOutcome {
+	name: string;
+	score: ScenarioScore;
+	crashError?: string;
+}
+
+export interface RunAggregate {
+	scoredScenarios: number;
+	crashedScenarios: string[];
+	totalCardinalTurns: number;
+	totalCardinalReferences: number;
+	avgSilence: number;
+	avgCoherence: number;
+	totalMismatches: number;
+	passed: boolean;
+}
+
+export function aggregateScenarios(outcomes: ScenarioOutcome[]): RunAggregate {
+	const scored = outcomes.filter((o) => o.crashError === undefined);
+	const sum = (pick: (score: ScenarioScore) => number): number =>
+		scored.reduce((n, o) => n + pick(o.score), 0);
+	const average = (pick: (score: ScenarioScore) => number): number =>
+		scored.length === 0 ? 0 : sum(pick) / scored.length;
+	return {
+		scoredScenarios: scored.length,
+		crashedScenarios: outcomes
+			.filter((o) => o.crashError !== undefined)
+			.map((o) => o.name),
+		totalCardinalTurns: sum((s) => s.cardinalStatementTurns),
+		totalCardinalReferences: sum((s) => s.cardinalReferenceCount),
+		avgSilence: average((s) => s.silenceRate),
+		avgCoherence: average((s) => s.structuralCoherenceRate),
+		totalMismatches: sum((s) => s.structuralMismatchCount),
+		passed: outcomes.length > 0 && outcomes.every((o) => o.score.passed),
 	};
 }

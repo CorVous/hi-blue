@@ -18,13 +18,22 @@ import {
 	type ValidationError,
 } from "../../src/spa/game/content-pack-provider.js";
 import { rollObjectiveTypes } from "../../src/spa/game/objective-type-roll.js";
+import { positiveIntegerKnob } from "../env-knobs.js";
 import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
 const MODEL = EVAL_MODEL;
-const ITERATIONS = Number(process.env.EVAL_ITERATIONS ?? 10);
-const PARALLEL = Number(process.env.EVAL_PARALLEL ?? 1);
+const ITERATIONS = positiveIntegerKnob(
+	"EVAL_ITERATIONS",
+	process.env.EVAL_ITERATIONS,
+	10,
+);
+const PARALLEL = positiveIntegerKnob(
+	"EVAL_PARALLEL",
+	process.env.EVAL_PARALLEL,
+	1,
+);
 const OUTER_BUDGET = 3;
 const OBJECTIVE_TYPES_PER_PACK = 3;
 const MAX_OBSTACLE_COUNT = 3;
@@ -180,7 +189,20 @@ async function runIteration(iter: number): Promise<IterationResult> {
 	const attempts: AttemptRecord[] = [];
 	let totalCostUsd = 0;
 
+	const thrownResult = (message: string): IterationResult => ({
+		iter,
+		settingA,
+		settingB,
+		theme,
+		objectiveTypes,
+		finalOutcome: "thrown",
+		finalError: message,
+		attempts,
+		totalCostUsd,
+	});
+
 	for (let outer = 0; outer < OUTER_BUDGET; outer++) {
+		const isLastAttempt = outer === OUTER_BUDGET - 1;
 		const messages = buildOuterMessages(
 			systemPrompt,
 			baseUserPrompt,
@@ -199,19 +221,7 @@ async function runIteration(iter: number): Promise<IterationResult> {
 				outcome: "hard-error",
 				errorMessage: message,
 			});
-			if (outer === OUTER_BUDGET - 1) {
-				return {
-					iter,
-					settingA,
-					settingB,
-					theme,
-					objectiveTypes,
-					finalOutcome: "thrown",
-					finalError: message,
-					attempts,
-					totalCostUsd,
-				};
-			}
+			if (isLastAttempt) return thrownResult(message);
 			correctiveFeedback = null;
 			prevAssistantRaw = null;
 			continue;
@@ -230,6 +240,7 @@ async function runIteration(iter: number): Promise<IterationResult> {
 				outcome: "hard-error",
 				errorMessage: "empty content and reasoning",
 			});
+			if (isLastAttempt) return thrownResult("empty content and reasoning");
 			correctiveFeedback = null;
 			prevAssistantRaw = null;
 			continue;
@@ -246,6 +257,7 @@ async function runIteration(iter: number): Promise<IterationResult> {
 				errorMessage: "JSON parse failed",
 				rawLength: raw.length,
 			});
+			if (isLastAttempt) return thrownResult("JSON parse failed");
 			correctiveFeedback = null;
 			prevAssistantRaw = null;
 			continue;
