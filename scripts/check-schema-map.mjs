@@ -213,12 +213,15 @@ function readArchiveMap(mapName) {
 	return { routed, blank };
 }
 
+const TEST_FILE = /(?:^|\/)__tests__\/|\.(?:test|spec)\.[cm]?[jt]s$/;
+
 function hasMigrationFrom(version) {
 	const name = `migrateV${version}To`;
 	const definition = new RegExp(
-		`(?:function\\s+|(?:const|let|var)\\s+)?${name}[A-Za-z0-9_]*\\s*[(=]`,
+		`(?:^|[^\\w$])(?:function(?:\\s*\\*\\s*|\\s+)|const\\s+)${name}[A-Za-z0-9_]*\\s*[(=:<]`,
 	);
 	for (const path of sourceFilesContaining(headRef, name)) {
+		if (TEST_FILE.test(path)) continue;
 		const text = revisionText(headRef, path);
 		if (typeof text === "string" && definition.test(text)) return true;
 	}

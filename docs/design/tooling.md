@@ -39,6 +39,10 @@ Some consequences:
 - A migration only counts if it starts from the superseded version: a
   `migrateV8ToV9` would not cover a 9 → 10 bump. (No migration functions
   exist today; see persistence.md, "Session schema history".)
+- A migration only counts if it is declared, as `function migrateV<old>To...`
+  or `const migrateV<old>To... =`, in a non-test source file. A bare call to
+  the name, or a declaration inside `__tests__/`, `*.test.*` or `*.spec.*`,
+  migrates no real save, so it does not satisfy the gate.
 - The object-literal reader skips string contents and `//` and `/* */`
   comments while it counts braces, so braces inside them do not end the map
   early.
