@@ -1,7 +1,8 @@
 # Route views (`src/spa/views/`)
 
 Design notes for the three route renderers (`start.ts` → `#/start`,
-`game.ts` → `#/game`, `sessions.ts` → `#/sessions`) and the shared
+`game.ts` → `#/game`, `sessions.ts` → `#/sessions`), the game route's
+`game-endgame.ts` and `transcript-lines.ts`, and the shared
 `archived-build-link.ts` and `dom.ts`. Each renderer owns what is visible for its route:
 it hides the other routes' screens and shows or hides the global chrome
 (`#stage > header`, `#topinfo`, `#banner`).
@@ -96,6 +97,18 @@ it hides the other routes' screens and shows or hides the global chrome
 
 ### Structure
 
+- The endgame screen lives in `game-endgame.ts`. `game.ts` only disables
+  the composer, releases the cached session and calls `showEndgame` with the
+  ended state, the ended session's id, and a `releaseEndedGame` callback
+  that clears `session`, `hydratedSessionId` and `gameEndHandled` when a
+  choice leaves the endgame. The endgame never reads `game.ts`'s module
+  state directly, so the two files do not import each other in a cycle.
+  `transcript-lines.ts` builds the `.msg-line` elements (player and daemon
+  lines with mention highlighting) that both the panels and the endgame's
+  final lines use. The bootstrap loading flow stays in `game.ts`: its
+  handover assigns `session`, `hydratedSessionId` and `hydratedEpoch` and
+  re-enters `renderGame`, so moving it out would need either a cycle or a
+  handful of callbacks back into the route.
 - `renderGame` is a short entry point. It works on one `GameViewContext`
   holding the root, the composer elements, the search params, the dev hooks,
   the persona lookups and lockouts, and the round state (`roundInFlight`,

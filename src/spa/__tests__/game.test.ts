@@ -3064,7 +3064,7 @@ describe("renderGame — endgame outcome and final round (issue #576)", () => {
 	});
 
 	it("endgameSubtitle maps each outcome to its line", async () => {
-		const { endgameSubtitle } = await import("../views/game.js");
+		const { endgameSubtitle } = await import("../views/game-endgame.js");
 		expect(endgameSubtitle("win")).toBe(WIN_LINE);
 		expect(endgameSubtitle("lose")).toBe(BUDGET_EXHAUSTED_LINE);
 	});

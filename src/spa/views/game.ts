@@ -1,4 +1,3 @@
-import { serializeGameSave } from "../../save-serializer.js";
 import {
 	BANNER,
 	formatTopInfoMobile,
@@ -23,7 +22,6 @@ import { updateGameStripSummary } from "../dev-inspector/game-strip.js";
 import { renderInspector } from "../dev-inspector/index.js";
 import { updateWorldMap } from "../dev-inspector/world-map.js";
 import {
-	buildSameDaemonsSession,
 	buildSessionFromAssets,
 	type NewGameAssets,
 } from "../game/bootstrap.js";
@@ -34,7 +32,6 @@ import {
 	type ComposerState,
 	deriveComposerState,
 } from "../game/composer-reducer.js";
-import { appendBroadcast } from "../game/engine.js";
 import { GameSession } from "../game/game-session.js";
 import {
 	applyAddresseeChange,
@@ -42,8 +39,6 @@ import {
 	buildPersonaDisplayNameMap,
 	buildPersonaNameMap,
 	findFirstMention,
-	type MentionSegment,
-	splitMentionSegments,
 } from "../game/mention-parser.js";
 import {
 	clearPendingBootstrap,
@@ -68,28 +63,27 @@ import type {
 	GameState,
 } from "../game/types";
 import { CapHitError } from "../llm-client.js";
-import { readStoredByokKey } from "../openrouter-key.js";
 import {
-	archiveSession,
 	clearActiveSession,
 	deactivateActiveSession,
 	getActiveSessionId,
 	type LoadResult,
 	listSessions,
 	loadActiveSession,
-	mintSessionId,
-	rmSession,
 	saveActiveSession,
-	setActiveSessionId,
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
 import { dropListenersByCloning, setHidden, trySetCaret } from "./dom.js";
+import { showEndgame } from "./game-endgame.js";
+import {
+	appendMentionAwareText,
+	type MessageEntry,
+	PLAYER_ID,
+	transcriptMessageLine,
+} from "./transcript-lines.js";
 
 export const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
 
-const PLAYER_ID = "blue";
-const OBJECTIVES_COMPLETE_SUBTITLE = "You have completed the objectives.";
-const BUDGET_EXHAUSTED_SUBTITLE = "You have hit your budget.";
 const LOADING_PLACEHOLDER = "loading…";
 const UNSET_PROMPT_TARGET = "/?????";
 const UNKNOWN_SESSION_ID = "0x????";
@@ -109,7 +103,6 @@ const SPINNER_INTERVAL_MS = 80;
 const PANEL_SPINNER_SELECTOR = ".panel-name .panel-spinner";
 const BRIGHTNESS_WIPE_TAU_MS = 60_000;
 const BRIGHTNESS_WIPE_MAX_PCT = 99;
-const NEW_ROOM_BROADCAST = "The sysadmin has created a new room.";
 
 const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	unavailable:
@@ -129,7 +122,6 @@ type PersonaLookups = Pick<
 	"personaNamesToId" | "personaColors" | "personaDisplayNames"
 >;
 
-type MessageEntry = Extract<ConversationEntry, { kind: "message" }>;
 type MessageEvent = Extract<SseEvent, { type: "message" }>;
 type UnloadableSession = Exclude<LoadResult, { kind: "ok" }>;
 
@@ -543,26 +535,6 @@ function repaintRestoredTranscripts(
 	});
 }
 
-function transcriptMessageLine(
-	doc: Document,
-	entry: Pick<MessageEntry, "from" | "content">,
-	aiId: AiId,
-	personas: Record<AiId, AiPersona>,
-): HTMLElement {
-	const lineEl = doc.createElement("div");
-	lineEl.className = "msg-line";
-	if (entry.from === PLAYER_ID) {
-		appendMentionAwareText(lineEl, `> ${entry.content}\n`, personas, "msg-you");
-		return lineEl;
-	}
-	const persona = personas[aiId];
-	lineEl.appendChild(
-		daemonPrefixSpan(doc, persona?.name ?? aiId, persona?.color),
-	);
-	appendMentionAwareText(lineEl, `${entry.content}\n`, personas);
-	return lineEl;
-}
-
 function mountSessionView(ctx: GameViewContext): void {
 	const { doc } = ctx;
 	if (session !== null) session = adoptSession(ctx, session);
@@ -876,53 +848,6 @@ function addressPanel(ctx: GameViewContext, panel: HTMLElement): void {
 	ctx.promptInput.value = result.text;
 	trySetCaret(ctx.promptInput, result.selectionStart);
 	refreshComposerState(ctx);
-}
-
-function appendMentionAwareText(
-	parent: HTMLElement,
-	text: string,
-	personas: Record<string, { name: string; color?: string }>,
-	nonMentionClass?: string,
-): void {
-	const doc = parent.ownerDocument;
-	for (const segment of splitMentionSegments(text, personas)) {
-		parent.appendChild(mentionSegmentNode(doc, segment, nonMentionClass));
-	}
-}
-
-function mentionSegmentNode(
-	doc: Document,
-	segment: MentionSegment,
-	nonMentionClass: string | undefined,
-): Node {
-	if (segment.kind === "text" && !nonMentionClass) {
-		return doc.createTextNode(segment.text);
-	}
-	const span = doc.createElement("span");
-	span.textContent = segment.text;
-	if (segment.kind === "text") {
-		span.className = nonMentionClass ?? "";
-		return span;
-	}
-	span.className = "msg-mention";
-	if (segment.color) span.style.setProperty("--mention-color", segment.color);
-	return span;
-}
-
-function transcriptName(name: string): string {
-	return name.toLowerCase();
-}
-
-function daemonPrefixSpan(
-	doc: Document,
-	personaName: string,
-	color: string | undefined,
-): HTMLElement {
-	const span = doc.createElement("span");
-	span.className = "msg-prefix";
-	if (color) span.style.setProperty("--prefix-color", color);
-	span.textContent = `> *${transcriptName(personaName)} `;
-	return span;
 }
 
 function scrollTranscriptToBottom(transcriptEl: HTMLElement | null): void {
@@ -1279,331 +1204,17 @@ function enterEndgame(
 	endedState: GameState,
 	endedSessionId: string | null,
 ): void {
-	const { doc } = ctx;
 	ctx.sendBtn.disabled = true;
 	ctx.promptInput.disabled = true;
 
 	releaseSession();
 
-	paintEndgameSubtitle(doc, endedState.outcome);
-	paintFinalRoundLines(doc, endedState);
-	showEndgameScreen(doc);
-	resetEndgameControls(doc);
-	wireEndgameChoices(ctx.root, endedSessionId, endedState);
-	wireSaveDownload(doc, endedState);
-	wireDiagnosticsSubmit(doc);
+	showEndgame(ctx.root, endedState, endedSessionId, releaseEndedGame);
 }
 
-const ENDGAME_BUTTON_SELECTORS = [
-	"#endgame-new-daemons-btn",
-	"#endgame-same-daemons-btn",
-	"#endgame-continue-btn",
-	"#download-ais-btn",
-	"#submit-diagnostics-btn",
-];
-
-const ENDGAME_STATUS_SELECTORS = [
-	"#endgame-choice-status",
-	"#download-status",
-	"#diagnostics-status",
-];
-
-function resetEndgameControls(doc: Document): void {
-	for (const selector of ENDGAME_BUTTON_SELECTORS) {
-		const button = doc.querySelector<HTMLButtonElement>(selector);
-		if (button) dropListenersByCloning(button).disabled = false;
-	}
-	for (const selector of ENDGAME_STATUS_SELECTORS) {
-		const statusEl = doc.querySelector<HTMLElement>(selector);
-		if (statusEl) statusEl.textContent = "";
-	}
-}
-
-export function endgameSubtitle(outcome: GameState["outcome"]): string {
-	return outcome === "lose"
-		? BUDGET_EXHAUSTED_SUBTITLE
-		: OBJECTIVES_COMPLETE_SUBTITLE;
-}
-
-function paintEndgameSubtitle(
-	doc: Document,
-	outcome: GameState["outcome"],
-): void {
-	const subtitleEl = doc.querySelector<HTMLElement>("#endgame-subtitle");
-	if (!subtitleEl) return;
-	subtitleEl.textContent = endgameSubtitle(outcome);
-	subtitleEl.dataset.outcome = outcome === "lose" ? "budget-exhausted" : "win";
-}
-
-export function finalRoundDaemonLines(
-	state: GameState,
-): Array<{ aiId: AiId; entry: MessageEntry }> {
-	const finalRound = state.round - 1;
-	const lines: Array<{ aiId: AiId; entry: MessageEntry }> = [];
-	for (const aiId of Object.keys(state.personas)) {
-		for (const entry of state.conversationLogs[aiId] ?? []) {
-			const isDaemonLineToPlayer =
-				entry.kind === "message" &&
-				entry.from === aiId &&
-				entry.to === PLAYER_ID;
-			if (isDaemonLineToPlayer && entry.round === finalRound) {
-				lines.push({ aiId, entry });
-			}
-		}
-	}
-	return lines;
-}
-
-function paintFinalRoundLines(doc: Document, state: GameState): void {
-	const sectionEl = doc.querySelector<HTMLElement>("#endgame-final-round");
-	const linesEl = doc.querySelector<HTMLElement>("#endgame-final-lines");
-	if (!sectionEl || !linesEl) return;
-	linesEl.textContent = "";
-	const lines = finalRoundDaemonLines(state);
-	for (const { aiId, entry } of lines) {
-		linesEl.appendChild(
-			transcriptMessageLine(doc, entry, aiId, state.personas),
-		);
-	}
-	sectionEl.hidden = lines.length === 0;
-}
-
-function showEndgameScreen(doc: Document): void {
-	setHidden(doc, ["#panels", "#composer", "#cap-hit"], true);
-	setHidden(doc, ["#endgame"], false);
-}
-
-interface EndgameChoice {
-	root: HTMLElement;
-	endedSessionId: string | null;
-	endedState: GameState;
-	setStatus(text: string): void;
-	enableChoices(): void;
-}
-
-function wireEndgameChoices(
-	root: HTMLElement,
-	endedSessionId: string | null,
-	endedState: GameState,
-): void {
-	const doc = root.ownerDocument;
-	const newDaemonsBtn = doc.querySelector<HTMLButtonElement>(
-		"#endgame-new-daemons-btn",
-	);
-	const sameDaemonsBtn = doc.querySelector<HTMLButtonElement>(
-		"#endgame-same-daemons-btn",
-	);
-	const continueBtn = doc.querySelector<HTMLButtonElement>(
-		"#endgame-continue-btn",
-	);
-	const choiceStatus = doc.querySelector<HTMLElement>("#endgame-choice-status");
-
-	const hasOpenRouterKey = readStoredByokKey() !== null;
-	if (continueBtn && hasOpenRouterKey) {
-		continueBtn.removeAttribute("hidden");
-	}
-
-	const setChoicesDisabled = (disabled: boolean): void => {
-		for (const btn of [newDaemonsBtn, sameDaemonsBtn, continueBtn]) {
-			if (btn) btn.disabled = disabled;
-		}
-	};
-	const choice: EndgameChoice = {
-		root,
-		endedSessionId,
-		endedState,
-		setStatus: (text) => {
-			if (choiceStatus) choiceStatus.textContent = text;
-		},
-		enableChoices: () => setChoicesDisabled(false),
-	};
-
-	newDaemonsBtn?.addEventListener("click", () => {
-		setChoicesDisabled(true);
-		void startWithNewDaemons(choice);
-	});
-	sameDaemonsBtn?.addEventListener("click", () => {
-		setChoicesDisabled(true);
-		void restartWithSameDaemons(choice);
-	});
-	continueBtn?.addEventListener("click", () => {
-		setChoicesDisabled(true);
-		void continueInNewRoom(choice);
-	});
-}
-
-function archiveIfKnown(sessionId: string | null): Promise<void> {
-	return sessionId ? archiveSession(sessionId) : Promise.resolve();
-}
-
-function playerLeftEndedSession(choice: EndgameChoice): boolean {
-	return getActiveSessionId() !== choice.endedSessionId;
-}
-
-function failEndgameChoice(choice: EndgameChoice, message: string): void {
-	choice.setStatus(message);
-	choice.enableChoices();
-}
-
-function failureDetail(err: unknown): string {
-	if (err instanceof DOMException && err.name === "QuotaExceededError") {
-		return "browser storage is full";
-	}
-	return err instanceof Error ? err.message : String(err);
-}
-
-function saveFailureDetail(reason: string): string {
-	return reason === "quota" ? "browser storage is full" : reason;
-}
-
-function removeEndedSession(choice: EndgameChoice): void {
-	if (choice.endedSessionId) rmSession(choice.endedSessionId);
-}
-
-async function startWithNewDaemons(choice: EndgameChoice): Promise<void> {
-	choice.setStatus("archiving…");
-	try {
-		await archiveIfKnown(choice.endedSessionId);
-	} catch (err) {
-		failEndgameChoice(
-			choice,
-			`could not archive this game: ${failureDetail(err)}`,
-		);
-		return;
-	}
-	const playerMovedOn = playerLeftEndedSession(choice);
-	removeEndedSession(choice);
-	if (playerMovedOn) return;
-	releaseSession();
-	renderApp(choice.root);
-}
-
-async function buildNewRoom(
-	choice: EndgameChoice,
-): Promise<GameSession | null> {
-	choice.setStatus("spinning up a new room…");
-	try {
-		return await buildSameDaemonsSession(choice.endedState.personas);
-	} catch (err) {
-		failEndgameChoice(
-			choice,
-			`could not spin up a new room: ${failureDetail(err)}`,
-		);
-		return null;
-	}
-}
-
-async function restartWithSameDaemons(choice: EndgameChoice): Promise<void> {
-	const newRoom = await buildNewRoom(choice);
-	if (!newRoom || playerLeftEndedSession(choice)) return;
-
-	choice.setStatus("archiving…");
-	try {
-		await archiveIfKnown(choice.endedSessionId);
-	} catch (err) {
-		failEndgameChoice(
-			choice,
-			`could not archive this game: ${failureDetail(err)}`,
-		);
-		return;
-	}
-	if (playerLeftEndedSession(choice)) return;
-
-	const newSessionId = mintSessionId();
-	const saveResult = saveActiveSession(newRoom.getState(), {
-		sessionId: newSessionId,
-	});
-	if (!saveResult.ok) {
-		rmSession(newSessionId);
-		failEndgameChoice(
-			choice,
-			`could not save the new room: ${saveFailureDetail(saveResult.reason)}`,
-		);
-		return;
-	}
-	removeEndedSession(choice);
-	setActiveSessionId(newSessionId);
+function releaseEndedGame(): void {
 	releaseSession();
 	gameEndHandled = false;
-	renderApp(choice.root);
-}
-
-async function continueInNewRoom(choice: EndgameChoice): Promise<void> {
-	const newRoom = await buildNewRoom(choice);
-	if (!newRoom || playerLeftEndedSession(choice)) return;
-
-	const saveResult = saveActiveSession(
-		appendBroadcast(newRoom.getState(), NEW_ROOM_BROADCAST),
-		{ sessionId: choice.endedSessionId },
-	);
-	if (!saveResult.ok) {
-		failEndgameChoice(
-			choice,
-			`could not save the new room: ${saveFailureDetail(saveResult.reason)}`,
-		);
-		return;
-	}
-	releaseSession();
-	gameEndHandled = false;
-	renderApp(choice.root);
-}
-
-function wireSaveDownload(doc: Document, endedState: GameState): void {
-	const downloadBtn = doc.querySelector<HTMLButtonElement>("#download-ais-btn");
-	const downloadStatusEl = doc.querySelector<HTMLElement>("#download-status");
-	if (!downloadBtn) return;
-	downloadBtn.dataset.savePayload = JSON.stringify(
-		serializeGameSave(endedState),
-	);
-	downloadBtn.addEventListener("click", () => {
-		downloadSavePayload(doc, downloadBtn.dataset.savePayload ?? "{}");
-		downloadBtn.disabled = true;
-		if (downloadStatusEl) downloadStatusEl.textContent = "Saved.";
-	});
-}
-
-function downloadSavePayload(doc: Document, payload: string): void {
-	const blob = new Blob([payload], { type: "application/json" });
-	const url = URL.createObjectURL(blob);
-	const a = doc.createElement("a");
-	a.href = url;
-	a.download = "hi-blue-save.json";
-	doc.body.appendChild(a);
-	a.click();
-	doc.body.removeChild(a);
-	URL.revokeObjectURL(url);
-}
-
-function wireDiagnosticsSubmit(doc: Document): void {
-	const submitBtn = doc.querySelector<HTMLButtonElement>(
-		"#submit-diagnostics-btn",
-	);
-	const summaryInput = doc.querySelector<HTMLInputElement>(
-		"#diagnostics-summary",
-	);
-	const statusEl = doc.querySelector<HTMLElement>("#diagnostics-status");
-	if (!submitBtn || !summaryInput || !statusEl) return;
-	submitBtn.addEventListener("click", () => {
-		const summary = summaryInput.value.trim();
-		if (!summary) {
-			statusEl.textContent = "Please enter a one-word summary first.";
-			return;
-		}
-		const downloaded =
-			doc.querySelector<HTMLButtonElement>("#download-ais-btn")?.disabled ??
-			false;
-		const markSubmitted = (): void => {
-			statusEl.textContent = "Diagnostics submitted.";
-		};
-		fetch(`${__WORKER_BASE_URL__}/diagnostics`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ downloaded, summary }),
-			mode: "no-cors",
-		})
-			.then(markSubmitted)
-			.catch(markSubmitted);
-	});
 }
 
 class BootstrapTimeoutError extends Error {
