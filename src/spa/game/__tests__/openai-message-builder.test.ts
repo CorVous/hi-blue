@@ -654,3 +654,85 @@ describe("buildOpenAiMessages — tool-call diskDelta (#376)", () => {
 		}
 	});
 });
+
+describe("buildOpenAiMessages — stored duplicate or empty tool-call ids", () => {
+	function toolCallEntry(
+		toolCallId: string,
+		round: number,
+		result: string,
+	): ConversationEntry {
+		return {
+			kind: "tool-call",
+			round,
+			aiId: "red",
+			toolCallId,
+			toolArgumentsJson: '{"direction":"north"}',
+			toolName: "go",
+			result,
+			success: true,
+		};
+	}
+
+	function replayOf(log: ConversationEntry[]) {
+		const game = makeTestGame();
+		const stored = {
+			...game,
+			conversationLogs: { ...game.conversationLogs, red: log },
+		};
+		const ctx = buildAiContext(stored, "red");
+		const roundtrip: ToolRoundtripMessage = {
+			assistantToolCalls: [
+				{ id: "replay-0", name: "go", argumentsJson: '{"direction":"east"}' },
+			],
+			toolResults: [
+				{ tool_call_id: "replay-0", success: true, description: "moved" },
+			],
+		};
+		return { stored, messages: buildOpenAiMessages(ctx, roundtrip) };
+	}
+
+	it("gives every replayed call a unique id and pairs each result with its own call", () => {
+		let messaged = appendMessage(makeTestGame(), "red", "blue", "hi", {
+			toolCallId: "dup",
+			toolArgumentsJson: '{"to":"blue","content":"hi"}',
+		});
+		messaged = appendMessage(messaged, "red", "blue", "again", {
+			toolCallId: "dup",
+			toolArgumentsJson: '{"to":"blue","content":"again"}',
+		});
+		const log = [
+			toolCallEntry("dup", 0, "first walk"),
+			...(messaged.conversationLogs.red ?? []),
+			toolCallEntry("", 1, "second walk"),
+			toolCallEntry("dup", 1, "third walk"),
+		];
+		const snapshot = structuredClone(log);
+		const { stored, messages } = replayOf(log);
+
+		const callIds = messages.flatMap((m) =>
+			m.role === "assistant" ? (m.tool_calls ?? []).map((tc) => tc.id) : [],
+		);
+		expect(callIds).toHaveLength(6);
+		expect(new Set(callIds).size).toBe(6);
+		expect(callIds).not.toContain("");
+
+		messages.forEach((m, index) => {
+			if (m.role !== "assistant" || !m.tool_calls) return;
+			const result = messages[index + 1];
+			expect(result?.role).toBe("tool");
+			if (result?.role === "tool") {
+				expect(result.tool_call_id).toBe(m.tool_calls[0]?.id);
+			}
+		});
+		const firstWalk = messages.find(
+			(m) => m.role === "tool" && m.content.includes("first walk"),
+		);
+		expect(firstWalk).toMatchObject({ tool_call_id: "dup" });
+
+		expect(stored.conversationLogs.red).toEqual(snapshot);
+		const replayedAgain = replayOf(snapshot).messages.flatMap((m) =>
+			m.role === "assistant" ? (m.tool_calls ?? []).map((tc) => tc.id) : [],
+		);
+		expect(replayedAgain).toEqual(callIds);
+	});
+});

@@ -213,11 +213,7 @@ export async function runRound(
 		);
 		const toolCalls = withUniqueToolCallIds(
 			providerToolCalls,
-			replayedToolCallIds(
-				state.conversationLogs[aiId] ?? [],
-				aiId,
-				priorRoundtrip,
-			),
+			replayedToolCallIds(messages),
 			`${aiId}-r${state.round}`,
 		);
 
@@ -490,19 +486,12 @@ export async function runRound(
 	};
 }
 
-function replayedToolCallIds(
-	log: ConversationEntry[],
-	aiId: AiId,
-	priorRoundtrip: ToolRoundtripMessage | undefined,
-): Set<string> {
+function replayedToolCallIds(messages: OpenAiMessage[]): Set<string> {
 	const ids = new Set<string>();
-	for (const entry of log) {
-		if (entry.kind === "tool-call") ids.add(entry.toolCallId);
-		if (entry.kind === "message" && entry.from === aiId && entry.toolCallId) {
-			ids.add(entry.toolCallId);
-		}
+	for (const message of messages) {
+		if (message.role !== "assistant") continue;
+		for (const toolCall of message.tool_calls ?? []) ids.add(toolCall.id);
 	}
-	for (const tc of priorRoundtrip?.assistantToolCalls ?? []) ids.add(tc.id);
 	return ids;
 }
 
