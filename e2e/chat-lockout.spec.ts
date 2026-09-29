@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
+	collectPageErrors,
 	ENGINE_OBFUSCATION_KEY,
 	expectNoPageErrors,
 	getAiHandles,
@@ -62,8 +63,7 @@ async function injectChatLockoutIntoEngineDat(
 test("a lockout restored from storage mutes the panel before any typing, disables send for that AI, and is silent to the player", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids } = await goToGame(page, { sse: ["greetings"] });
 

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
 	classifyJsonRequest,
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	isJsonModeRequest,
@@ -23,8 +24,7 @@ type SealedEngineWithEnding = SealedEngine & {
 test("a win shows the win line, the final turn and the final round's lines, and survives a reload", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page, {
 		url: "/?winImmediately=1",
@@ -56,8 +56,7 @@ test("a win shows the win line, the final turn and the final round's lines, and 
 });
 
 test("a budget-exhausted ending shows its own line", async ({ page }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page, { sse: ["last ", "gasp"] });
 
@@ -105,8 +104,7 @@ test("a budget-exhausted ending shows its own line", async ({ page }) => {
 test("re-entering the endgame without a reload does not stack its button handlers", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page, {
 		url: "/?winImmediately=1",

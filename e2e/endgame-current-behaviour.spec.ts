@@ -1,11 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame } from "./helpers";
+import { collectPageErrors, expectNoPageErrors, goToGame } from "./helpers";
 
 test("game_ended disables the composer, shows endgame choices, and keeps the session pointer and URL", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page, {
 		url: "/?winImmediately=1",

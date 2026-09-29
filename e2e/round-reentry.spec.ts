@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	isJsonModeRequest,
@@ -9,8 +10,7 @@ import {
 test("toggling the session picker mid-round keeps Send disabled and runs one round", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page, { sse: ["held", "reply"] });
 

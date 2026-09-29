@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
 	classifyJsonRequest,
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	parseRequestBody,
@@ -45,8 +46,7 @@ async function holdNewRoomGeneration(page: Page) {
 test("toggling the picker during a Same daemons generation keeps the choices locked and the status shown", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await reachEndgame(page);
 	const generation = await holdNewRoomGeneration(page);
@@ -77,8 +77,7 @@ test("toggling the picker during a Same daemons generation keeps the choices loc
 test("a triple-clicked diagnostics submit sends one request", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await reachEndgame(page);
 	let posts = 0;
@@ -103,8 +102,7 @@ test("a triple-clicked diagnostics submit sends one request", async ({
 test("Continue hides again once the stored OpenRouter key is cleared", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await reachEndgame(page);
 	await page.evaluate(() => {

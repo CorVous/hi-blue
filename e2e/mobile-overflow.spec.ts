@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame } from "./helpers";
+import { collectPageErrors, expectNoPageErrors, goToGame } from "./helpers";
 
 const MOBILE_WIDTHS = [320, 360, 375, 390, 414] as const;
 
@@ -49,8 +49,7 @@ test.describe("mobile shell overflow (#554)", () => {
 	test.use({ viewport: { width: 375, height: 667 } });
 
 	test("the booted shell does not overflow at 375px", async ({ page }) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 		const probe = await overflowProbe(page);
@@ -75,8 +74,7 @@ test.describe("mobile shell overflow (#554)", () => {
 	test("a wide dev-strip row cannot blow out the stage track", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 
@@ -107,8 +105,7 @@ test.describe("mobile shell overflow (#554)", () => {
 	test("no horizontal overflow at any supported mobile width", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 

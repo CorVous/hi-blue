@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	isJsonModeRequest,
@@ -54,8 +55,7 @@ async function routeDaemonStreams(page: Page, body: () => string) {
 test("an error chunk before any content or tool call fails the round with #round-error", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page);
 	await routeDaemonStreams(page, streamThatErrorsBeforeAnyOutput);
@@ -74,8 +74,7 @@ test("an error chunk before any content or tool call fails the round with #round
 test("an error chunk after a message tool call keeps the message and completes the round", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page);
 	await routeDaemonStreams(page, () =>

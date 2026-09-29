@@ -1,5 +1,5 @@
 export { getAiHandles, renderedPlayerLine } from "./handles";
-export { expectNoPageErrors } from "./page-errors";
+export { collectPageErrors, expectNoPageErrors } from "./page-errors";
 export {
 	pickerOkSessionFiles,
 	pickerOkSessionSeedScript,

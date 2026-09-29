@@ -3,6 +3,7 @@ import {
 	activePackOf,
 	CARDINAL_DIRECTIONS,
 	type CardinalDirection,
+	collectPageErrors,
 	expectNoPageErrors,
 	type GridPosition,
 	getAiHandles,
@@ -114,8 +115,7 @@ function entityHolderOf(sealed: SealedEngine, entityId: string): unknown {
 test("game state and transcripts persist across mid-round reload", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { names, ids } = await goToGame(page, { sse: [STUB_COMPLETION] });
 
@@ -187,8 +187,7 @@ test("game state and transcripts persist across mid-round reload", async ({
 test("a live-schema session reloads with position, inventory, content state, conversation and perception changes intact", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page, { sse: [STUB_COMPLETION] });
 	await expect(page.locator("#composer")).toBeVisible();

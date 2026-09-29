@@ -172,6 +172,8 @@ specs that assert on generation failure check `#cap-hit` themselves.
   microtask or a timer can arrive after the test's last `await`, so a
   synchronous `expect(pageErrors).toEqual([])` misses it.
   `expectNoPageErrors` lets such errors settle for 100 ms before it asserts.
+  Specs collect the errors with `collectPageErrors(page)`, which registers
+  the listener and returns the array it fills.
   `smoke.spec.ts` checks that the helper catches a late microtask error.
 
 ## What each spec guards

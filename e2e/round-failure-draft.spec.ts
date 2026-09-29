@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	isJsonModeRequest,
@@ -9,8 +10,7 @@ import {
 test("a failed round puts the typed message back and drops its transcript line", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page);
 	await page.route("**/v1/chat/completions", async (route, request) => {

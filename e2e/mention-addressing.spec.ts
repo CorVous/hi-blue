@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame, renderedPlayerLine } from "./helpers";
+import {
+	collectPageErrors,
+	expectNoPageErrors,
+	goToGame,
+	renderedPlayerLine,
+} from "./helpers";
 
 test("address dropdown is gone (#address count === 0)", async ({ page }) => {
 	await goToGame(page);
@@ -24,8 +29,7 @@ test("typing 'hi' leaves Send disabled", async ({ page }) => {
 test("typing '*<ai1> hi' enables Send and submits to that transcript only", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page, { sse: ["greetings"] });
 	await expect(page.locator("#composer")).toBeVisible();

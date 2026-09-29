@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame, parseRequestBody } from "./helpers";
+import {
+	collectPageErrors,
+	expectNoPageErrors,
+	goToGame,
+	parseRequestBody,
+} from "./helpers";
 
 test("default daemon turns leave thinking on — requests do NOT include the reasoning field", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const observedBodies: unknown[] = [];
 
@@ -32,8 +36,7 @@ test("default daemon turns leave thinking on — requests do NOT include the rea
 test("?think=0 turns thinking off — requests add reasoning:{enabled:false}", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const observedBodies: Record<string, unknown>[] = [];
 

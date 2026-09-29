@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	renderedPlayerLine,
@@ -14,8 +15,7 @@ const COMPLETIONS_IN_CALL_ORDER = [
 test("addressed message lands only on first panel; each call-order completion lands in exactly one panel", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	let callIndex = 0;
 	const { ids, names } = await goToGame(page, {

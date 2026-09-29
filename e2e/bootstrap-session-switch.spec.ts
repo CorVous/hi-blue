@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { BOOTSTRAP_LOADING_TIMEOUT_MS } from "../src/spa/views/game-bootstrap-flow.js";
 import {
 	classifyJsonRequest,
+	collectPageErrors,
 	expectNoPageErrors,
 	parseRequestBody,
 	pickerOkSessionFiles,
@@ -62,8 +63,7 @@ function listSessionIds(page: Page): Promise<string[]> {
 test("a timed-out loading flow that succeeds after the player abandoned it does not take over the start screen", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.clock.install();
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
@@ -108,8 +108,7 @@ test("a timed-out loading flow that succeeds after the player abandoned it does 
 test("a new game shows epoch 01 after a session with a later epoch was open", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 	const files = pickerOkSessionFiles("2025-03-01T10:00:00.000Z");

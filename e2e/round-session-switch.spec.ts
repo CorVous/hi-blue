@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	isJsonModeRequest,
@@ -53,8 +54,7 @@ async function readMetaRound(page: Page, id: string): Promise<number | null> {
 test("a round still running when the player loads another session is saved to its own session", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page, { sse: [ROUND_A_REPLY] });
 	const sessionA = await page.evaluate(() =>
@@ -101,8 +101,7 @@ test("a round still running when the player loads another session is saved to it
 test("a round still running when the player removes its session is dropped", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { names } = await goToGame(page, { sse: [ROUND_A_REPLY] });
 	const sessionA = await page.evaluate(() =>

@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
 	classifyJsonRequest,
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	parseRequestBody,
@@ -93,8 +94,7 @@ for (const choice of [
 	test(`${choice.name} leaves a session the player loaded meanwhile untouched`, async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 		await page.addInitScript(() => {
 			localStorage.setItem("openrouter_key", "sk-or-test-key");
 		});
@@ -135,8 +135,7 @@ for (const choice of [
 	test(`${choice.name} keeps the finished game and shows why when archiving fails`, async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		const endedSessionId = await reachEndgame(page);
 		await page.evaluate((id) => {
@@ -169,8 +168,7 @@ function markFinalSaveTorn(page: Page, sessionId: string): Promise<void> {
 test("New daemons moves on from a torn final save without archiving it", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const endedSessionId = await reachEndgame(page);
 	await markFinalSaveTorn(page, endedSessionId);
@@ -192,8 +190,7 @@ test("New daemons moves on from a torn final save without archiving it", async (
 test("Same daemons notes a torn final save before building the new room", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const endedSessionId = await reachEndgame(page);
 	await markFinalSaveTorn(page, endedSessionId);

@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
+	collectPageErrors,
 	expectNoPageErrors,
 	type GridPosition,
 	goToGame,
@@ -154,8 +155,7 @@ test.describe("dev inspector world map", () => {
 	test("board renders the room-only 5×5 grid with no wall cells", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 
@@ -186,8 +186,7 @@ test.describe("dev inspector world map", () => {
 	test("board lays out as five rows of five, not a wrapped narrow grid", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 		await expect(page.locator("#dev-world-map")).toBeVisible();
@@ -230,8 +229,7 @@ test.describe("dev inspector world map", () => {
 	test("daemon markers carry identity only — no direction or movement marker", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 
@@ -269,8 +267,7 @@ test.describe("dev inspector world map", () => {
 	test("focus highlights the in-bounds Vista, leaving the marker intact", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 
@@ -335,8 +332,7 @@ test.describe("dev inspector world map", () => {
 	test("switching focus moves the tint; repeat-click and Escape both clear it", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 
@@ -405,8 +401,7 @@ test.describe("dev inspector world map", () => {
 	test("boundary Daemons highlight fewer cells than a centred one, all in room", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 
@@ -484,8 +479,7 @@ test.describe("dev inspector at 375×667", () => {
 	test("narrow viewport keeps the board rendered without horizontal overflow", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 
@@ -536,8 +530,7 @@ test.describe("dev inspector at 375×667", () => {
 	test("board renders and the grid does not overflow when the media query is lifted", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await goToGame(page, { sse: ["hi"] });
 		await expect(page.locator("#dev-world-map")).toBeAttached();
@@ -583,8 +576,7 @@ test.describe("dev inspector daemon footer", () => {
 	test("a restored session fills the footer chips before any round runs", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		const { ids } = await goToGame(page, { sse: ["hi"] });
 		const target = ids[0];

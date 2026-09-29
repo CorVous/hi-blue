@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame, renderedPlayerLine } from "./helpers";
+import {
+	collectPageErrors,
+	expectNoPageErrors,
+	goToGame,
+	renderedPlayerLine,
+} from "./helpers";
 
 async function reachEndgame(page: Parameters<typeof goToGame>[0]) {
 	const { names, ids } = await goToGame(page, {
@@ -17,8 +22,7 @@ async function reachEndgame(page: Parameters<typeof goToGame>[0]) {
 test("endgame shows choice buttons; Continue hidden without openrouter_key", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await reachEndgame(page);
 
@@ -34,8 +38,7 @@ test("endgame shows choice buttons; Continue hidden without openrouter_key", asy
 test("Continue button visible when openrouter_key is set in localStorage", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		localStorage.setItem("openrouter_key", "sk-or-test-key");
@@ -51,8 +54,7 @@ test("Continue button visible when openrouter_key is set in localStorage", async
 test("New Daemons click archives session and transitions to start view", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await reachEndgame(page);
 
@@ -90,8 +92,7 @@ async function expectPlayableGameAfterEndgame(
 test("Same Daemons leaves the endgame screen and re-enables the prompt", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await reachEndgame(page);
 	await page.locator("#endgame-same-daemons-btn").click();
@@ -104,8 +105,7 @@ test("Same Daemons leaves the endgame screen and re-enables the prompt", async (
 test("Continue leaves the endgame screen and re-enables the prompt", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		localStorage.setItem("openrouter_key", "sk-or-test-key");
@@ -136,8 +136,7 @@ test("Continue leaves the endgame screen and re-enables the prompt", async ({
 test("New Daemons hides the endgame on the start screen and in the next game", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await reachEndgame(page);
 	await page.locator("#endgame-new-daemons-btn").click();

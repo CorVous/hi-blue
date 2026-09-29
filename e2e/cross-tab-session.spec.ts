@@ -1,5 +1,6 @@
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import {
+	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
 	isJsonModeRequest,
@@ -66,8 +67,7 @@ test("an idle tab reloads the session when another tab saves a round into it", a
 	context,
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page);
 	const sessionId = await activeSessionId(page);
@@ -102,8 +102,7 @@ test("a round that finishes after another tab saved is refused, warned about, an
 	context,
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page);
 	const sessionId = await activeSessionId(page);

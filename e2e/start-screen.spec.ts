@@ -7,6 +7,7 @@ import {
 } from "@playwright/test";
 import {
 	classifyJsonRequest,
+	collectPageErrors,
 	expectNoPageErrors,
 	isJsonModeRequest,
 	parseRequestBody,
@@ -33,8 +34,7 @@ async function waitForActiveSession(
 test("new visitor sees the start screen with panels and composer hidden", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubChatCompletions(page, ["stub reply"]);
 
@@ -53,8 +53,7 @@ test.describe("mobile viewport", () => {
 	test("start screen keeps panels and composer hidden on mobile", async ({
 		page,
 	}) => {
-		const pageErrors: Error[] = [];
-		page.on("pageerror", (err) => pageErrors.push(err));
+		const pageErrors = collectPageErrors(page);
 
 		await stubChatCompletions(page, ["stub reply"]);
 
@@ -71,8 +70,7 @@ test.describe("mobile viewport", () => {
 test("password input disables ligatures so masked `***` doesn't shift mid-char", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubChatCompletions(page, ["stub reply"]);
 
@@ -90,8 +88,7 @@ test("password input disables ligatures so masked `***` doesn't shift mid-char",
 test("[ BEGIN ] is enabled once the start screen has booted with the dial-up skipped", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
@@ -106,8 +103,7 @@ test("[ BEGIN ] is enabled once the start screen has booted with the dial-up ski
 test("clicking [ BEGIN ] transitions to the game view and shows panels", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
@@ -134,8 +130,7 @@ test("clicking [ BEGIN ] transitions to the game view and shows panels", async (
 test("refreshing on the game view with an active session stays on the game view", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
@@ -162,8 +157,7 @@ test("refreshing on the game view with an active session stays on the game view"
 });
 
 test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.route("**/v1/chat/completions", async (route, request) => {
 		const body = parseRequestBody(request);
@@ -203,8 +197,7 @@ test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
 test("an upstream provider 429 during generation is retried, not shown as #cap-hit", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
@@ -241,8 +234,7 @@ test("an upstream provider 429 during generation is retried, not shown as #cap-h
 test("a non-cap generation failure shows a retryable error on the start screen, not #cap-hit", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
@@ -293,8 +285,7 @@ const RERENDER_SETTLE_MS = 500;
 test("toggling the session picker after a generation failure sends no new request", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	let completionRequests = 0;
 	await page.route("**/v1/chat/completions", async (route) => {
@@ -342,8 +333,7 @@ test("toggling the session picker after a generation failure sends no new reques
 test("refresh during generation re-enters start screen and restarts generation", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const holdGenerationInFlightHandler = async (
 		route: Route,
@@ -385,8 +375,7 @@ test("refresh during generation re-enters start screen and restarts generation",
 test("empty active-session pointer surfaces the start screen on load", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 

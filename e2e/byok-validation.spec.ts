@@ -1,13 +1,12 @@
 import { expect, type Route, test } from "@playwright/test";
-import { expectNoPageErrors, goToGame } from "./helpers";
+import { collectPageErrors, expectNoPageErrors, goToGame } from "./helpers";
 
 const KEY_VALIDATION_TIMEOUT_MS = 15_000;
 
 test("a stalled key validation says it is in progress, then times out and frees the button", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const authKeyRoutes: Route[] = [];
 	await page.route("https://openrouter.ai/api/v1/auth/key", (route) => {
@@ -47,8 +46,7 @@ test("a stalled key validation says it is in progress, then times out and frees 
 test("a validated key that the browser refuses to store says so instead of hanging on Validating…", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		const realSetItem = Storage.prototype.setItem;
