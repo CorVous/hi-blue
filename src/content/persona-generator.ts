@@ -86,6 +86,11 @@ function drawWithReplacement<T>(pool: T[], rng: () => number): T {
 	return pool[Math.floor(rng() * pool.length)]!;
 }
 
+function drawWithoutReplacement<T>(remaining: T[], rng: () => number): T {
+	const [drawn] = remaining.splice(Math.floor(rng() * remaining.length), 1);
+	return drawn as T;
+}
+
 export async function generatePersonas(
 	rng: () => number = Math.random,
 	llm?: LlmSynthesisProvider,
@@ -121,12 +126,16 @@ export async function generatePersonas(
 			drawWithReplacement(TEMPERAMENT_POOL, rng),
 		];
 		const personaGoal = drawWithReplacement(PERSONA_GOAL_POOL, rng);
+		const unusedQuirks = [...TYPING_QUIRK_POOL];
 		const typingQuirks: [string, string, ...string[]] = [
-			drawWithReplacement(TYPING_QUIRK_POOL, rng),
-			drawWithReplacement(TYPING_QUIRK_POOL, rng),
+			drawWithoutReplacement(unusedQuirks, rng),
+			drawWithoutReplacement(unusedQuirks, rng),
 		];
-		while (rollsTopFace(rng, EXTRA_TYPING_QUIRK_DIE_SIDES)) {
-			typingQuirks.push(drawWithReplacement(TYPING_QUIRK_POOL, rng));
+		while (
+			unusedQuirks.length > 0 &&
+			rollsTopFace(rng, EXTRA_TYPING_QUIRK_DIE_SIDES)
+		) {
+			typingQuirks.push(drawWithoutReplacement(unusedQuirks, rng));
 		}
 		tuples.push({ id: name, temperaments, personaGoal, typingQuirks });
 	}

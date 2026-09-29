@@ -108,6 +108,25 @@ describe("generatePersonas — template fallback (no llm)", () => {
 	});
 });
 
+describe("generatePersonas — typing quirks", () => {
+	it("never gives one persona the same quirk twice", async () => {
+		const alwaysDrawFirstEntry = () => 0;
+		const personas = await generatePersonas(alwaysDrawFirstEntry);
+		for (const p of Object.values(personas)) {
+			expect(new Set(p.typingQuirks).size).toBe(p.typingQuirks.length);
+		}
+	});
+
+	it("stops adding quirks once the pool is exhausted", async () => {
+		const alwaysRollSix = () => 0.99;
+		const personas = await generatePersonas(alwaysRollSix);
+		for (const p of Object.values(personas)) {
+			expect(p.typingQuirks).toHaveLength(TYPING_QUIRK_POOL.length);
+			expect(new Set(p.typingQuirks).size).toBe(TYPING_QUIRK_POOL.length);
+		}
+	});
+});
+
 describe("generatePersonas — LLM path", () => {
 	it("passes all 3 persona tuples in a single batched call", async () => {
 		const mockProvider = new MockSynthesisProvider(

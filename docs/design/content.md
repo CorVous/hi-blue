@@ -68,6 +68,11 @@ Placement writes holders back in place, so this stays the pack order.
   to enumerating names in order. A degenerate test RNG (a constant stub) would
   otherwise collide forever.
 - Each persona gets two typing quirks, and one more on every roll of 6 on a d6.
+  Quirks are drawn without replacement, so a persona never lists the same
+  quirk twice, and the extra rolls stop once the pool is used up (a constant
+  test RNG that always rolls 6 would otherwise loop forever). Temperaments are
+  still drawn with replacement: a repeated temperament is intensification
+  (CONTEXT.md), a repeated quirk is only noise.
 - Without an LLM provider, blurbs and voice examples come from templates. The
   fallback voice examples are deliberately low quality: they exist to satisfy
   the type. The real value comes from LLM synthesis.
