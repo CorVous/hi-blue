@@ -126,10 +126,11 @@ export function targetHandles(entities: WorldEntity[]): Map<string, string> {
 	const targetable = entities.filter(isTargetable);
 	const nameCounts = new Map<string, number>();
 	for (const e of targetable) {
-		const name = e.name.trim();
-		nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+		const nameKey = handleKey(e.name);
+		nameCounts.set(nameKey, (nameCounts.get(nameKey) ?? 0) + 1);
 	}
-	const isShared = (name: string): boolean => (nameCounts.get(name) ?? 0) > 1;
+	const isShared = (name: string): boolean =>
+		(nameCounts.get(handleKey(name)) ?? 0) > 1;
 	const taken = new Set(
 		targetable
 			.map((e) => e.name.trim())
@@ -144,13 +145,14 @@ export function targetHandles(entities: WorldEntity[]): Map<string, string> {
 			handles.set(e.id, name);
 			continue;
 		}
-		let ordinal = lastOrdinal.get(name) ?? 0;
+		const nameKey = handleKey(name);
+		let ordinal = lastOrdinal.get(nameKey) ?? 0;
 		let handle: string;
 		do {
 			ordinal++;
 			handle = `${name} #${ordinal}`;
 		} while (taken.has(handleKey(handle)));
-		lastOrdinal.set(name, ordinal);
+		lastOrdinal.set(nameKey, ordinal);
 		taken.add(handleKey(handle));
 		handles.set(e.id, handle);
 	}

@@ -303,6 +303,30 @@ describe("ordinal handles never collide with an existing name", () => {
 	});
 });
 
+describe("names that differ only in case share ordinal handles", () => {
+	it("gives Lamp and lamp distinct #n handles, each resolving to its own entity", () => {
+		const game = makeGame([
+			makeEntity("lamp-upper", "interesting_object", RED_CELL, {
+				name: "Lamp",
+			}),
+			makeEntity("lamp-lower", "interesting_object", RED_CELL, {
+				name: "lamp",
+			}),
+		]);
+		const handles = targetHandles(game.world.entities);
+		expect(handles.get("lamp-upper")).toBe("Lamp #1");
+		expect(handles.get("lamp-lower")).toBe("lamp #2");
+		expect(new Set(itemEnum(game, "pick_up")).size).toBe(2);
+		const result = dispatchAiTurn(game, {
+			aiId: "red",
+			toolCall: { name: "pick_up", args: { item: "lamp #2" } },
+		});
+		expect(result.game.world.entities.find((e) => e.holder === "red")?.id).toBe(
+			"lamp-lower",
+		);
+	});
+});
+
 describe("rejections name a held-fast item's space by its handle", () => {
 	it("uses the space's handle when two spaces share a name", () => {
 		const game = makeGame([
