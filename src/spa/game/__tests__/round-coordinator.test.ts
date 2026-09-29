@@ -18,6 +18,7 @@ import type {
 	GameState,
 	PersonaSpatialState,
 	UseItemObjective,
+	WorldEntity,
 } from "../types";
 import {
 	makeSilentProvider,
@@ -2713,112 +2714,21 @@ describe("complication countdown — coordinator integration", () => {
 });
 
 describe("diskDelta persistence via diskEntities", () => {
-	it("passes diskEntities from round 1 as priorDiskEntities to round 2, emitting first-sight line", async () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "item",
-					kind: "interesting_object",
-					name: "TestItem",
-					examineDescription: "It shimmers.",
-					holder: { row: 10, col: 10 },
-				},
-			],
-			{
-				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
-			},
-		);
-		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const provider1 = makeSilentProvider();
+	const ROW_STARTS = {
+		red: { position: { row: 0, col: 0 } },
+		green: { position: { row: 0, col: 1 } },
+		cyan: { position: { row: 0, col: 2 } },
+	};
 
-		const round1Result = await runRound(game1, "red", "hello", provider1);
-		const game2 = round1Result.nextState;
-
-		const gameWithItem = {
-			...game2,
-			world: {
-				...game2.world,
-				entities: game2.world.entities.map((e) =>
-					e.id === "item" ? { ...e, holder: { row: 1, col: 0 } } : e,
-				),
-			},
-		};
-
-		const provider2 = new MockRoundLLMProvider([
-			{
-				assistantText: "I see the item",
-				toolCalls: [
-					{
-						id: "1",
-						name: "go",
-						argumentsJson: JSON.stringify({ direction: "north" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		const round2Result = await runRound(
-			gameWithItem,
-			"red",
-			"move",
-			provider2,
-			{
-				rng: Math.random,
-				priorToolRoundtrip: {},
-				priorDiskSnapshots: {},
-				priorDiskEntities: round1Result.diskEntities,
-			},
-		);
-
-		const redLog = round2Result.nextState.conversationLogs.red ?? [];
-		const redActionToolCall = redLog.find(
-			(e) => e.kind === "tool-call" && e.toolName === "go",
-		);
-		expect(redActionToolCall?.kind === "tool-call").toBe(true);
-		expect(
-			redActionToolCall?.kind === "tool-call" && redActionToolCall.diskDelta,
-		).toBeDefined();
-		const diskDelta =
-			redActionToolCall?.kind === "tool-call"
-				? redActionToolCall.diskDelta
-				: "";
-		expect(diskDelta).toContain("Came into view: TestItem");
-	});
-
-	it("attaches perception-delta lines to a pick_up that auto-examines the item", async () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "lamp",
-					kind: "interesting_object",
-					name: "Lamp",
-					examineDescription: "A brass lamp.",
-					holder: { row: 1, col: 0 },
-				},
-				{
-					id: "coin",
-					kind: "interesting_object",
-					name: "Coin",
-					examineDescription: "A dull coin.",
-					holder: { row: 10, col: 10 },
-				},
-			],
-			{
-				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
-			},
-		);
+	async function roundTwoWith(
+		entities: WorldEntity[],
+		placements: Record<string, { row: number; col: number }>,
+		redToolCalls: Array<{ id: string; name: string; argumentsJson: string }>,
+	) {
+		const pack = makeTestPack(entities, {
+			wallName: "wall",
+			aiStarts: ROW_STARTS,
+		});
 		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
 		const round1Result = await runRound(
 			game1,
@@ -2826,204 +2736,136 @@ describe("diskDelta persistence via diskEntities", () => {
 			"hi",
 			makeSilentProvider(),
 		);
-		const gameWithCoin = {
+		const game2 = {
 			...round1Result.nextState,
 			world: {
 				...round1Result.nextState.world,
-				entities: round1Result.nextState.world.entities.map((e) =>
-					e.id === "coin" ? { ...e, holder: { row: 2, col: 0 } } : e,
-				),
+				entities: round1Result.nextState.world.entities.map((e) => {
+					const placed = placements[e.id];
+					return placed ? { ...e, holder: placed } : e;
+				}),
 			},
 		};
+		const provider2 = new MockRoundLLMProvider([
+			{ assistantText: "", toolCalls: redToolCalls },
+			{ assistantText: "", toolCalls: [] },
+			{ assistantText: "", toolCalls: [] },
+		]);
+		const round2Result = await runRound(game2, "red", "move", provider2, {
+			rng: Math.random,
+			priorToolRoundtrip: {},
+			priorDiskSnapshots: {},
+			priorDiskEntities: round1Result.diskEntities,
+		});
+		const prompt = provider2.calls[0]?.messages ?? [];
+		const stateMessage = prompt[prompt.length - 1]?.content ?? "";
+		return { round2Result, stateMessage };
+	}
 
-		const round2Result = await runRound(
-			gameWithCoin,
-			"red",
-			"grab it",
-			new MockRoundLLMProvider([
-				{
-					assistantText: "",
-					toolCalls: [
-						{
-							id: "pickup_lamp",
-							name: "pick_up",
-							argumentsJson: JSON.stringify({ item: "lamp" }),
-						},
-					],
-				},
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
-			]),
-			{ priorDiskEntities: round1Result.diskEntities },
+	function offGrid(id: string, name: string, description: string): WorldEntity {
+		return {
+			id,
+			kind: "interesting_object",
+			name,
+			examineDescription: description,
+			holder: { row: 10, col: 10 },
+		};
+	}
+
+	const goSouth = {
+		id: "go1",
+		name: "go",
+		argumentsJson: JSON.stringify({ direction: "south" }),
+	};
+
+	it("notices what the action itself brought into view", async () => {
+		const { round2Result } = await roundTwoWith(
+			[offGrid("far", "Far Lantern", "It glows.")],
+			{ far: { row: 3, col: 0 } },
+			[goSouth],
 		);
+		const goEntry = loggedToolCalls(round2Result.nextState, "red").find(
+			(e) => e.toolCallId === "go1",
+		);
+		expect(goEntry?.diskDelta).toContain("Came into view: Far Lantern");
+	});
 
+	it("does not repeat in <noticed> what this turn's <whats_new> already showed", async () => {
+		const { round2Result, stateMessage } = await roundTwoWith(
+			[offGrid("near", "Near Crate", "A crate.")],
+			{ near: { row: 2, col: 0 } },
+			[goSouth],
+		);
+		expect(stateMessage).toContain("Came into view: Near Crate");
+		const goEntry = loggedToolCalls(round2Result.nextState, "red").find(
+			(e) => e.toolCallId === "go1",
+		);
+		expect(goEntry?.diskDelta ?? "").not.toContain(
+			"Came into view: Near Crate",
+		);
+	});
+
+	it("leaves a pick_up with nothing new in view without perception lines", async () => {
+		const { round2Result, stateMessage } = await roundTwoWith(
+			[
+				offGrid("lamp", "Lamp", "A brass lamp."),
+				offGrid("coin", "Coin", "A dull coin."),
+			],
+			{ lamp: { row: 1, col: 0 }, coin: { row: 2, col: 0 } },
+			[
+				{
+					id: "pickup_lamp",
+					name: "pick_up",
+					argumentsJson: JSON.stringify({ item: "Lamp" }),
+				},
+			],
+		);
+		expect(stateMessage).toContain("Came into view: Coin");
 		const pickUpEntry = loggedToolCalls(round2Result.nextState, "red").find(
 			(e) => e.toolCallId === "pickup_lamp",
 		);
 		expect(pickUpEntry?.result).toContain("A brass lamp.");
-		expect(pickUpEntry?.diskDelta).toContain("Came into view: Coin");
+		expect(pickUpEntry?.diskDelta).toBeUndefined();
 	});
 
 	it("merges perception-delta with actorDiskDelta when both exist", async () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "item",
-					kind: "interesting_object",
-					name: "Treasure",
-					examineDescription: "Gold coins.",
-					holder: { row: 10, col: 10 },
-				},
-			],
-			{
-				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
-			},
+		const { round2Result } = await roundTwoWith(
+			[offGrid("item", "Treasure", "Gold coins.")],
+			{ item: { row: 3, col: 0 } },
+			[goSouth],
 		);
-		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const provider1 = makeSilentProvider();
-
-		const round1Result = await runRound(game1, "red", "hi", provider1);
-
-		const gameWithItem = {
-			...round1Result.nextState,
-			world: {
-				...round1Result.nextState.world,
-				entities: round1Result.nextState.world.entities.map((e) =>
-					e.id === "item" ? { ...e, holder: { row: 1, col: 0 } } : e,
-				),
-			},
-		};
-
-		const provider2 = new MockRoundLLMProvider([
-			{
-				assistantText: "Moving north",
-				toolCalls: [
-					{
-						id: "1",
-						name: "go",
-						argumentsJson: JSON.stringify({ direction: "north" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		const round2Result = await runRound(
-			gameWithItem,
-			"red",
-			"move",
-			provider2,
-			{
-				rng: Math.random,
-				priorToolRoundtrip: {},
-				priorDiskSnapshots: {},
-				priorDiskEntities: round1Result.diskEntities,
-			},
+		const goEntry = loggedToolCalls(round2Result.nextState, "red").find(
+			(e) => e.toolCallId === "go1",
 		);
-
-		const redLog = round2Result.nextState.conversationLogs.red ?? [];
-		const redGo = redLog.find(
-			(e) => e.kind === "tool-call" && e.toolName === "go",
-		);
-		expect(redGo?.kind === "tool-call" && redGo.diskDelta).toBeDefined();
-		const delta = redGo?.kind === "tool-call" ? redGo.diskDelta : "";
-		expect(delta).toMatch(/Treasure|moved|north/i);
-		expect(delta).toContain("Came into view: Treasure");
+		expect(goEntry?.diskDelta).toContain("+ at two steps south: Treasure");
+		expect(goEntry?.diskDelta).toContain("Came into view: Treasure");
 	});
 
-	it("only emits perception delta for first action tool-call in multi-action turn", async () => {
-		const pack = makeTestPack(
+	it("attaches perception delta to the action, not the message, in a two-call turn", async () => {
+		const { round2Result } = await roundTwoWith(
+			[offGrid("item", "Mysterious Box", "A sealed box.")],
+			{ item: { row: 3, col: 0 } },
 			[
 				{
-					id: "item",
-					kind: "interesting_object",
-					name: "Mysterious Box",
-					examineDescription: "A sealed box.",
-					holder: { row: 10, col: 10 },
+					id: "msg1",
+					name: "message",
+					argumentsJson: JSON.stringify({
+						to: "blue",
+						content: "Look at this!",
+					}),
 				},
+				goSouth,
 			],
-			{
-				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
-			},
 		);
-		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const provider1 = makeSilentProvider();
-
-		const round1Result = await runRound(game1, "red", "hi", provider1);
-
-		const gameWithItem = {
-			...round1Result.nextState,
-			world: {
-				...round1Result.nextState.world,
-				entities: round1Result.nextState.world.entities.map((e) =>
-					e.id === "item" ? { ...e, holder: { row: 1, col: 0 } } : e,
-				),
-			},
-		};
-
-		const provider2 = new MockRoundLLMProvider([
-			{
-				assistantText: "I see something",
-				toolCalls: [
-					{
-						id: "1",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "Look at this!",
-						}),
-					},
-					{
-						id: "2",
-						name: "go",
-						argumentsJson: JSON.stringify({ direction: "north" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		const round2Result = await runRound(
-			gameWithItem,
-			"red",
-			"move",
-			provider2,
-			{
-				rng: Math.random,
-				priorToolRoundtrip: {},
-				priorDiskSnapshots: {},
-				priorDiskEntities: round1Result.diskEntities,
-			},
-		);
-
 		const redLog = round2Result.nextState.conversationLogs.red ?? [];
 		const messageEntry = redLog.find((e) => e.kind === "message");
-		const actionEntry = redLog.find(
-			(e) => e.kind === "tool-call" && e.toolName === "go",
-		);
-
-		expect(messageEntry?.kind === "message").toBe(true);
+		expect(messageEntry?.kind).toBe("message");
 		expect(
 			(messageEntry as { diskDelta?: unknown } | undefined)?.diskDelta,
 		).toBeUndefined();
-
-		expect(
-			actionEntry?.kind === "tool-call" && actionEntry.diskDelta,
-		).toBeDefined();
-		const delta =
-			actionEntry?.kind === "tool-call" ? actionEntry.diskDelta : "";
-		expect(delta).toContain("Came into view: Mysterious Box");
+		const goEntry = loggedToolCalls(round2Result.nextState, "red").find(
+			(e) => e.toolCallId === "go1",
+		);
+		expect(goEntry?.diskDelta).toContain("Came into view: Mysterious Box");
 	});
 });

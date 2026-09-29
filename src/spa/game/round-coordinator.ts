@@ -193,7 +193,8 @@ export async function runRound(
 				: {}),
 		});
 		newDiskSnapshots[aiId] = buildDiskSnapshot(ctx);
-		newDiskEntities[aiId] = buildDiskEntityState(ctx);
+		const promptEntities = buildDiskEntityState(ctx);
+		newDiskEntities[aiId] = promptEntities;
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
 		const messages = buildOpenAiMessages(ctx, priorRoundtrip, state.round);
 
@@ -328,8 +329,6 @@ export async function runRound(
 				? dispatchResult.records[messageRecordCount]
 				: undefined;
 
-		const perceptionDeltaLines = renderPerceptionDelta(ctx, priorEntities);
-
 		const failedMessageCalls: EmittedToolCall[] = [];
 		const failedMessageResults: ToolRoundtripMessage["toolResults"] = [];
 
@@ -364,7 +363,7 @@ export async function runRound(
 				...(dispatchResult.actorDiskDelta !== undefined
 					? [dispatchResult.actorDiskDelta]
 					: []),
-				...perceptionDeltaLines,
+				...renderPerceptionDelta(buildAiContext(state, aiId), promptEntities),
 			];
 			return lines.length > 0 ? lines.join("\n") : undefined;
 		}
