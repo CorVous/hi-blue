@@ -157,21 +157,30 @@ function tryPlacePhase(
 	};
 }
 
-function placePhases(
+function placePhase(
 	rng: () => number,
-	packs: ContentPack[],
+	pack: ContentPack,
 	aiIds: AiId[],
-): ContentPack[] {
-	return packs.map((pack, i) => {
-		for (let attempt = 0; attempt < MAX_PLACEMENT_ATTEMPTS; attempt++) {
-			const result = tryPlacePhase(rng, pack, aiIds);
-			if (result !== null) return result;
-		}
-		throw new Error(
-			`generateDualContentPacks: could not place phase ${i + 1} after ${MAX_PLACEMENT_ATTEMPTS} attempts. ` +
-				`Check that m (${obstacleEntities(pack).length}) obstacles leave enough room for AI starts and entities.`,
-		);
-	});
+): ContentPack {
+	for (let attempt = 0; attempt < MAX_PLACEMENT_ATTEMPTS; attempt++) {
+		const result = tryPlacePhase(rng, pack, aiIds);
+		if (result !== null) return result;
+	}
+	throw new Error(
+		`generateDualContentPacks: could not place phase 1 after ${MAX_PLACEMENT_ATTEMPTS} attempts. ` +
+			`Check that m (${obstacleEntities(pack).length}) obstacles leave enough room for AI starts and entities.`,
+	);
+}
+
+function copyDefined<K extends keyof WorldEntity>(
+	entity: WorldEntity,
+	src: { [P in K]?: WorldEntity[P] },
+	fields: readonly K[],
+): void {
+	for (const field of fields) {
+		const value = src[field];
+		if (value !== undefined) entity[field] = value;
+	}
 }
 
 function rawBoundPackToContentPack(
@@ -226,14 +235,12 @@ function rawBoundPackToContentPack(
 						proximityFlavor: spc.proximityFlavor ?? "",
 						holder: { row: 0, col: 0 },
 					};
-					if (spc.activationFlavor !== undefined)
-						entity.activationFlavor = spc.activationFlavor;
-					if (spc.satisfactionFlavor !== undefined)
-						entity.satisfactionFlavor = spc.satisfactionFlavor;
-					if (spc.postExamineDescription !== undefined)
-						entity.postExamineDescription = spc.postExamineDescription;
-					if (spc.postLookFlavor !== undefined)
-						entity.postLookFlavor = spc.postLookFlavor;
+					copyDefined(entity, spc, [
+						"activationFlavor",
+						"satisfactionFlavor",
+						"postExamineDescription",
+						"postLookFlavor",
+					]);
 					entities.push(entity);
 				}
 				break;
@@ -249,16 +256,12 @@ function rawBoundPackToContentPack(
 						proximityFlavor: spc.proximityFlavor ?? "",
 						holder: { row: 0, col: 0 },
 					};
-					if (spc.convergenceTier1Flavor !== undefined)
-						entity.convergenceTier1Flavor = spc.convergenceTier1Flavor;
-					if (spc.convergenceTier2Flavor !== undefined)
-						entity.convergenceTier2Flavor = spc.convergenceTier2Flavor;
-					if (spc.convergenceTier1ActorFlavor !== undefined)
-						entity.convergenceTier1ActorFlavor =
-							spc.convergenceTier1ActorFlavor;
-					if (spc.convergenceTier2ActorFlavor !== undefined)
-						entity.convergenceTier2ActorFlavor =
-							spc.convergenceTier2ActorFlavor;
+					copyDefined(entity, spc, [
+						"convergenceTier1Flavor",
+						"convergenceTier2Flavor",
+						"convergenceTier1ActorFlavor",
+						"convergenceTier2ActorFlavor",
+					]);
 					entities.push(entity);
 				}
 				break;
@@ -274,14 +277,12 @@ function rawBoundPackToContentPack(
 						proximityFlavor: item.proximityFlavor ?? "",
 						holder: { row: 0, col: 0 },
 					};
-					if (item.useOutcome !== undefined)
-						entity.useOutcome = item.useOutcome;
-					if (item.activationFlavor !== undefined)
-						entity.activationFlavor = item.activationFlavor;
-					if (item.postExamineDescription !== undefined)
-						entity.postExamineDescription = item.postExamineDescription;
-					if (item.postLookFlavor !== undefined)
-						entity.postLookFlavor = item.postLookFlavor;
+					copyDefined(entity, item, [
+						"useOutcome",
+						"activationFlavor",
+						"postExamineDescription",
+						"postLookFlavor",
+					]);
 					entities.push(entity);
 				}
 				break;
@@ -298,7 +299,7 @@ function rawBoundPackToContentPack(
 			proximityFlavor: decoy.proximityFlavor ?? "",
 			holder: { row: 0, col: 0 },
 		};
-		if (decoy.useOutcome !== undefined) entity.useOutcome = decoy.useOutcome;
+		copyDefined(entity, decoy, ["useOutcome"]);
 		entities.push(entity);
 	}
 
@@ -408,10 +409,7 @@ export async function generateDualContentPacks(
 		timeOfDayB,
 	);
 
-	const placedPacksA = placePhases(rng, [unplacedPackA], aiIds);
-	const placedPackA = placedPacksA[0];
-	if (!placedPackA)
-		throw new Error("generateDualContentPacks: placement failed");
+	const placedPackA = placePhase(rng, unplacedPackA, aiIds);
 
 	const packB = copyPlacementsById(placedPackA, unplacedPackB);
 	return { packA: placedPackA, packB, objectiveTypes };
