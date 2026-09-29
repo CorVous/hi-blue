@@ -1,13 +1,4 @@
-import {
-	BANNER,
-	formatTopInfoMobile,
-	initPanelChrome,
-	type LoadState,
-	type LoadStateStatus,
-	renderTopInfoLeft,
-	type TopInfoInputs,
-	topInfoStatus,
-} from "../bbs-chrome.js";
+import { topInfoStatus } from "../bbs-chrome.js";
 import { isDevHost } from "../dev-host.js";
 import {
 	type DaemonFooterPipState,
@@ -21,11 +12,6 @@ import {
 	refreshInspectorAfterRound,
 	renderInspector,
 } from "../dev-inspector/index.js";
-import {
-	buildSessionFromAssets,
-	type NewGameAssets,
-	newGameAssets,
-} from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { isPlayerChatLockedOut } from "../game/complication-engine.js";
 import {
@@ -43,10 +29,8 @@ import {
 } from "../game/mention-parser.js";
 import {
 	clearPendingBootstrap,
-	failPendingBootstrap,
 	getPendingBootstrap,
 	type PendingBootstrap,
-	restartContentPacks,
 } from "../game/pending-bootstrap.js";
 import type {
 	LifecyclePhase,
@@ -57,7 +41,6 @@ import {
 	type SseEvent,
 } from "../game/round-result-encoder.js";
 import { fisherYatesShuffledCopy } from "../game/shuffle.js";
-import { getSpikeRng } from "../game/spike-seed.js";
 import type {
 	AiId,
 	AiPersona,
@@ -72,11 +55,22 @@ import {
 	type LoadResult,
 	listSessions,
 	loadActiveSession,
-	type SaveResult,
 	saveActiveSession,
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
-import { dropListenersByCloning, setHidden, trySetCaret } from "./dom.js";
+import { trySetCaret } from "./dom.js";
+import { enterBootstrapLoading } from "./game-bootstrap-flow.js";
+import {
+	animateSpinners,
+	appendPanelSpinners,
+	hidePersistenceWarning,
+	paintBannerOnce,
+	paintPersonaPanels,
+	paintTopInfo,
+	revealGameRouteChrome,
+	showPersistenceWarning,
+	UNKNOWN_SESSION_ID,
+} from "./game-chrome.js";
 import { showEndgame } from "./game-endgame.js";
 import {
 	appendMentionAwareText,
@@ -85,36 +79,9 @@ import {
 	transcriptMessageLine,
 } from "./transcript-lines.js";
 
-export const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
+export { BOOTSTRAP_LOADING_TIMEOUT_MS } from "./game-bootstrap-flow.js";
 
-const LOADING_PLACEHOLDER = "loading…";
 const UNSET_PROMPT_TARGET = "/?????";
-const UNKNOWN_SESSION_ID = "0x????";
-const BRAILLE_SPINNER_FRAMES = [
-	"⠋",
-	"⠙",
-	"⠹",
-	"⠸",
-	"⠼",
-	"⠴",
-	"⠦",
-	"⠧",
-	"⠇",
-	"⠏",
-];
-const SPINNER_INTERVAL_MS = 80;
-const PANEL_SPINNER_SELECTOR = ".panel-name .panel-spinner";
-const BRIGHTNESS_WIPE_TAU_MS = 60_000;
-const BRIGHTNESS_WIPE_MAX_PCT = 99;
-
-type SaveFailureReason = Extract<SaveResult, { ok: false }>["reason"];
-
-const PERSISTENCE_WARNING_MESSAGES: Record<SaveFailureReason, string> = {
-	unavailable:
-		"Game progress cannot be saved: storage is disabled in your browser. Your session will be lost on refresh.",
-	quota: "Game progress could not be saved: browser storage is full.",
-	unknown: "Game progress could not be saved due to an unexpected error.",
-};
 
 const DAEMON_FOOTER_STATE_BY_PHASE: Partial<
 	Record<LifecyclePhase["phase"], DaemonFooterPipState>
@@ -130,6 +97,7 @@ type PersonaLookups = Pick<
 >;
 
 type MessageEvent = Extract<SseEvent, { type: "message" }>;
+
 type UnloadableSession = Exclude<LoadResult, { kind: "ok" }>;
 
 interface DevHooks {
@@ -168,18 +136,6 @@ interface GameViewContext {
 	connectionUnstable: boolean;
 }
 
-interface LoadingTimers {
-	spinnerInterval: ReturnType<typeof setInterval> | undefined;
-	wipeRaf: ReturnType<typeof requestAnimationFrame> | undefined;
-}
-
-interface LoadingFlow {
-	sessionId: string | null;
-	pending: PendingBootstrap;
-	timers: LoadingTimers;
-	blockedBy: "cap-hit" | "recovery" | null;
-}
-
 interface RoundSpinners {
 	strip(aiId: AiId): void;
 	stripAll(): void;
@@ -202,10 +158,12 @@ interface RoundOwner {
 let gameEndHandled = false;
 
 let session: GameSession | null = null;
+
 let hydratedSessionId: string | null = null;
+
 let hydratedEpoch: number = 1;
+
 let viewCtx: GameViewContext | null = null;
-let loadingFlow: LoadingFlow | null = null;
 
 export function renderGame(
 	root: HTMLElement,
@@ -394,12 +352,9 @@ function enterWithoutCachedSession(ctx: GameViewContext): Promise<void> | null {
 	if (pendingBootstrap) {
 		const activeSessionIsEmpty = loadActiveSession().kind === "none";
 		if (activeSessionIsEmpty) {
-			const runningFlow = runningLoadingFlowFor(pendingBootstrap);
-			if (runningFlow) {
-				revealRunningLoadingFlow(ctx, runningFlow);
-				return Promise.resolve();
-			}
-			return renderBootstrapLoadingFlow(ctx, pendingBootstrap);
+			return enterBootstrapLoading(ctx, pendingBootstrap, (built, sessionId) =>
+				adoptBootstrappedSession(ctx, built, sessionId),
+			);
 		}
 		clearPendingBootstrap();
 		renderApp(ctx.root);
@@ -431,17 +386,15 @@ function isLocalStorageAvailable(): boolean {
 	}
 }
 
-function hidePersistenceWarning(warningEl: HTMLElement | null): void {
-	warningEl?.setAttribute("hidden", "");
-}
-
-function showPersistenceWarning(
-	warningEl: HTMLElement | null,
-	reason: SaveFailureReason,
-): void {
-	if (!warningEl) return;
-	warningEl.textContent = PERSISTENCE_WARNING_MESSAGES[reason];
-	warningEl.removeAttribute("hidden");
+function adoptBootstrappedSession(
+	ctx: GameViewContext,
+	built: GameSession,
+	sessionId: string | null,
+): Promise<void> {
+	session = built;
+	hydratedSessionId = sessionId;
+	hydratedEpoch = 1;
+	return renderGame(ctx.root, ctx.opts);
 }
 
 function restoreActiveSession(ctx: GameViewContext): Promise<void> | null {
@@ -554,42 +507,6 @@ function adoptSession(
 	return adopted;
 }
 
-function revealGameRouteChrome(doc: Document): void {
-	setHidden(doc, ["#start-screen", "#sessions-screen", "#endgame"], true);
-	setHidden(
-		doc,
-		["#panels", "#composer", "#stage > header", "#topinfo", "#banner"],
-		false,
-	);
-}
-
-function paintBannerOnce(doc: Document): void {
-	const bannerEl = doc.querySelector<HTMLElement>("#banner");
-	if (bannerEl && !bannerEl.innerHTML) bannerEl.innerHTML = BANNER;
-}
-
-function setGameSurfaceHidden(doc: Document, hidden: boolean): void {
-	setHidden(doc, ["#panels", "#composer"], hidden);
-}
-
-function paintPersonaPanels(
-	doc: Document,
-	personas: Record<AiId, AiPersona>,
-	paintPanelExtras: (panel: HTMLElement, aiId: AiId) => void,
-): void {
-	const aiIds = Object.keys(personas);
-	doc.querySelectorAll<HTMLElement>(".ai-panel").forEach((panel, idx) => {
-		const aiId = aiIds[idx];
-		if (!aiId) return;
-		const persona = personas[aiId];
-		if (!persona) return;
-		panel.dataset.ai = aiId;
-		panel.style.setProperty("--panel-color", persona.color);
-		initPanelChrome(panel, persona);
-		paintPanelExtras(panel, aiId);
-	});
-}
-
 function paintSessionPanels(doc: Document, state: GameState): void {
 	paintPersonaPanels(doc, state.personas, (panel, aiId) => {
 		const budget = state.budgets[aiId];
@@ -633,56 +550,6 @@ function refreshTopInfo(ctx: GameViewContext): void {
 		},
 		topInfoStatus(ctx.connectionUnstable ? "unstable" : "stable"),
 	);
-}
-
-function renderLoadingTopInfo(doc: Document, state: LoadState): void {
-	paintTopInfo(
-		doc,
-		{
-			sessionId: getActiveSessionId() ?? UNKNOWN_SESSION_ID,
-			epoch: hydratedEpoch,
-			turn: 0,
-		},
-		topInfoStatus(state),
-	);
-}
-
-function paintTopInfo(
-	doc: Document,
-	inputs: TopInfoInputs,
-	status: LoadStateStatus,
-): void {
-	const leftEl = doc.querySelector<HTMLElement>("#topinfo-left");
-	const rightEl = doc.querySelector<HTMLElement>("#topinfo-right");
-	const mobileEl = doc.querySelector<HTMLElement>("#topinfo-mobile");
-	const mobileStatusEl = doc.querySelector<HTMLElement>(
-		"#topinfo-mobile-status",
-	);
-	if (leftEl) renderTopInfoLeft(leftEl, inputs);
-	if (rightEl) paintStatusSpan(rightEl, status.cls, status.desktop);
-	if (mobileEl) mobileEl.textContent = formatTopInfoMobile(inputs);
-	if (mobileStatusEl) {
-		paintStatusSpan(mobileStatusEl, status.cls, ` ${status.mobile}`);
-	}
-}
-
-function paintStatusSpan(el: HTMLElement, cls: string, text: string): void {
-	el.textContent = "";
-	const span = el.ownerDocument.createElement("span");
-	span.className = cls;
-	span.textContent = text;
-	el.appendChild(span);
-}
-
-function setStageLoadState(doc: Document, state: LoadState): void {
-	const stageEl = doc.querySelector<HTMLElement>("#stage");
-	if (!stageEl) return;
-	if (state === "stable") {
-		stageEl.removeAttribute("data-load-state");
-		stageEl.style.removeProperty("--fill-pct");
-	} else {
-		stageEl.setAttribute("data-load-state", state);
-	}
 }
 
 function wireViewListeners(ctx: GameViewContext): void {
@@ -975,34 +842,6 @@ function roundErrorText(err: unknown): string {
 		: `the daemons stuttered (${upstreamMessage}) — try again`;
 }
 
-function brailleFrameText(frame: number): string {
-	return ` ${BRAILLE_SPINNER_FRAMES[frame] ?? ""}`;
-}
-
-function appendPanelSpinners(panel: HTMLElement): HTMLElement[] {
-	const doc = panel.ownerDocument;
-	const spinnerEls: HTMLElement[] = [];
-	for (const labelEl of panel.querySelectorAll<HTMLElement>(".panel-name")) {
-		const spinnerEl = doc.createElement("span");
-		spinnerEl.className = "panel-spinner";
-		spinnerEl.textContent = brailleFrameText(0);
-		labelEl.appendChild(spinnerEl);
-		spinnerEls.push(spinnerEl);
-	}
-	return spinnerEls;
-}
-
-function animateSpinners(
-	spinnerEls: () => Iterable<HTMLElement>,
-): ReturnType<typeof setInterval> {
-	let frame = 0;
-	return setInterval(() => {
-		frame = (frame + 1) % BRAILLE_SPINNER_FRAMES.length;
-		const text = brailleFrameText(frame);
-		for (const spinnerEl of spinnerEls()) spinnerEl.textContent = text;
-	}, SPINNER_INTERVAL_MS);
-}
-
 function startRoundSpinners(
 	doc: Document,
 	aiIds: readonly AiId[],
@@ -1191,414 +1030,4 @@ function enterEndgame(
 function releaseEndedGame(): void {
 	releaseSession();
 	gameEndHandled = false;
-}
-
-class BootstrapTimeoutError extends Error {
-	constructor() {
-		super("bootstrap loading timed out");
-		this.name = "BootstrapTimeoutError";
-	}
-}
-
-function withBootstrapTimeout<T>(
-	work: Promise<T>,
-	onTimeout: (err: BootstrapTimeoutError) => void,
-): Promise<T> {
-	let timeoutId: ReturnType<typeof setTimeout> | undefined;
-	const timeout = new Promise<never>((_resolve, reject) => {
-		timeoutId = setTimeout(() => {
-			const err = new BootstrapTimeoutError();
-			onTimeout(err);
-			reject(err);
-		}, BOOTSTRAP_LOADING_TIMEOUT_MS);
-	});
-	return Promise.race([work, timeout]).finally(() => {
-		if (timeoutId !== undefined) {
-			clearTimeout(timeoutId);
-		}
-	});
-}
-
-function runningLoadingFlowFor(pending: PendingBootstrap): LoadingFlow | null {
-	const running =
-		loadingFlow !== null &&
-		loadingFlow.pending === pending &&
-		loadingFlow.sessionId === getActiveSessionId();
-	return running ? loadingFlow : null;
-}
-
-function revealRunningLoadingFlow(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-): void {
-	const { doc } = ctx;
-	revealGameRouteChrome(doc);
-	paintBannerOnce(doc);
-	if (flow.blockedBy === null) return;
-	setGameSurfaceHidden(doc, true);
-	if (flow.blockedBy === "cap-hit") ctx.capHitEl?.removeAttribute("hidden");
-	else doc.querySelector("#bootstrap-recovery")?.removeAttribute("hidden");
-}
-
-function loadingFlowAbandoned(flow: LoadingFlow): boolean {
-	return getActiveSessionId() !== flow.sessionId;
-}
-
-function forgetLoadingFlow(flow: LoadingFlow): void {
-	if (loadingFlow === flow) loadingFlow = null;
-}
-
-function renderBootstrapLoadingFlow(
-	ctx: GameViewContext,
-	pending: PendingBootstrap,
-): Promise<void> {
-	const { doc } = ctx;
-	hydratedEpoch = 1;
-	revealGameRouteChrome(doc);
-	paintBannerOnce(doc);
-	resetPanelsToEmptyShells(doc.querySelectorAll<HTMLElement>(".ai-panel"));
-
-	showComposerAsLoading(ctx.promptInput);
-	ctx.sendBtn.disabled = true;
-
-	setStageLoadState(doc, "loading-daemons");
-	renderLoadingTopInfo(doc, "loading-daemons");
-	ctx.dev.showPendingBootstrap(ctx.root, pending);
-
-	const flow: LoadingFlow = {
-		sessionId: getActiveSessionId(),
-		pending,
-		timers: { spinnerInterval: undefined, wipeRaf: undefined },
-		blockedBy: null,
-	};
-	loadingFlow = flow;
-	return runBootstrapChain(ctx, flow).catch((err: unknown) =>
-		handleBootstrapFailure(ctx, flow, err),
-	);
-}
-
-function resetPanelsToEmptyShells(panelEls: NodeListOf<HTMLElement>): void {
-	for (const panel of panelEls) {
-		panel.removeAttribute("data-ai");
-		panel.style.removeProperty("--panel-color");
-		for (const lbl of panel.querySelectorAll<HTMLElement>(".panel-name")) {
-			lbl.textContent = "";
-		}
-		const transcript = panel.querySelector<HTMLElement>(".transcript");
-		if (transcript) {
-			transcript.dataset.transcript = "";
-			transcript.textContent = "";
-		}
-		const budgetEl = panel.querySelector<HTMLSpanElement>(".panel-budget");
-		if (budgetEl) {
-			budgetEl.dataset.budget = "";
-			budgetEl.textContent = "";
-		}
-	}
-}
-
-function showComposerAsLoading(input: HTMLInputElement): void {
-	input.disabled = true;
-	input.placeholder = LOADING_PLACEHOLDER;
-}
-
-function runBootstrapChain(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-): Promise<void> {
-	const { pending } = flow;
-	const bootstrapPromise = pending.personasPromise
-		.then((personas) => {
-			enterGeneratingRoom(ctx, flow, personas);
-			return pending.contentPacksPromise.then((packs) =>
-				newGameAssets(personas, packs),
-			);
-		})
-		.then((assets) => handOverBootstrappedSession(ctx, flow, assets));
-
-	return withBootstrapTimeout(bootstrapPromise, (err) =>
-		failPendingBootstrap(pending, err),
-	);
-}
-
-function enterGeneratingRoom(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-	personas: Record<AiId, AiPersona>,
-): void {
-	if (loadingFlowAbandoned(flow)) return;
-	const { doc } = ctx;
-	paintLoadingPersonaPanels(doc, personas);
-	setStageLoadState(doc, "generating-room");
-	renderLoadingTopInfo(doc, "generating-room");
-	ctx.dev.showPendingBootstrap(ctx.root, flow.pending);
-	startLoadingSpinners(doc, flow.timers);
-	startBrightnessWipe(doc, flow.timers);
-}
-
-function paintLoadingPersonaPanels(
-	doc: Document,
-	personas: Record<AiId, AiPersona>,
-): void {
-	paintPersonaPanels(doc, personas, (panel) => {
-		appendPanelSpinners(panel);
-	});
-}
-
-function startLoadingSpinners(doc: Document, timers: LoadingTimers): void {
-	timers.spinnerInterval = animateSpinners(() =>
-		doc.querySelectorAll<HTMLElement>(PANEL_SPINNER_SELECTOR),
-	);
-}
-
-function nowMs(): number {
-	return typeof performance !== "undefined" ? performance.now() : Date.now();
-}
-
-function startBrightnessWipe(doc: Document, timers: LoadingTimers): void {
-	const stageEl = doc.querySelector<HTMLElement>("#stage");
-	if (!stageEl) return;
-	const startTs = nowMs();
-	const tick = (): void => {
-		const elapsed = nowMs() - startTs;
-		const eased = 1 - Math.exp(-elapsed / BRIGHTNESS_WIPE_TAU_MS);
-		const pct = Math.min(BRIGHTNESS_WIPE_MAX_PCT, Math.max(0, eased * 100));
-		stageEl.style.setProperty("--fill-pct", `${pct.toFixed(2)}%`);
-		timers.wipeRaf = requestAnimationFrame(tick);
-	};
-	timers.wipeRaf = requestAnimationFrame(tick);
-}
-
-function cleanupLoadingTimers(timers: LoadingTimers): void {
-	if (timers.spinnerInterval) {
-		clearInterval(timers.spinnerInterval);
-		timers.spinnerInterval = undefined;
-	}
-	if (timers.wipeRaf !== undefined) {
-		cancelAnimationFrame(timers.wipeRaf);
-		timers.wipeRaf = undefined;
-	}
-}
-
-function removeAllPanelSpinners(doc: Document): void {
-	for (const spinnerEl of doc.querySelectorAll<HTMLElement>(
-		PANEL_SPINNER_SELECTOR,
-	)) {
-		spinnerEl.remove();
-	}
-}
-
-function handOverBootstrappedSession(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-	assets: NewGameAssets,
-): Promise<void> | undefined {
-	const { doc } = ctx;
-	cleanupLoadingTimers(flow.timers);
-	forgetLoadingFlow(flow);
-	if (loadingFlowAbandoned(flow)) return;
-	const gameSessionRng = getSpikeRng("gameSession");
-	const built = applyTestAffordances(
-		buildSessionFromAssets(
-			assets,
-			gameSessionRng ? { rng: gameSessionRng } : undefined,
-		),
-		ctx.searchParams,
-	);
-
-	const bootstrapInvalidatedMidFlight = loadActiveSession().kind !== "none";
-	if (bootstrapInvalidatedMidFlight) {
-		clearPendingBootstrap();
-		renderApp(ctx.root);
-		return;
-	}
-
-	const saveResult = saveActiveSession(built.getState());
-	clearPendingBootstrap();
-
-	removeAllPanelSpinners(doc);
-	dismissStaleBootstrapRecovery(doc);
-	setStageLoadState(doc, "stable");
-
-	ctx.promptInput.disabled = false;
-	ctx.promptInput.placeholder = "";
-
-	session = built;
-	hydratedSessionId = flow.sessionId;
-	hydratedEpoch = 1;
-	const rendered = renderGame(ctx.root, ctx.opts);
-	if (!saveResult.ok) {
-		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
-	}
-	return rendered;
-}
-
-function dismissStaleBootstrapRecovery(doc: Document): void {
-	const recoveryEl = doc.querySelector<HTMLElement>("#bootstrap-recovery");
-	if (!recoveryEl) return;
-	recoveryEl.setAttribute("hidden", "");
-	const staleRegenBtn = doc.querySelector<HTMLButtonElement>(
-		"#bootstrap-recovery-regen",
-	);
-	if (staleRegenBtn) dropListenersByCloning(staleRegenBtn);
-	const staleAbandonLink = doc.querySelector<HTMLAnchorElement>(
-		"#bootstrap-recovery-abandon",
-	);
-	if (staleAbandonLink) dropListenersByCloning(staleAbandonLink);
-}
-
-function failedFlowAbandoned(flow: LoadingFlow): boolean {
-	cleanupLoadingTimers(flow.timers);
-	if (!loadingFlowAbandoned(flow)) return false;
-	forgetLoadingFlow(flow);
-	return true;
-}
-
-function blockFlowOnCapHit(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-	err: unknown,
-): boolean {
-	if (!(err instanceof CapHitError) || !ctx.capHitEl) return false;
-	flow.blockedBy = "cap-hit";
-	ctx.capHitEl.removeAttribute("hidden");
-	setGameSurfaceHidden(ctx.doc, true);
-	return true;
-}
-
-function blockFlowOnRecovery(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-	recoveryEl: HTMLElement,
-): void {
-	flow.blockedBy = "recovery";
-	recoveryEl.removeAttribute("hidden");
-	setGameSurfaceHidden(ctx.doc, true);
-	setStageLoadState(ctx.doc, "unstable");
-}
-
-function handleBootstrapFailure(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-	err: unknown,
-): void {
-	if (failedFlowAbandoned(flow)) return;
-	ctx.dev.showPendingBootstrap(ctx.root, flow.pending);
-	if (blockFlowOnCapHit(ctx, flow, err)) return;
-	showBootstrapRecovery(ctx, flow, err);
-}
-
-function showBootstrapRecovery(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-	err: unknown,
-): void {
-	const { doc, root } = ctx;
-	const recoveryEl = doc.querySelector<HTMLElement>("#bootstrap-recovery");
-	const recoveryUiMissing = !recoveryEl || !paintRecoveryCopy(doc, err);
-	if (recoveryUiMissing) {
-		abandonBootstrap(root);
-		return;
-	}
-
-	blockFlowOnRecovery(ctx, flow, recoveryEl);
-	wireRegenerateButton(ctx, flow, recoveryEl);
-	wireAbandonLink(root);
-}
-
-function paintRecoveryCopy(doc: Document, err: unknown): boolean {
-	const titleEl = doc.querySelector<HTMLElement>("#bootstrap-recovery-title");
-	const bodyEl = doc.querySelector<HTMLElement>("#bootstrap-recovery-body");
-	if (!titleEl || !bodyEl) return false;
-	const nextSteps =
-		"try regenerating with the same daemons, or abandon and reconnect.";
-	const upstreamMessage = upstreamMessageOf(err);
-	if (err instanceof BootstrapTimeoutError) {
-		titleEl.textContent = "the room is taking too long";
-		bodyEl.textContent = `the world generation timed out. ${nextSteps}`;
-	} else if (upstreamMessage !== null) {
-		titleEl.textContent = "the room collapsed";
-		bodyEl.textContent = `the model answered with an error (${upstreamMessage}). ${nextSteps}`;
-	} else {
-		titleEl.textContent = "the room collapsed";
-		bodyEl.textContent = `the world we tried to build was malformed. ${nextSteps}`;
-	}
-	return true;
-}
-
-function abandonBootstrap(root: HTMLElement): void {
-	loadingFlow = null;
-	clearActiveSession();
-	clearPendingBootstrap();
-	renderApp(root, { reason: "broken" });
-}
-
-function wireRegenerateButton(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-	recoveryEl: HTMLElement,
-): void {
-	const staleRegenBtn = ctx.doc.querySelector<HTMLButtonElement>(
-		"#bootstrap-recovery-regen",
-	);
-	if (!staleRegenBtn) return;
-	staleRegenBtn.disabled = false;
-	const regenBtn = dropListenersByCloning(staleRegenBtn);
-	regenBtn.addEventListener("click", (e) => {
-		e.preventDefault();
-		void runRegenerate(ctx, flow, recoveryEl, regenBtn);
-	});
-}
-
-async function runRegenerate(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-	recoveryEl: HTMLElement,
-	regenBtn: HTMLButtonElement,
-): Promise<void> {
-	const { doc } = ctx;
-	flow.blockedBy = null;
-	recoveryEl.setAttribute("hidden", "");
-	hidePersistenceWarning(ctx.persistenceWarningEl);
-	setGameSurfaceHidden(doc, false);
-	showComposerAsLoading(ctx.promptInput);
-
-	regenBtn.disabled = true;
-
-	flow.pending = restartContentPacks();
-
-	try {
-		await runBootstrapChain(ctx, flow);
-	} catch (regenErr: unknown) {
-		if (failedFlowAbandoned(flow)) return;
-		showRegenerateFailure(ctx, flow, recoveryEl, regenBtn, regenErr);
-	}
-}
-
-function showRegenerateFailure(
-	ctx: GameViewContext,
-	flow: LoadingFlow,
-	recoveryEl: HTMLElement,
-	regenBtn: HTMLButtonElement,
-	regenErr: unknown,
-): void {
-	if (blockFlowOnCapHit(ctx, flow, regenErr)) {
-		recoveryEl.setAttribute("hidden", "");
-		return;
-	}
-	paintRecoveryCopy(ctx.doc, regenErr);
-	blockFlowOnRecovery(ctx, flow, recoveryEl);
-	regenBtn.disabled = false;
-}
-
-function wireAbandonLink(root: HTMLElement): void {
-	const staleAbandonLink = root.ownerDocument.querySelector<HTMLAnchorElement>(
-		"#bootstrap-recovery-abandon",
-	);
-	if (!staleAbandonLink) return;
-	const abandonLink = dropListenersByCloning(staleAbandonLink);
-	abandonLink.addEventListener("click", (e) => {
-		e.preventDefault();
-		abandonBootstrap(root);
-	});
 }

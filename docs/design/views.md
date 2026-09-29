@@ -2,7 +2,8 @@
 
 Design notes for the three route renderers (`start.ts` → `#/start`,
 `game.ts` → `#/game`, `sessions.ts` → `#/sessions`), the game route's
-`game-endgame.ts` and `transcript-lines.ts`, and the shared
+`game-bootstrap-flow.ts`, `game-chrome.ts`, `game-endgame.ts` and
+`transcript-lines.ts`, and the shared
 `archived-build-link.ts` and `dom.ts`. Each renderer owns what is visible for its route:
 it hides the other routes' screens and shows or hides the global chrome
 (`#stage > header`, `#topinfo`, `#banner`).
@@ -117,10 +118,16 @@ it hides the other routes' screens and shows or hides the global chrome
   state directly, so the two files do not import each other in a cycle.
   `transcript-lines.ts` builds the `.msg-line` elements (player and daemon
   lines with mention highlighting) that both the panels and the endgame's
-  final lines use. The bootstrap loading flow stays in `game.ts`: its
-  handover assigns `session`, `hydratedSessionId` and `hydratedEpoch` and
-  re-enters `renderGame`, so moving it out would need either a cycle or a
-  handful of callbacks back into the route.
+  final lines use.
+- The bootstrap loading flow lives in `game-bootstrap-flow.ts`. `game.ts`
+  calls `enterBootstrapLoading` with its context (typed there as the
+  narrower `BootstrapFlowView`) and one `AdoptBootstrappedSession` callback.
+  The flow builds and saves the new game, then hands the session to that
+  callback, which assigns `session`, `hydratedSessionId` and `hydratedEpoch`
+  and re-enters `renderGame`. The flow never imports `game.ts`, so there is
+  no cycle. The DOM helpers both files need (route chrome, panel painting,
+  spinners, topinfo, the stage load state and the save warning) live in
+  `game-chrome.ts`, which imports neither.
 - `renderGame` is a short entry point. It works on one `GameViewContext`
   holding the root, the composer elements, the search params, the dev hooks,
   the persona lookups and lockouts, and the round state (`roundInFlight`,
@@ -185,7 +192,7 @@ it hides the other routes' screens and shows or hides the global chrome
 - `gameEndHandled` stops a second `game_ended` event from binding the endgame
   handlers again. It is reset whenever a session is set up.
 
-### Bootstrap loading flow (`renderBootstrapLoadingFlow`)
+### Bootstrap loading flow (`game-bootstrap-flow.ts`)
 
 - This runs when the player has just pressed CONNECT and a bootstrap is
   pending. The session cannot be built until the content packs arrive, but
@@ -225,8 +232,9 @@ it hides the other routes' screens and shows or hides the global chrome
   buttons with clones that have no listeners. Otherwise the banner would sit
   on top of the working game, and its regenerate or abandon buttons could
   destroy the running session.
-- **Handover.** After saving, the flow sets the module-level `session` and
-  calls `renderGame` again. That second entry skips both the loading branch
+- **Handover.** After saving, the flow calls its `AdoptBootstrappedSession`
+  callback, which sets the module-level `session` in `game.ts` and calls
+  `renderGame` again. That second entry skips both the loading branch
   and the localStorage restore, and runs the normal set-up path, where
   `refreshComposerState` decides whether Send is enabled. A failed save's
   warning is shown after that entry, because each entry first hides
@@ -251,10 +259,10 @@ it hides the other routes' screens and shows or hides the global chrome
   into the new session, cleared the newer pending bootstrap and pulled the
   player off the start screen. Regenerate keeps the session id, so it still
   hands over.
-- **Epoch.** A new game starts at epoch 1. The loading flow and the handover
-  reset `hydratedEpoch`, which otherwise still held the epoch of the last
-  session restored on this page, so topinfo showed that session's epoch for
-  the new game.
+- **Epoch.** A new game starts at epoch 1. The loading topinfo always paints
+  `NEW_GAME_EPOCH`, and the handover resets `hydratedEpoch`, which otherwise
+  still held the epoch of the last session restored on this page, so topinfo
+  showed that session's epoch for the new game.
 - **Recovery.** A timeout shows "stuck" copy and any other failure shows
   "broken" copy (`paintRecoveryCopy`). When the error carries an upstream
   message (`HttpStatusError`, `UpstreamErrorBodyError`) the copy names it,
