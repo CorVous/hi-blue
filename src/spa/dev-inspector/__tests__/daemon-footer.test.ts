@@ -297,6 +297,35 @@ describe("daemon-footer", () => {
 		expect(chipTexts).toContain("[tool-dis:pick_up]");
 	});
 
+	it("renderInspector fills the footer summary and details straight away", () => {
+		const contentPack = STATIC_CONTENT_PACKS[0];
+		if (!contentPack) throw new Error("Content pack missing");
+		const state = new GameSession(contentPack, STATIC_PERSONAS).getState();
+		const session = GameSession.restore({
+			...state,
+			activeComplications: [
+				{
+					kind: "tool_disable",
+					target: "red",
+					tool: "pick_up",
+					resolveAtRound: 3,
+				},
+			],
+		});
+
+		renderInspector(document.body, { session });
+
+		const redPanel = document.querySelector<HTMLElement>(
+			'.ai-panel[data-ai="red"]',
+		);
+		const chipTexts = Array.from(
+			redPanel?.querySelectorAll(
+				'[data-field="complication-chips"] .dev-footer-chip',
+			) ?? [],
+		).map((chip) => chip.textContent);
+		expect(chipTexts).toEqual(["[tool-dis:pick_up]"]);
+	});
+
 	it("updateDaemonFooterSummary does NOT mutate the pip span", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");

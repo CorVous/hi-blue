@@ -180,6 +180,12 @@ affordance such as `?winImmediately=1` would change a later test's round.
   (`withDevInspectorRecording`) records them in module-level maps in
   `dev-inspector/daemon-footer.ts`. Every session render clears the turn results
   so that data from a previous session does not appear.
+- **A session render is complete on its own.** After it rebuilds each footer,
+  `renderSessionInspector` fills the summary and details from the session
+  (last tools, complication chips) and calls `setMapFocus(getMapFocus())`. The
+  footers' focus buttons are new elements, so without that call a focused
+  Vista stayed tinted while every button read inactive, and the footers stayed
+  blank until the next round.
 - **Update invariants.** `updateDaemonFooterSummary` never touches the pip,
   which only `setDaemonFooterInFlight` changes.
   `updateDaemonFooterDetails` never replaces a `<details>` element or its

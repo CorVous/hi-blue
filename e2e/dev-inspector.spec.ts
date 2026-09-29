@@ -4,8 +4,12 @@ import {
 	type GridPosition,
 	goToGame,
 	inRoom,
+	readActiveSessionEngine,
+	type SealedEngine,
+	stubChatCompletions,
 	type VistaCell,
 	vistaCells,
+	writeActiveSessionEngine,
 } from "./helpers";
 
 const ROOM_ROWS = 5;
@@ -570,6 +574,40 @@ test.describe("dev inspector at 375×667", () => {
 		expect(probe.scrollWidth).toBeLessThanOrEqual(
 			probe.clientWidth + SUBPIXEL_TOLERANCE_PX,
 		);
+
+		await expectNoPageErrors(page, pageErrors);
+	});
+});
+
+test.describe("dev inspector daemon footer", () => {
+	test("a restored session fills the footer chips before any round runs", async ({
+		page,
+	}) => {
+		const pageErrors: Error[] = [];
+		page.on("pageerror", (err) => pageErrors.push(err));
+
+		const { ids } = await goToGame(page, { sse: ["hi"] });
+		const target = ids[0];
+		if (target === undefined) throw new Error("e2e: no Daemon ids");
+
+		const { sessionId, sealed } = await readActiveSessionEngine(page);
+		const withLockout: SealedEngine & { activeComplications?: unknown[] } = {
+			...sealed,
+		};
+		withLockout.activeComplications = [
+			{ kind: "chat_lockout", target, resolveAtRound: 100 },
+		];
+		await writeActiveSessionEngine(page, sessionId, withLockout);
+
+		await page.reload();
+		await stubChatCompletions(page, ["hi"]);
+		await expect(page.locator("#composer")).toBeVisible();
+
+		await expect(
+			page.locator(
+				`.ai-panel[data-ai="${target}"] [data-field="complication-chips"]`,
+			),
+		).toHaveText("[chat-lock]");
 
 		await expectNoPageErrors(page, pageErrors);
 	});

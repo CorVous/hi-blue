@@ -1,7 +1,12 @@
 import type { GameSession } from "../game/game-session.js";
 import type { PendingBootstrap } from "../game/pending-bootstrap.js";
 import { getPendingCallMeta } from "../game/pending-bootstrap.js";
-import { clearDaemonTurnResults, renderDaemonFooter } from "./daemon-footer.js";
+import {
+	clearDaemonTurnResults,
+	renderDaemonFooter,
+	updateDaemonFooterDetails,
+	updateDaemonFooterSummary,
+} from "./daemon-footer.js";
 import { renderGameStrip } from "./game-strip.js";
 import { clearPendingStrip, renderPendingStrip } from "./pending-strip.js";
 import { getMapFocus, renderWorldMap, setMapFocus } from "./world-map.js";
@@ -62,8 +67,11 @@ function renderSessionInspector(
 		);
 		if (panel) {
 			renderDaemonFooter(panel, aiId, session);
+			updateDaemonFooterSummary(panel, aiId, session);
+			updateDaemonFooterDetails(panel, aiId, session);
 		}
 	}
+	setMapFocus(getMapFocus());
 
 	attachEscapeClearsFocusOnce(doc);
 }

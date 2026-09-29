@@ -1,3 +1,4 @@
+import { GRID_COLS, GRID_ROWS } from "../game/direction.js";
 import type { GameSession } from "../game/game-session.js";
 import type {
 	AiId,
@@ -9,9 +10,6 @@ import { vistaMaskForDaemon } from "./vista-mask.js";
 
 let mapFocus: AiId | null = null;
 let activeSession: GameSession | null = null;
-
-const ROOM_ROWS = 5;
-const ROOM_COLS = 5;
 
 const DAEMON_GLYPH = "@ ";
 const VISTA_TINT_ALPHA = 0.25;
@@ -209,11 +207,11 @@ export function renderWorldMap(
 
 	const grid = doc.createElement("div");
 	grid.className = "dev-map-grid";
-	grid.setAttribute("data-rows", String(ROOM_ROWS));
-	grid.setAttribute("data-cols", String(ROOM_COLS));
+	grid.setAttribute("data-rows", String(GRID_ROWS));
+	grid.setAttribute("data-cols", String(GRID_COLS));
 
-	for (let row = 0; row < ROOM_ROWS; row++) {
-		for (let col = 0; col < ROOM_COLS; col++) {
+	for (let row = 0; row < GRID_ROWS; row++) {
+		for (let col = 0; col < GRID_COLS; col++) {
 			const roomPos: GridPosition = { row, col };
 			const cellInfo = computeCellInfo(roomPos, state);
 

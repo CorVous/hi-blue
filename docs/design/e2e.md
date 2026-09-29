@@ -196,7 +196,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `persistence-reload` | Transcripts and budgets survive a reload, and a live-schema session round-trips position, inventory, content state, conversation and perception changes. | #173, #214 |
 | `witnessed-event-reload` | A live `go` produces a witnessed-event entry that survives reloads and appears in the witness's turns but never the actor's. | #196, #195, PRD #157, ADR 0015 |
 | `whisper-tampering` | Each Daemon's `<aiId>.txt` is the only source of its message history, and an entry injected into one Daemon's file appears in no other Daemon's prompt. | #213 |
-| `dev-inspector` | The dev world map in a real browser: a 5×5 room-only board, markers that carry identity only, the focus Vista tint, and narrow viewports. | #540, ADR 0015 |
+| `dev-inspector` | The dev world map in a real browser: a 5×5 room-only board, markers that carry identity only, the focus Vista tint, and narrow viewports; and daemon footers that are filled as soon as a restored session renders. | #540, ADR 0015 |
 | `mobile-overflow` | The app shell does not overflow horizontally at phone widths. | #554 |
 | `responsive-bento` | The ≤720px bento layout, strip-card previews, and the mobile header. | |
 | `byok-validation` | A key validation whose `/api/v1/auth/key` request never answers: a second click says "Validation in progress…" and sends nothing, the request is aborted after 15 s (fast-forwarded with `page.clock`) and offers Save unverified, and the button validates again afterwards. | |
@@ -280,6 +280,10 @@ specs that assert on generation failure check `#cap-hit` themselves.
 - **dev-inspector.**
   - This is the only coverage of the real inspector DOM. The jsdom tests
     live under `src/spa/dev-inspector/__tests__/`.
+  - The footer test seals a `chat_lockout` into `engine.dat` and reloads,
+    because a complication chip is the one footer field that has content
+    before any round runs. Before the fix the footer was built empty on every
+    session render and filled only after the next round.
   - A persona handle can itself be `east` or `left`, or contain `v`, so
     direction checks run against the tooltip minus the handle and never
     against the handle text.
