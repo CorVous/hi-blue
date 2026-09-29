@@ -34,7 +34,11 @@ Three interfaces isolate every LLM call so tests and evals never touch the netwo
   DeepSeek V4.1 Flash, sometimes returned its whole answer in the reasoning
   channel, and the fallback costs nothing to keep.
 - `CapHitError` (the spend cap, HTTP 429) is never retried by any provider. It
-  surfaces straight away so the UI can show the cap screen.
+  surfaces straight away so the UI can show the cap screen. Only the proxy's
+  own cap response (`type: rate_limit_exceeded`, `code` of `per-ip-daily` or
+  `global-daily`) becomes a `CapHitError`. Any other 429, such as a provider
+  rate limit the proxy passes through or one OpenRouter returns on the BYOK
+  path, is an ordinary error and is retried like one.
 - **Reasoning defaults.** Every provider defaults to `disableReasoning: false`,
   so the model thinks before it answers. On DeepSeek V4.1 Flash thinking costs
   about one second per daemon turn and fixes the problems seen without it:

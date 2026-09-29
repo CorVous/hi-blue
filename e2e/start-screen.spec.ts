@@ -171,7 +171,13 @@ test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
 			await route.fulfill({
 				status: 429,
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ error: { message: "Rate limit exceeded" } }),
+				body: JSON.stringify({
+					error: {
+						message: "You have exceeded your daily spend limit.",
+						type: "rate_limit_exceeded",
+						code: "per-ip-daily",
+					},
+				}),
 			});
 			return;
 		}
@@ -192,6 +198,44 @@ test("CapHit during generation surfaces #cap-hit", async ({ page }) => {
 		errorsOtherThanRethrownCapHit,
 		errorsOtherThanRethrownCapHit.map((e) => e.message).join("\n"),
 	).toEqual([]);
+});
+
+test("an upstream provider 429 during generation is retried, not shown as #cap-hit", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await stubNewGameLLM(page, { sse: ["stub reply"] });
+
+	let providerRateLimitsSent = 0;
+	await page.route("**/v1/chat/completions", async (route, request) => {
+		const body = parseRequestBody(request);
+		const isSynthesis =
+			isJsonModeRequest(body) && classifyJsonRequest(body) === "synthesis";
+		if (isSynthesis && providerRateLimitsSent === 0) {
+			providerRateLimitsSent += 1;
+			await route.fulfill({
+				status: 429,
+				headers: { "Content-Type": "application/json", "Retry-After": "1" },
+				body: JSON.stringify({
+					error: { message: "Provider rate limited", code: 429 },
+				}),
+			});
+			return;
+		}
+
+		await route.fallback();
+	});
+
+	await page.goto("/?skipDialup=1");
+
+	const beginBtn = await waitForStartScreenReady(page);
+	await expect(beginBtn).toBeEnabled();
+	await expect(page.locator("#cap-hit")).toBeHidden();
+	expect(providerRateLimitsSent).toBe(1);
+
+	await expectNoPageErrors(page, pageErrors);
 });
 
 test("refresh during generation re-enters start screen and restarts generation", async ({

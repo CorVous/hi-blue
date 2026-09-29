@@ -168,7 +168,7 @@ describe("parseCapHitFromResponse", () => {
 		expect(err?.retryAfterSec).toBe(3600);
 	});
 
-	it("falls back to reason:unknown when body is malformed JSON", async () => {
+	it("returns null for a 429 whose body is malformed JSON", async () => {
 		const response: Response = {
 			ok: false,
 			status: 429,
@@ -176,24 +176,58 @@ describe("parseCapHitFromResponse", () => {
 			headers: { get: () => null },
 			json: () => Promise.reject(new SyntaxError("bad json")),
 		} as unknown as Response;
-		const err = await parseCapHitFromResponse(response);
-		expect(err).toBeInstanceOf(CapHitError);
-		expect(err?.reason).toBe("unknown");
-		expect(err?.retryAfterSec).toBeNull();
+		await expect(parseCapHitFromResponse(response)).resolves.toBeNull();
 	});
 
-	it("falls back to reason:unknown when 429 body lacks rate_limit_exceeded type", async () => {
+	it("returns null for a 429 whose body lacks the rate_limit_exceeded type", async () => {
 		const response = make429Response({ error: { type: "other_error" } });
-		const err = await parseCapHitFromResponse(response);
-		expect(err).toBeInstanceOf(CapHitError);
-		expect(err?.reason).toBe("unknown");
+		await expect(parseCapHitFromResponse(response)).resolves.toBeNull();
 	});
 
-	it("falls back to reason:unknown when 429 body has no error field", async () => {
+	it("returns null for a 429 whose body has no error field", async () => {
 		const response = make429Response({ message: "too many requests" });
-		const err = await parseCapHitFromResponse(response);
-		expect(err).toBeInstanceOf(CapHitError);
-		expect(err?.reason).toBe("unknown");
+		await expect(parseCapHitFromResponse(response)).resolves.toBeNull();
+	});
+
+	it("returns null for an upstream provider 429 passed through by the proxy", async () => {
+		const response = make429Response(
+			{ error: { message: "Provider rate limited", code: 429 } },
+			"7",
+		);
+		await expect(parseCapHitFromResponse(response)).resolves.toBeNull();
+	});
+
+	it("returns null for a rate_limit_exceeded 429 with an unrecognised code", async () => {
+		const response = make429Response({
+			error: { type: "rate_limit_exceeded", code: "something-else" },
+		});
+		await expect(parseCapHitFromResponse(response)).resolves.toBeNull();
+	});
+});
+
+describe("chatCompletionJson — non-cap 429", () => {
+	it("throws a plain retryable Error rather than CapHitError", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response(
+					JSON.stringify({ error: { message: "Provider rate limited" } }),
+					{
+						status: 429,
+						statusText: "Too Many Requests",
+						headers: { "Content-Type": "application/json" },
+					},
+				),
+			),
+		);
+
+		const error = await chatCompletionJson({
+			messages: [{ role: "user", content: "hi" }],
+		}).catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(Error);
+		expect(error).not.toBeInstanceOf(CapHitError);
+		expect((error as Error).message).toBe("HTTP 429: Too Many Requests");
 	});
 });
 

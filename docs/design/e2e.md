@@ -189,7 +189,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. | #307 |
 | `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. | #380 |
 | `bootstrap-failure-bounce` | A content-pack failure after CONNECT, whether a network abort or an HTTP 200 with an error body, shows `#bootstrap-recovery` inside the game view instead of bouncing to start. | #380 |
-| `start-screen` | Start-screen boot, login, restore on refresh, cap-hit, refresh during generation, and an empty active pointer. | ADR 0011 |
+| `start-screen` | Start-screen boot, login, restore on refresh, cap-hit (and a provider 429 that is not one), refresh during generation, and an empty active pointer. | ADR 0011 |
 | `sessions-picker` | Picker rows for ok, broken and version-mismatch saves; load, dup and rm; the sessions icon; sticky routing; archived-build links. | ADR 0011 |
 | `persistence-reload` | Transcripts and budgets survive a reload, and a live-schema session round-trips position, inventory, content state, conversation and perception changes. | #173, #214 |
 | `witnessed-event-reload` | A live `go` produces a witnessed-event entry that survives reloads and appears in the witness's turns but never the actor's. | #196, #195, PRD #157, ADR 0015 |
@@ -233,6 +233,11 @@ specs that assert on generation failure check `#cap-hit` themselves.
     hence `font-variant-ligatures: none`.
   - The SPA deliberately re-throws `CapHitError` after showing `#cap-hit`, for
     dev-console diagnostics, so the cap-hit spec filters that one error out.
+  - The cap-hit stub sends the proxy's exact cap body (`rate_limit_exceeded`,
+    `per-ip-daily`); a bare 429 is not a cap hit. A companion spec sends a
+    provider-style 429 once and checks that generation retries and
+    `#cap-hit` stays hidden, because the proxy now passes upstream 429s
+    through.
   - The refresh-during-generation spec holds generation on a promise that never
     settles. Reloading aborts the in-flight request, so the test does not
     stall. The fast stub is installed before the reload.

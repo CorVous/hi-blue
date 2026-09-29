@@ -53,6 +53,7 @@ beforeEach(() => {
 
 afterEach(async () => {
 	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
 	_setPricingCacheForTests(null);
 	await reset();
 });
@@ -270,9 +271,10 @@ describe("POST /v1/chat/completions — upstream errors", () => {
 	});
 
 	it("returns 502 upstream_error when fetch throws (network failure)", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		vi.stubGlobal(
 			"fetch",
-			vi.fn().mockRejectedValue(new Error("Network error")),
+			vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED 10.1.2.3:443")),
 		);
 
 		const resp = await SELF.fetch(ENDPOINT, {
@@ -282,8 +284,82 @@ describe("POST /v1/chat/completions — upstream errors", () => {
 		});
 
 		expect(resp.status).toBe(502);
-		const json = (await resp.json()) as { error: { type: string } };
+		const json = (await resp.json()) as {
+			error: { type: string; message: string };
+		};
 		expect(json.error.type).toBe("upstream_error");
+		expect(json.error.message).not.toContain("ECONNREFUSED");
+	});
+
+	it("passes an upstream 400 through with its status and body", async () => {
+		const upstreamBody = JSON.stringify({
+			error: { message: "context too long", code: 400 },
+		});
+		vi.stubGlobal(
+			"fetch",
+			makeUpstreamMock(upstreamBody, 400, {
+				"Content-Type": "application/json",
+			}),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: VALID_BODY,
+		});
+
+		expect(resp.status).toBe(400);
+		expect(resp.headers.get("Content-Type")).toBe("application/json");
+		expect(await resp.text()).toBe(upstreamBody);
+	});
+
+	it("passes an upstream 429 through with its body and Retry-After", async () => {
+		const upstreamBody = JSON.stringify({
+			error: { message: "Provider rate limited", code: 429 },
+		});
+		vi.stubGlobal(
+			"fetch",
+			makeUpstreamMock(upstreamBody, 429, {
+				"Content-Type": "application/json",
+				"Retry-After": "7",
+			}),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: VALID_BODY,
+		});
+
+		expect(resp.status).toBe(429);
+		expect(resp.headers.get("Retry-After")).toBe("7");
+		expect(await resp.text()).toBe(upstreamBody);
+	});
+});
+
+describe("POST /v1/chat/completions — stream flag validation", () => {
+	it.each([
+		["string", "true"],
+		["number", 1],
+		["null", null],
+		["object", {}],
+	])("returns 400 when stream is a %s, without calling upstream", async (_kind, stream) => {
+		const mockFetch = vi.fn();
+		vi.stubGlobal("fetch", mockFetch);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream,
+			}),
+		});
+
+		expect(resp.status).toBe(400);
+		const json = (await resp.json()) as { error: { type: string } };
+		expect(json.error.type).toBe("invalid_request_error");
+		expect(mockFetch).not.toHaveBeenCalled();
 	});
 });
 
@@ -521,7 +597,85 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		expect(Number(gVal)).toBe(0);
 	});
 
+	it("upstream 4xx is passed through and counters return to 0", async () => {
+		const ip = "9.9.9.10";
+
+		vi.stubGlobal(
+			"fetch",
+			makeUpstreamMock('{"error":{"message":"rate limited"}}', 429, {
+				"Content-Type": "application/json",
+			}),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(429);
+
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
+		expect(Number(ipVal)).toBe(0);
+		expect(Number(gVal)).toBe(0);
+	});
+
+	it("non-boolean stream is rejected before any pre-charge", async () => {
+		const ip = "9.9.9.11";
+		vi.stubGlobal("fetch", vi.fn());
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: "true",
+			}),
+		});
+
+		expect(resp.status).toBe(400);
+		expect(await kv().get(perIpKey(ip, Date.now()))).toBeNull();
+	});
+
+	it("IPv6 clients in the same /64 share one per-IP counter", async () => {
+		const now = Date.now();
+		await kv().put(
+			perIpKey("2001:db8:1:2::1", now),
+			String(
+				VITEST_CONFIG_PER_IP_CAP_MICRO_USD -
+					VITEST_CONFIG_PRE_CHARGE_MICRO_USD +
+					1,
+			),
+			{ expirationTtl: 25 * 3600 },
+		);
+		const mockFetch = vi.fn();
+		vi.stubGlobal("fetch", mockFetch);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": "2001:db8:1:2:aaaa:bbbb:cccc:dddd",
+			},
+			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		});
+
+		expect(resp.status).toBe(429);
+		expect(mockFetch).not.toHaveBeenCalled();
+	});
+
 	it("upstream fetch throws returns 502 and counters return to 0", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		const ip = "10.0.0.1";
 
 		vi.stubGlobal(
@@ -753,7 +907,7 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		expect(Number(ipVal)).toBe(1200);
 	});
 
-	it("stream failure mid-flight: per-IP counter is refunded back to seeded value (ctx.waitUntil fix)", async () => {
+	it("stream failure mid-flight before usage: the pre-charge is kept (ctx.waitUntil fix)", async () => {
 		const ip = "14.0.0.1";
 		const seeded = 7_000;
 		const now = Date.now();
@@ -794,10 +948,65 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		await resp.text().catch(() => undefined);
 
 		const ipKey766 = perIpKey(ip, Date.now());
-		await waitForCounter(kv(), ipKey766, String(seeded));
+		await waitForCounter(
+			kv(),
+			ipKey766,
+			String(seeded + VITEST_CONFIG_PRE_CHARGE_MICRO_USD),
+		);
+		await new Promise((r) => setTimeout(r, 50));
+		expect(Number(await kv().get(ipKey766))).toBe(
+			seeded + VITEST_CONFIG_PRE_CHARGE_MICRO_USD,
+		);
+	});
 
-		const ipVal = await kv().get(ipKey766);
-		expect(Number(ipVal)).toBe(seeded);
+	it("stream failure after the usage chunk settles with the parsed usage", async () => {
+		const ip = "14.0.0.2";
+		const usageChunk = new TextEncoder().encode(
+			'data: {"usage":{"prompt_tokens":300,"completion_tokens":200}}\n\n',
+		);
+		let pulls = 0;
+		const streamThatDiesAfterUsage = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				pulls += 1;
+				if (pulls === 1) {
+					controller.enqueue(usageChunk);
+					return;
+				}
+				controller.error(new Error("client went away"));
+			},
+		});
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(streamThatDiesAfterUsage, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		await resp.text().catch(() => undefined);
+
+		const now = Date.now();
+		await Promise.all([
+			waitForCounter(kv(), perIpKey(ip, now), "500"),
+			waitForCounter(kv(), globalKey(now), "500"),
+		]);
 	});
 
 	describe("prompt-cache discount: upstream usage.cost is authoritative over token-count pricing", () => {

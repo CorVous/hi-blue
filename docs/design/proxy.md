@@ -88,8 +88,26 @@ rules and tradeoffs the code cannot state by itself.
 ## Chat completions pipeline (`openai-proxy.ts`)
 
 `handleChatCompletions` runs its steps in order: require the key, parse, validate,
-pre-charge, forward, then relay the whole or streamed response. Each failure
-after the pre-charge refunds it.
+pre-charge, forward, then relay the whole or streamed response. A failure
+before the upstream has produced anything (network error, non-2xx status,
+unreadable whole body) refunds the pre-charge. A stream that breaks part-way
+does not; see "Streaming settlement" below.
+
+- **`stream` must be a boolean when present.** Anything else is a 400 before
+  the pre-charge. The proxy decides between the whole and streamed relay with
+  `stream === true`, but forwards the caller's value unchanged, so a truthy
+  non-boolean such as `"true"` could make OpenRouter stream while the proxy
+  read the SSE text as one JSON body, found no usage, and refunded in full.
+- **Upstream status mapping.** A 4xx from OpenRouter (bad request, auth,
+  payment, provider rate limit) is passed through with its status, body and
+  `Retry-After`, so the client sees the real cause and can honour the retry
+  hint. A 5xx, or any other non-2xx, becomes a 502 `upstream_error`. A
+  network failure is also a 502, with a fixed message: the underlying error
+  is logged, not echoed, because it can name internal hosts. The SPA only
+  treats a 429 as the spend cap when its body carries the proxy's own
+  `rate_limit_exceeded` type and a `per-ip-daily` or `global-daily` code
+  (`parseCapHitFromResponse`), so a passed-through provider 429 is an
+  ordinary, retryable failure rather than the cap-hit screen.
 
 - **Pricing lookup runs in parallel.** `getModelPricing` starts right after
   the pre-charge, alongside the upstream call, so reconciliation adds no
@@ -106,13 +124,21 @@ after the pre-charge refunds it.
   the OpenAI shape (`prompt_tokens_details.cached_tokens`) or the Anthropic
   shape (`cache_read_input_tokens`) and logged as `[cache] ...`. They are
   never priced directly.
-- **Missing or unparseable usage means a full refund**, not keeping the
-  estimate.
+- **Missing or unparseable usage on a completed response means a full
+  refund**, not keeping the estimate.
 - **Streaming settlement uses `ctx.waitUntil`.** The response is teed through
-  a `TransformStream` that scans SSE `data:` lines for the usage chunk. Both
-  the end-of-stream reconcile and the refund on a mid-stream upstream failure
-  are handed to `ctx.waitUntil`, or the KV write can be lost once the
-  response finishes. A regression test covers the refund.
+  a `TransformStream` that scans SSE `data:` lines for the usage chunk, with
+  one streaming `TextDecoder` so a multi-byte character split across chunks
+  decodes correctly. Both the end-of-stream reconcile and the settlement of a
+  broken stream are handed to `ctx.waitUntil`, or the KV write can be lost
+  once the response finishes.
+- **A broken stream is never refunded.** When the pipe errors (the upstream
+  drops, or the client disconnects), OpenRouter has usually already billed
+  for the tokens generated so far. If the usage chunk was already seen, the
+  stream settles on it like a completed one. Otherwise the pre-charge is kept
+  as the estimate. Refunding here would let a client get generations for free
+  by aborting each request just before the end. Regression tests cover both
+  cases.
 
 ## Cost guard (`rate-guard.ts`)
 

@@ -75,6 +75,13 @@ export async function handleChatCompletions(
 			"Request body must include a non-empty messages array",
 		);
 	}
+	if (body.stream !== undefined && typeof body.stream !== "boolean") {
+		return openAiError(
+			400,
+			"invalid_request_error",
+			"stream must be a boolean when present",
+		);
+	}
 
 	const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
 	const nowMs = Date.now();
@@ -102,15 +109,19 @@ export async function handleChatCompletions(
 		);
 	} catch (err) {
 		await refundPreCharge();
-		const message =
-			err instanceof Error
-				? err.message
-				: "Network error forwarding to OpenRouter";
-		return openAiError(502, "upstream_error", message);
+		console.error("[proxy] forwarding to OpenRouter failed", err);
+		return openAiError(
+			502,
+			"upstream_error",
+			"Network error forwarding to OpenRouter",
+		);
 	}
 
 	if (!upstream.ok) {
 		await refundPreCharge();
+		if (isClientErrorStatus(upstream.status)) {
+			return relayUpstreamClientError(upstream);
+		}
 		return openAiError(
 			502,
 			"upstream_error",
@@ -121,7 +132,7 @@ export async function handleChatCompletions(
 	if (!isStream) {
 		return relayWholeResponse(upstream, settleFromUsage, refundPreCharge);
 	}
-	return relayStreamedResponse(upstream, settleFromUsage, refundPreCharge, ctx);
+	return relayStreamedResponse(upstream, settleFromUsage, ctx);
 }
 
 async function readJsonBody(request: Request): Promise<unknown> {
@@ -177,6 +188,24 @@ function upstreamContentType(upstream: Response): string {
 	return upstream.headers.get("Content-Type") ?? "application/octet-stream";
 }
 
+function isClientErrorStatus(status: number): boolean {
+	return status >= 400 && status < 500;
+}
+
+async function relayUpstreamClientError(upstream: Response): Promise<Response> {
+	const bodyText = await upstream.text().catch(() => "");
+	const headers = new Headers({
+		"Content-Type": upstreamContentType(upstream),
+	});
+	const retryAfter = upstream.headers.get("Retry-After");
+	if (retryAfter !== null) headers.set("Retry-After", retryAfter);
+	return new Response(bodyText, {
+		status: upstream.status,
+		statusText: upstream.statusText,
+		headers,
+	});
+}
+
 async function relayWholeResponse(
 	upstream: Response,
 	settleFromUsage: (usage: ParsedUsage | null) => Promise<void>,
@@ -194,7 +223,7 @@ async function relayWholeResponse(
 		);
 	}
 
-	await settleFromUsage(extractUsage(responseText));
+	await settleFromUsage(parseUsageJson(responseText));
 
 	return new Response(responseText, {
 		status: upstream.status,
@@ -205,9 +234,9 @@ async function relayWholeResponse(
 async function relayStreamedResponse(
 	upstream: Response,
 	settleFromUsage: (usage: ParsedUsage | null) => Promise<void>,
-	refundPreCharge: () => Promise<void>,
 	ctx: ExecutionContext,
 ): Promise<Response> {
+	const decoder = new TextDecoder();
 	let sseBuffer = "";
 	let usage: ParsedUsage | null = null;
 
@@ -224,20 +253,26 @@ async function relayStreamedResponse(
 		transform(chunk, controller) {
 			controller.enqueue(chunk);
 
-			sseBuffer += new TextDecoder().decode(chunk);
+			sseBuffer += decoder.decode(chunk, { stream: true });
 			const lines = sseBuffer.split("\n");
 			sseBuffer = lines.pop() ?? "";
 			for (const line of lines) tryParseSseLine(line);
 		},
-		flush(controller) {
+		flush() {
+			sseBuffer += decoder.decode();
 			if (sseBuffer.trim().length > 0) tryParseSseLine(sseBuffer);
 			ctx.waitUntil(settleFromUsage(usage));
-			controller.terminate();
 		},
 	});
 
+	const settleInterruptedStream = async (): Promise<void> => {
+		if (usage !== null) await settleFromUsage(usage);
+	};
+
 	if (upstream.body) {
-		ctx.waitUntil(upstream.body.pipeTo(writable).catch(refundPreCharge));
+		ctx.waitUntil(
+			upstream.body.pipeTo(writable).catch(settleInterruptedStream),
+		);
 	} else {
 		const writer = writable.getWriter();
 		await writer.close();
@@ -254,14 +289,6 @@ interface ParsedUsage {
 	completionTokens: number;
 	cachedTokens?: number;
 	costUsd?: number;
-}
-
-function extractUsage(responseText: string): ParsedUsage | null {
-	try {
-		return parseUsageJson(responseText);
-	} catch {
-		return null;
-	}
 }
 
 function parseUsageJson(text: string): ParsedUsage | null {

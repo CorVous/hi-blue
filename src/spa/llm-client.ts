@@ -7,14 +7,16 @@ import { parseSSEStream } from "./streaming.js";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+export type CapHitReason = "per-ip-daily" | "global-daily";
+
 export class CapHitError extends Error {
 	readonly status = 429 as const;
-	readonly reason: "per-ip-daily" | "global-daily" | "unknown";
+	readonly reason: CapHitReason;
 	readonly retryAfterSec: number | null;
 
 	constructor(opts: {
 		message: string;
-		reason: "per-ip-daily" | "global-daily" | "unknown";
+		reason: CapHitReason;
 		retryAfterSec: number | null;
 	}) {
 		super(opts.message);
@@ -44,19 +46,11 @@ export async function parseCapHitFromResponse(
 ): Promise<CapHitError | null> {
 	if (response.status !== 429) return null;
 
-	const retryAfterHeader = response.headers?.get("Retry-After");
-	const retryAfterSec =
-		retryAfterHeader != null ? Number(retryAfterHeader) : null;
-
 	let body: unknown;
 	try {
 		body = await response.json();
 	} catch {
-		return new CapHitError({
-			message: "rate limit exceeded",
-			reason: "unknown",
-			retryAfterSec,
-		});
+		return null;
 	}
 
 	const err =
@@ -68,26 +62,16 @@ export async function parseCapHitFromResponse(
 			? (body.error as Record<string, unknown>)
 			: null;
 
-	if (!err || err.type !== "rate_limit_exceeded") {
-		return new CapHitError({
-			message: "rate limit exceeded",
-			reason: "unknown",
-			retryAfterSec,
-		});
-	}
+	if (!err || err.type !== "rate_limit_exceeded") return null;
+	if (err.code !== "per-ip-daily" && err.code !== "global-daily") return null;
 
-	const code = err.code;
-	const reason: "per-ip-daily" | "global-daily" | "unknown" =
-		code === "per-ip-daily"
-			? "per-ip-daily"
-			: code === "global-daily"
-				? "global-daily"
-				: "unknown";
-
+	const retryAfterHeader = response.headers?.get("Retry-After");
+	const retryAfterSec =
+		retryAfterHeader != null ? Number(retryAfterHeader) : null;
 	const message =
 		typeof err.message === "string" ? err.message : "rate limit exceeded";
 
-	return new CapHitError({ message, reason, retryAfterSec });
+	return new CapHitError({ message, reason: err.code, retryAfterSec });
 }
 
 export function resolveLLMTarget(): {
