@@ -121,15 +121,31 @@ function removeKeyAndMeta(): void {
 	localStorage.removeItem(LOCALSTORAGE_META_KEY);
 }
 
+function readStoredItemOrNull(storageKey: string): string | null {
+	try {
+		return localStorage.getItem(storageKey);
+	} catch {
+		return null;
+	}
+}
+
+function restoreStoredItem(storageKey: string, previous: string | null): void {
+	try {
+		if (previous === null) localStorage.removeItem(storageKey);
+		else localStorage.setItem(storageKey, previous);
+	} catch {}
+}
+
 export function writeKeyAndMeta(key: string, meta: KeyMeta): boolean {
+	const previousKey = readStoredItemOrNull(OPENROUTER_KEY_STORAGE_KEY);
+	const previousMeta = readStoredItemOrNull(LOCALSTORAGE_META_KEY);
 	try {
 		localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, key);
 		localStorage.setItem(LOCALSTORAGE_META_KEY, JSON.stringify(meta));
 		return true;
 	} catch {
-		try {
-			removeKeyAndMeta();
-		} catch {}
+		restoreStoredItem(OPENROUTER_KEY_STORAGE_KEY, previousKey);
+		restoreStoredItem(LOCALSTORAGE_META_KEY, previousMeta);
 		return false;
 	}
 }

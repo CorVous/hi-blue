@@ -106,8 +106,11 @@ re-render is a call to `renderApp` from a view.
   mode, a quota). The modal then says it could not store (or clear) the key
   and keeps the dialog open. Before, the throw escaped the click handler and
   the status line stayed on "Validating…" forever. A write that fails half way
-  (key written, meta refused) removes the key again, so the SPA never runs on
-  a key the modal says it did not save.
+  (key written, meta refused) puts back the key and meta that were stored
+  before the write, or removes them when there were none, so the SPA never
+  runs on a key the modal says it did not save. Removing them outright used
+  to delete a key that was working: a failed replacement left the player
+  with no key at all.
 - **Key storage.** `openrouter-key.ts` owns the storage key
   (`OPENROUTER_KEY_STORAGE_KEY`) and `readStoredByokKey`, which returns
   `null` when localStorage cannot be read. The modal, `llm-client.ts` and

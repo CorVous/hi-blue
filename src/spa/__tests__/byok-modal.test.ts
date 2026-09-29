@@ -195,6 +195,40 @@ describe("storage helpers when storage refuses writes", () => {
 		expect(store.openrouter_key).toBeUndefined();
 	});
 
+	it("writeKeyAndMeta restores the previously working key and meta when the new write fails", () => {
+		const previousMeta = JSON.stringify({
+			validatedAt: "2024-01-01T00:00:00.000Z",
+			status: "validated",
+			keySuffix: "orig",
+		});
+		const store: Record<string, string> = {
+			openrouter_key: "sk-or-v1-original",
+			openrouter_key_meta: previousMeta,
+		};
+		vi.stubGlobal("localStorage", {
+			getItem: (k: string) => store[k] ?? null,
+			setItem: (k: string, v: string) => {
+				if (k === "openrouter_key_meta" && v !== previousMeta) {
+					throw new DOMException("full", "QuotaExceededError");
+				}
+				store[k] = v;
+			},
+			removeItem: (k: string) => {
+				delete store[k];
+			},
+		});
+
+		const stored = writeKeyAndMeta("sk-or-v1-replacement", {
+			validatedAt: "",
+			status: "unverified",
+			keySuffix: "ment",
+		});
+
+		expect(stored).toBe(false);
+		expect(store.openrouter_key).toBe("sk-or-v1-original");
+		expect(store.openrouter_key_meta).toBe(previousMeta);
+	});
+
 	it("clearKey reports failure instead of throwing when storage is blocked", () => {
 		vi.stubGlobal("localStorage", {
 			getItem: () => null,
