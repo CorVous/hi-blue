@@ -531,7 +531,7 @@ function repaintRestoredTranscripts(
 		);
 		for (const entry of visibleEntries) {
 			transcript.appendChild(
-				restoredMessageLine(doc, entry, aiId, restoredPersonas),
+				transcriptMessageLine(doc, entry, aiId, restoredPersonas),
 			);
 		}
 	});
@@ -543,9 +543,9 @@ function repaintRestoredTranscripts(
 	});
 }
 
-function restoredMessageLine(
+function transcriptMessageLine(
 	doc: Document,
-	entry: MessageEntry,
+	entry: Pick<MessageEntry, "from" | "content">,
 	aiId: AiId,
 	personas: Record<AiId, AiPersona>,
 ): HTMLElement {
@@ -951,24 +951,6 @@ function openMsgLine(transcript: HTMLElement): HTMLElement {
 	return div;
 }
 
-function appendAiTokensToCurrentMsgLine(
-	doc: Document,
-	aiId: AiId,
-	text: string,
-): void {
-	const el = getTranscriptEl(doc, aiId);
-	if (!el) return;
-	const last = el.lastElementChild as HTMLElement | null;
-	const line = last?.classList.contains("msg-line") ? last : openMsgLine(el);
-	line.dataset.body = (line.dataset.body ?? "") + text;
-	const prefix = line.querySelector<HTMLElement>(":scope > .msg-prefix");
-	while (line.lastChild && line.lastChild !== prefix) {
-		line.removeChild(line.lastChild);
-	}
-	appendMentionAwareText(line, line.dataset.body, currentPersonas());
-	scrollTranscriptToBottom(el);
-}
-
 function appendTranscriptLine(
 	doc: Document,
 	aiId: AiId,
@@ -979,15 +961,6 @@ function appendTranscriptLine(
 	if (!el) return;
 	const line = openMsgLine(el);
 	appendMentionAwareText(line, text, currentPersonas(), nonMentionClass);
-	scrollTranscriptToBottom(el);
-}
-
-function appendAiPrefix(doc: Document, aiId: AiId, personaName: string): void {
-	const el = getTranscriptEl(doc, aiId);
-	if (!el) return;
-	const line = openMsgLine(el);
-	const color = currentPersonas()[aiId]?.color;
-	line.appendChild(daemonPrefixSpan(doc, personaName, color));
 	scrollTranscriptToBottom(el);
 }
 
@@ -1294,9 +1267,12 @@ function paintDaemonMessage(
 	const isDaemonToPlayer = event.to === PLAYER_ID;
 	if (!isDaemonToPlayer) return;
 	const daemonId = event.from as AiId;
-	const daemonName = nextState.personas[daemonId]?.name ?? daemonId;
-	appendAiPrefix(doc, daemonId, daemonName);
-	appendAiTokensToCurrentMsgLine(doc, daemonId, `${event.content}\n`);
+	const transcript = getTranscriptEl(doc, daemonId);
+	if (!transcript) return;
+	transcript.appendChild(
+		transcriptMessageLine(doc, event, daemonId, nextState.personas),
+	);
+	scrollTranscriptToBottom(transcript);
 }
 
 function reportRoundFailure(ctx: GameViewContext, err: unknown): void {
@@ -1395,7 +1371,7 @@ function paintFinalRoundLines(doc: Document, state: GameState): void {
 	linesEl.textContent = "";
 	const lines = finalRoundDaemonLines(state);
 	for (const { aiId, entry } of lines) {
-		linesEl.appendChild(restoredMessageLine(doc, entry, aiId, state.personas));
+		linesEl.appendChild(transcriptMessageLine(doc, entry, aiId, state.personas));
 	}
 	sectionEl.hidden = lines.length === 0;
 }

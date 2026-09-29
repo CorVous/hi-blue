@@ -302,8 +302,11 @@ it hides the other routes' screens and shows or hides the global chrome
   streaming feel better.
 - **One line per message.** A daemon message stays in a single `.msg-line`
   even if it contains `\n`, so the strip-card preview can show it as one
-  truncated line. The accumulated body is kept in `line.dataset.body`, so
-  each update re-renders the whole body with mention highlighting.
+  truncated line. A message arrives whole, so it is painted with the same
+  `transcriptMessageLine` that rebuilds restored transcripts and the
+  endgame's final lines. The view used to accumulate streamed tokens in
+  `line.dataset.body` and re-render the line on each one; that path went
+  with token streaming.
 - **`game_ended`.** The event only marks the round as the last one. After the
   events loop the final state is saved, topinfo is repainted so the turn
   counter shows the final round, and then `enterEndgame` runs with that state.
