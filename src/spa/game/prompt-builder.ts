@@ -1,6 +1,7 @@
 import { blueCuriosityClauseFor } from "../../content/blue-curiosity.js";
 import {
 	pairedSpaceHoldingItem,
+	targetHandles,
 	withinInteractionRange,
 } from "./available-tools.js";
 import { isGridPosition, positionsEqual } from "./direction.js";
@@ -291,7 +292,7 @@ export function renderPerceptionDelta(
 			const description =
 				entity.postExamineDescription ?? entity.examineDescription;
 			if (description) {
-				lines.push(`${entity.name} is now ${description}`);
+				lines.push(`${displayName(ctx, entity)} is now ${description}`);
 				transitionEmitted.add(entityId);
 			}
 		}
@@ -313,7 +314,7 @@ export function renderPerceptionDelta(
 		const pickedUpByActor = entity?.holder === ctx.aiId;
 		if (pickedUpByActor) continue;
 
-		const name = entity?.name ?? entityId;
+		const name = entity ? displayName(ctx, entity) : entityId;
 		lines.push(`Lost from view: ${name}`);
 	}
 
@@ -335,18 +336,26 @@ export function renderPerceptionDelta(
 		if (!entity) continue;
 
 		if (entity.kind === "obstacle") {
-			lines.push(`Came into view: ${entity.name}`);
+			lines.push(`Came into view: ${displayName(ctx, entity)}`);
 		} else {
 			const description = chooseExamineDescription(entity);
 			if (description) {
-				lines.push(`Came into view: ${entity.name} — ${description}`);
+				lines.push(
+					`Came into view: ${displayName(ctx, entity)} — ${description}`,
+				);
 			} else {
-				lines.push(`Came into view: ${entity.name}`);
+				lines.push(`Came into view: ${displayName(ctx, entity)}`);
 			}
 		}
 	}
 
 	return lines;
+}
+
+function displayName(ctx: AiContext, entity: WorldEntity): string {
+	return (
+		targetHandles(ctx.worldSnapshot.entities).get(entity.id) ?? entity.name
+	);
 }
 
 function objectiveSpacesAt(
@@ -375,9 +384,11 @@ function describeGroundItems(
 	for (const item of cellItems) {
 		const space = pairedSpaceHoldingItem(item, ctx.worldSnapshot.entities);
 		if (space) {
-			placed.push(`${item.name} (set into the ${space.name})`);
+			placed.push(
+				`${displayName(ctx, item)} (set into the ${displayName(ctx, space)})`,
+			);
 		} else {
-			loose.push(item.name);
+			loose.push(displayName(ctx, item));
 		}
 	}
 	return [
@@ -577,17 +588,17 @@ export function buildDiskSnapshot(ctx: AiContext): string {
 
 	const heldItems = items
 		.filter((i) => i.holder === ctx.aiId)
-		.map((i) => i.name)
+		.map((i) => displayName(ctx, i))
 		.sort();
 	const ownCellItems = items
 		.filter((item) => {
 			const h = item.holder;
 			return isGridPosition(h) && positionsEqual(h, actorSpatial.position);
 		})
-		.map((i) => i.name)
+		.map((i) => displayName(ctx, i))
 		.sort();
 	const ownCellSpaces = objectiveSpacesAt(ctx, actorSpatial.position)
-		.map((s) => s.name)
+		.map((s) => displayName(ctx, s))
 		.sort();
 	lines.push(
 		`you: holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}] on=[${ownCellSpaces.join(", ") || "nothing"}]`,
@@ -618,7 +629,7 @@ export function buildDiskSnapshot(ctx: AiContext): string {
 				const h = item.holder;
 				return isGridPosition(h) && positionsEqual(h, position);
 			})
-			.map((i) => i.name);
+			.map((i) => displayName(ctx, i));
 		contentParts.push(...cellItems);
 
 		const obstacles = ctx.worldSnapshot.entities.filter((e) => {
@@ -626,8 +637,10 @@ export function buildDiskSnapshot(ctx: AiContext): string {
 			const h = e.holder;
 			return isGridPosition(h) && positionsEqual(h, position);
 		});
-		contentParts.push(...obstacles.map((o) => o.name));
-		contentParts.push(...objectiveSpacesAt(ctx, position).map((s) => s.name));
+		contentParts.push(...obstacles.map((o) => displayName(ctx, o)));
+		contentParts.push(
+			...objectiveSpacesAt(ctx, position).map((s) => displayName(ctx, s)),
+		);
 
 		const contents =
 			contentParts.length > 0 ? [...contentParts].sort().join(", ") : "nothing";
@@ -737,11 +750,13 @@ function renderCurrentState(ctx: AiContext): string {
 
 		const heldItems = items.filter((item) => item.holder === ctx.aiId);
 		if (heldItems.length > 0) {
-			lines.push(`You are holding: ${heldItems.map((i) => i.name).join(", ")}`);
+			lines.push(
+				`You are holding: ${heldItems.map((i) => displayName(ctx, i)).join(", ")}`,
+			);
 			for (const item of heldItems) {
 				const chosenDescription = chooseExamineDescription(item);
 				if (!chosenDescription) continue;
-				lines.push(`    ${item.name}: ${chosenDescription}`);
+				lines.push(`    ${displayName(ctx, item)}: ${chosenDescription}`);
 			}
 		} else {
 			lines.push("You are holding: nothing");
@@ -763,14 +778,14 @@ function renderCurrentState(ctx: AiContext): string {
 		if (standingOn.length > 0) {
 			const standingParts = standingOn.map((space) =>
 				space.satisfactionState === "satisfied" && space.postLookFlavor
-					? `${space.name} ${space.postLookFlavor}`
-					: space.name,
+					? `${displayName(ctx, space)} ${space.postLookFlavor}`
+					: displayName(ctx, space),
 			);
 			lines.push(`You are standing on: ${standingParts.join("; ")}`);
 			for (const space of standingOn) {
 				const chosenDescription = chooseExamineDescription(space);
 				if (!chosenDescription) continue;
-				lines.push(`    ${space.name}: ${chosenDescription}`);
+				lines.push(`    ${displayName(ctx, space)}: ${chosenDescription}`);
 			}
 		}
 
@@ -800,7 +815,7 @@ function renderCurrentState(ctx: AiContext): string {
 				if (!positionsEqual(otherSpatial.position, position)) continue;
 				const heldByOther = items
 					.filter((item) => item.holder === otherId)
-					.map((item) => item.name);
+					.map((item) => displayName(ctx, item));
 				const holdingStr =
 					heldByOther.length > 0 ? heldByOther.join(", ") : "nothing";
 				const otherColor = ctx.personaColors[otherId] ?? "unknown";
@@ -846,12 +861,12 @@ function renderCurrentState(ctx: AiContext): string {
 			});
 			if (obstacleEntities.length > 0) {
 				for (const obs of obstacleEntities) {
-					contentParts.push(obs.name);
+					contentParts.push(displayName(ctx, obs));
 				}
 			}
 
 			for (const space of objectiveSpacesAt(ctx, position)) {
-				contentParts.push(`${space.name} (a place, not an item)`);
+				contentParts.push(`${displayName(ctx, space)} (a place, not an item)`);
 			}
 
 			const contents =
@@ -874,7 +889,7 @@ function renderCurrentState(ctx: AiContext): string {
 
 				if (!chosenDescription) continue;
 
-				lines.push(`    ${entity.name}: ${chosenDescription}`);
+				lines.push(`    ${displayName(ctx, entity)}: ${chosenDescription}`);
 			}
 		}
 		if (viewCells.length === 0) {

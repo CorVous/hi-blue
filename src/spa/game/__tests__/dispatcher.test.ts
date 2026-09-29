@@ -1583,9 +1583,9 @@ describe("interaction range — availability, validation, and effects agree", ()
 
 		for (const { label, offset, reachable } of cases) {
 			const game = makeRangeGame([makeGroundItem(offset)]);
-			const call: ToolCall = { name: "pick_up", args: { item: "flower" } };
+			const call: ToolCall = { name: "pick_up", args: { item: "Flower" } };
 			const validation = validateToolCall(game, "red", call);
-			expect(pickUpEnum(game).includes("flower"), label).toBe(reachable);
+			expect(pickUpEnum(game).includes("Flower"), label).toBe(reachable);
 			expect(validation.valid, label).toBe(reachable);
 		}
 	});
@@ -1594,12 +1594,12 @@ describe("interaction range — availability, validation, and effects agree", ()
 		const near = makeRangeGame([makeGroundItem({ dx: 1, dy: 1 })]);
 		const nearResult = validateToolCall(near, "red", {
 			name: "use",
-			args: { item: "flower" },
+			args: { item: "Flower" },
 		});
 		expect(nearResult.valid).toBe(false);
 		expect(nearResult.reason).toMatch(/on the ground/);
 		expect(nearResult.reason).toMatch(/pick_up/i);
-		expect(pickUpEnum(near)).toContain("flower");
+		expect(pickUpEnum(near)).toContain("Flower");
 
 		const far = makeRangeGame([makeGroundItem({ dx: 2, dy: 0 })]);
 		const farResult = validateToolCall(far, "red", {

@@ -245,7 +245,7 @@ describe("availableTools — use includes objective_space ids", () => {
 		const useTool = tools.find((t) => t.function.name === "use");
 		expect(useTool).toBeDefined();
 		const itemEnum = useTool?.function.parameters.properties.item?.enum;
-		expect(itemEnum).toContain("space1");
+		expect(itemEnum).toContain("Test Space");
 	});
 
 	it("use includes space id when space is one step north", () => {
@@ -254,7 +254,7 @@ describe("availableTools — use includes objective_space ids", () => {
 		const useTool = tools.find((t) => t.function.name === "use");
 		expect(useTool).toBeDefined();
 		const itemEnum = useTool?.function.parameters.properties.item?.enum;
-		expect(itemEnum).toContain("space1");
+		expect(itemEnum).toContain("Test Space");
 	});
 
 	it("use includes space id when space is the north-west diagonal", () => {
@@ -262,7 +262,7 @@ describe("availableTools — use includes objective_space ids", () => {
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum;
-		expect(itemEnum).toContain("space1");
+		expect(itemEnum).toContain("Test Space");
 	});
 
 	it("use includes space id when space is the north-east diagonal", () => {
@@ -270,7 +270,7 @@ describe("availableTools — use includes objective_space ids", () => {
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum;
-		expect(itemEnum).toContain("space1");
+		expect(itemEnum).toContain("Test Space");
 	});
 
 	it("use does NOT include space id when space is two cardinal steps away", () => {
@@ -278,7 +278,7 @@ describe("availableTools — use includes objective_space ids", () => {
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
-		expect(itemEnum).not.toContain("space1");
+		expect(itemEnum).not.toContain("Test Space");
 	});
 
 	it("use includes space id when space is one step south of the actor", () => {
@@ -286,7 +286,7 @@ describe("availableTools — use includes objective_space ids", () => {
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
-		expect(itemEnum).toContain("space1");
+		expect(itemEnum).toContain("Test Space");
 	});
 
 	it("use does NOT include space id when useAvailable is false", () => {
@@ -294,7 +294,7 @@ describe("availableTools — use includes objective_space ids", () => {
 		const tools = availableTools(game, "red", []);
 		const useTool = tools.find((t) => t.function.name === "use");
 		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
-		expect(itemEnum).not.toContain("space1");
+		expect(itemEnum).not.toContain("Test Space");
 	});
 
 	it("use is present with space id only when Daemon holds NO item but stands on space", () => {
@@ -303,7 +303,7 @@ describe("availableTools — use includes objective_space ids", () => {
 		const useTool = tools.find((t) => t.function.name === "use");
 		expect(useTool).toBeDefined();
 		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
-		expect(itemEnum).toContain("space1");
+		expect(itemEnum).toContain("Test Space");
 		expect(itemEnum).toHaveLength(1);
 	});
 });
@@ -353,15 +353,15 @@ describe("availableTools — interaction range", () => {
 			itemOffset: { dx: 0, dy: 0 },
 			spaceOffset: { dx: 0, dy: 0 },
 		});
-		expect(enumOf(ownCell, "pick_up", "item")).toContain("ground-item");
-		expect(enumOf(ownCell, "use", "item")).toContain("space1");
+		expect(enumOf(ownCell, "pick_up", "item")).toContain("Ground Item");
+		expect(enumOf(ownCell, "use", "item")).toContain("Test Space");
 
 		const diagonal = makeGameAtOffsets({
 			itemOffset: { dx: 1, dy: 1 },
 			spaceOffset: { dx: 1, dy: 1 },
 		});
-		expect(enumOf(diagonal, "pick_up", "item")).toContain("ground-item");
-		expect(enumOf(diagonal, "use", "item")).toContain("space1");
+		expect(enumOf(diagonal, "pick_up", "item")).toContain("Ground Item");
+		expect(enumOf(diagonal, "use", "item")).toContain("Test Space");
 
 		for (let dx = -1; dx <= 1; dx++) {
 			for (let dy = -1; dy <= 1; dy++) {
@@ -369,8 +369,8 @@ describe("availableTools — interaction range", () => {
 					itemOffset: { dx, dy },
 					spaceOffset: { dx, dy },
 				});
-				expect(enumOf(game, "pick_up", "item")).toContain("ground-item");
-				expect(enumOf(game, "use", "item")).toContain("space1");
+				expect(enumOf(game, "pick_up", "item")).toContain("Ground Item");
+				expect(enumOf(game, "use", "item")).toContain("Test Space");
 			}
 		}
 	});
@@ -382,8 +382,8 @@ describe("availableTools — interaction range", () => {
 			itemOffset: { dx: 2, dy: 0 },
 			spaceOffset: { dx: 2, dy: 0 },
 		});
-		expect(enumOf(game, "pick_up", "item")).not.toContain("ground-item");
-		expect(enumOf(game, "use", "item")).not.toContain("space1");
+		expect(enumOf(game, "pick_up", "item")).not.toContain("Ground Item");
+		expect(enumOf(game, "use", "item")).not.toContain("Test Space");
 	});
 
 	it("offset (2,1) is outside both the Vista and interaction range", () => {
@@ -393,8 +393,8 @@ describe("availableTools — interaction range", () => {
 			itemOffset: { dx: 2, dy: 1 },
 			spaceOffset: { dx: 2, dy: 1 },
 		});
-		expect(enumOf(game, "pick_up", "item")).not.toContain("ground-item");
-		expect(enumOf(game, "use", "item")).not.toContain("space1");
+		expect(enumOf(game, "pick_up", "item")).not.toContain("Ground Item");
+		expect(enumOf(game, "use", "item")).not.toContain("Test Space");
 	});
 
 	it("reach is omnidirectional: one step in every cardinal direction is reachable", () => {
@@ -408,8 +408,8 @@ describe("availableTools — interaction range", () => {
 				itemOffset: step,
 				spaceOffset: step,
 			});
-			expect(enumOf(game, "pick_up", "item")).toContain("ground-item");
-			expect(enumOf(game, "use", "item")).toContain("space1");
+			expect(enumOf(game, "pick_up", "item")).toContain("Ground Item");
+			expect(enumOf(game, "use", "item")).toContain("Test Space");
 		}
 	});
 });

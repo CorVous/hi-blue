@@ -32,7 +32,8 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 				properties: {
 					item: {
 						type: "string",
-						description: "The id of the item to pick up.",
+						description:
+							"The name of the item to pick up, as it appears in what you see.",
 					},
 				},
 				required: ["item"],
@@ -51,7 +52,7 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 				properties: {
 					item: {
 						type: "string",
-						description: "The id of the item you are holding.",
+						description: "The name of the item you are holding.",
 					},
 				},
 				required: ["item"],
@@ -64,13 +65,14 @@ export const TOOL_DEFINITIONS: OpenAiTool[] = [
 		function: {
 			name: "use",
 			description:
-				'You must be holding the item to use it. Use an item you are holding, OR activate an objective space in your own cell or in one of the eight cells around you. Fires a flavoured outcome string. For held items: if the item is an objective item AND its paired space is in your own cell or in one of the eight cells around you, also places it on that space. For spaces: activates the space to satisfy a UseSpace objective. Use this tool when you want to "interact with", "play with", "activate", "operate", "employ", or "wield" an item or space.',
+				'Use an item you are holding, OR activate a place in your own cell or in one of the eight cells around you. An item on the ground must be picked up first; a place is used where it is. Fires a flavoured outcome string. For held items: if the item is an objective item AND its paired space is in your own cell or in one of the eight cells around you, also places it on that space. For spaces: activates the space to satisfy a UseSpace objective. Use this tool when you want to "interact with", "play with", "activate", "operate", "employ", or "wield" an item or space.',
 			parameters: {
 				type: "object",
 				properties: {
 					item: {
 						type: "string",
-						description: "The id of the item you are holding.",
+						description:
+							"The name of the item you are holding, or of the place you want to activate.",
 					},
 				},
 				required: ["item"],
