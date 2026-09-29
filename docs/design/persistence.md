@@ -112,6 +112,14 @@ Each session is a set of localStorage keys under one prefix:
   sessions get no `outcome`. A finished save is not cleared: the active pointer
   stays until the player picks an endgame choice, and the game view reopens the
   endgame screen when it restores a complete session.
+- **Per-round prompt carry-over is not persisted.** `GameSession.restore`
+  starts with empty `priorToolRoundtrip`, `priorDiskSnapshots` and
+  `priorDiskEntities`; they live only in memory and are not part of the save
+  format. After a reload, the first round has no `<whats_new>` diff or "X is
+  now …" transition lines for any Daemon, and message tool calls that failed in
+  the round before the reload are not replayed to the model. From the second
+  round on, everything is back to normal. Persisting them would change the
+  save format and need a schema bump.
 - `deserializeSession` takes the boundary as a parameter, defaulting to the
   live boundary. Tests can then check the gate against another cutoff.
 
