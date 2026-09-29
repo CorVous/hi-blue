@@ -987,7 +987,9 @@ async function playRound(
 		reloadChangedSession(ctx, { warn: true });
 		return;
 	}
-	if (saveResult.ok && cached) cached.lastSavedAt = saveResult.lastSavedAt;
+	if (saveResult.lastSavedAt !== undefined && cached) {
+		cached.lastSavedAt = saveResult.lastSavedAt;
+	}
 
 	for (const event of encodeRoundResult(
 		result,

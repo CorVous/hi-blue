@@ -41,7 +41,11 @@ export const LEGACY_KEY = "hi-blue-game-state";
 
 export type SaveResult =
 	| { ok: true; lastSavedAt: string }
-	| { ok: false; reason: "unavailable" | "quota" | "unknown" | "stale" };
+	| {
+			ok: false;
+			reason: "unavailable" | "quota" | "unknown" | "stale";
+			lastSavedAt?: string;
+	  };
 
 export type LoadResult =
 	| { kind: "none" }
@@ -288,20 +292,25 @@ export function saveActiveSession(
 		if (markerWritten && !anyDataKeyWritten) {
 			ignoringStorageErrors(() => localStorage.removeItem(markerKey));
 		}
-		if (err instanceof DOMException) {
-			const name = err.name;
-			if (
-				name === "QuotaExceededError" ||
-				name === "NS_ERROR_DOM_QUOTA_REACHED"
-			) {
-				return { ok: false, reason: "quota" };
-			}
-			if (name === "SecurityError") {
-				return { ok: false, reason: "unavailable" };
-			}
-		}
-		return { ok: false, reason: "unknown" };
+		const writtenLastSavedAt = anyDataKeyWritten ? { lastSavedAt: now } : {};
+		return {
+			ok: false,
+			reason: saveFailureReason(err),
+			...writtenLastSavedAt,
+		};
 	}
+}
+
+function saveFailureReason(err: unknown): "quota" | "unavailable" | "unknown" {
+	if (!(err instanceof DOMException)) return "unknown";
+	if (
+		err.name === "QuotaExceededError" ||
+		err.name === "NS_ERROR_DOM_QUOTA_REACHED"
+	) {
+		return "quota";
+	}
+	if (err.name === "SecurityError") return "unavailable";
+	return "unknown";
 }
 
 export function readSessionLastSavedAt(sessionId: string): string | null {

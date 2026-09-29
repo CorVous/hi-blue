@@ -272,8 +272,52 @@ describe("saveActiveSession", () => {
 			stub._store[key] = value;
 		});
 		const result = saveActiveSession(makeFreshGame());
-		expect(result).toEqual({ ok: false, reason: "quota" });
+		expect(result).toMatchObject({ ok: false, reason: "quota" });
 		expect(loadActiveSession().kind).toBe("broken");
+	});
+
+	it.each([
+		".txt",
+		"engine.dat",
+	])("a save that fails writing %s reports the lastSavedAt it wrote, so the next save is not stale", (failingSuffix) => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		const first = saveActiveSession(makeFreshGame());
+		if (!first.ok) throw new Error("first save failed");
+
+		const failingStore = stub.setItem.getMockImplementation();
+		stub.setItem.mockImplementation((key: string, value: string) => {
+			if (key.endsWith(failingSuffix)) {
+				throw new DOMException("quota", "QuotaExceededError");
+			}
+			stub._store[key] = value;
+		});
+		vi.useFakeTimers({ now: Date.parse(first.lastSavedAt) + 1000 });
+		const failed = saveActiveSession(makeFreshGame(), {
+			expectedLastSavedAt: first.lastSavedAt,
+		});
+		vi.useRealTimers();
+		expect(failed.lastSavedAt).not.toBe(first.lastSavedAt);
+		expect(failed.ok).toBe(false);
+		expect(failed.lastSavedAt).toBe(readSessionLastSavedAt(id));
+		if (failingStore) stub.setItem.mockImplementation(failingStore);
+
+		const next = saveActiveSession(makeFreshGame(), {
+			expectedLastSavedAt: failed.lastSavedAt ?? first.lastSavedAt,
+		});
+		expect(next.ok).toBe(true);
+		expect(isSessionSaveInProgress(id)).toBe(false);
+		expect(loadActiveSession().kind).toBe("ok");
+
+		stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] = JSON.stringify({
+			...JSON.parse(stub._store[`${SESSIONS_PREFIX}${id}/meta.json`] ?? "{}"),
+			lastSavedAt: "2099-01-01T00:00:00.000Z",
+		});
+		expect(
+			saveActiveSession(makeFreshGame(), {
+				expectedLastSavedAt: next.ok ? next.lastSavedAt : "",
+			}),
+		).toEqual({ ok: false, reason: "stale" });
 	});
 
 	it("a re-save that fails writing meta.json removes the marker and leaves the old save ok", () => {

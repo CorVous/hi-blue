@@ -54,6 +54,13 @@ Each session is a set of localStorage keys under one prefix:
   session was removed), the save writes nothing and returns
   `{ ok: false, reason: "stale" }`. A successful save returns the
   `lastSavedAt` it wrote, so the caller can carry it into the next save.
+  A save that fails after `meta.json` was written also returns that
+  `lastSavedAt`, because the new value is already on disk: a caller that kept
+  the old one refused its own next save as `stale`, warned about another tab
+  that did not exist, reloaded, and left the torn session `broken`. Carrying
+  the written value lets the next save in the same tab go through, which
+  also clears the marker. Another tab's saves still change `lastSavedAt` to
+  something this tab never wrote, so cross-tab detection is unchanged.
   This is optimistic concurrency on a timestamp with millisecond
   resolution: two tabs saving in the same millisecond are not told apart,
   which is rare enough to accept for a single-player game. Callers that

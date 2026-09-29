@@ -218,7 +218,8 @@ it hides the other routes' screens and shows or hides the global chrome
 - **Two tabs on one session.** localStorage is shared by every tab of the
   origin, but each tab caches its own `GameSession`. `cached.lastSavedAt`
   records the `meta.lastSavedAt` the cached session was loaded (or last
-  saved) with; the round save passes it as `expectedLastSavedAt`, so a save
+  saved) with, including the value a failed save had already written to
+  `meta.json` (persistence.md); the round save passes it as `expectedLastSavedAt`, so a save
   from a tab that is behind is refused with `stale` instead of erasing the
   other tab's rounds (persistence.md). A `storage` listener, added once per
   page, notices another tab's writes under the cached session's directory.

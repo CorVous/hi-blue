@@ -108,3 +108,74 @@ test("a round that finishes after another tab saved is refused, warned about, an
 
 	await expectNoPageErrors(page, pageErrors);
 });
+
+async function failNextDaemonFileWrite(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const originalSetItem = Storage.prototype.setItem;
+		let armed = true;
+		Storage.prototype.setItem = function setItemFailingOnce(
+			key: string,
+			value: string,
+		) {
+			if (
+				armed &&
+				key.startsWith("hi-blue:sessions/") &&
+				key.endsWith(".txt")
+			) {
+				armed = false;
+				throw new DOMException("quota", "QuotaExceededError");
+			}
+			originalSetItem.call(this, key, value);
+		};
+	});
+}
+
+async function waitForRoundSettled(page: Page): Promise<void> {
+	await expect(page.locator("#stage")).not.toHaveAttribute(
+		"data-round-in-flight",
+		"true",
+	);
+}
+
+test("a save that fails part-way does not make the next save in the same tab stale", async ({
+	context,
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	const { ids, names } = await goToGame(page);
+	const sessionId = await activeSessionId(page);
+	const warning = page.locator("#persistence-warning");
+	await sendRound(page, `*${names[0]} first from tab a`);
+	await waitForRound(page, sessionId, 1);
+	await waitForRoundSettled(page);
+
+	await failNextDaemonFileWrite(page);
+	await sendRound(page, `*${names[0]} torn from tab a`);
+	await expect(warning).toContainText("browser storage is full");
+	await waitForRoundSettled(page);
+
+	await sendRound(page, `*${names[0]} recovered in tab a`);
+	await waitForRound(page, sessionId, 3);
+	await waitForRoundSettled(page);
+	await expect(warning).not.toContainText("changed in another tab");
+	await expect(page.locator(`[data-transcript="${ids[0]}"]`)).toContainText(
+		renderedPlayerLine("recovered in tab a"),
+	);
+	const stored = await readStoredDaemonLogs(page, sessionId);
+	expect(stored).toContain("torn from tab a");
+	expect(stored).toContain("recovered in tab a");
+
+	const second = await openSecondTab(context);
+	await expect(second.locator(`[data-transcript="${ids[0]}"]`)).toContainText(
+		renderedPlayerLine("recovered in tab a"),
+	);
+	await sendRound(second, `*${names[1]} from tab b after recovery`);
+	await waitForRound(second, sessionId, 4);
+	await expect(page.locator(`[data-transcript="${ids[1]}"]`)).toContainText(
+		renderedPlayerLine("from tab b after recovery"),
+	);
+
+	await expectNoPageErrors(page, pageErrors);
+});
