@@ -125,7 +125,7 @@ export async function preCharge(
 	return { allowed: true, preCharged: cfg.preChargeMicroUsd };
 }
 
-export async function adjustCharge(
+async function adjustCharge(
 	kv: KVNamespace,
 	ip: string,
 	nowMs: number,

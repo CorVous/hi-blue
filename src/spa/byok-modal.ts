@@ -13,7 +13,7 @@ export type ValidationResult =
 	| { kind: "rejected-other"; status: number }
 	| { kind: "network-or-5xx"; status: number | null };
 
-export type KeyMeta = {
+type KeyMeta = {
 	validatedAt: string;
 	status: "validated" | "unverified";
 	keySuffix: string;

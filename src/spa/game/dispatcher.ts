@@ -67,7 +67,7 @@ function isItemTool(name: ToolCall["name"]): name is ItemToolName {
 	return name === "pick_up" || name === "put_down" || name === "use";
 }
 
-export function resolveToolCall(
+function resolveToolCall(
 	game: GameState,
 	aiId: AiId,
 	call: ToolCall,
@@ -445,7 +445,7 @@ function isObservableAction(
 	);
 }
 
-export function dropEverythingHeldBy(game: GameState, aiId: AiId): GameState {
+function dropEverythingHeldBy(game: GameState, aiId: AiId): GameState {
 	const heldIds = pickableEntities(game.world.entities)
 		.filter((e) => e.holder === aiId)
 		.map((e) => e.id);
