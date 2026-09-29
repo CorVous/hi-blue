@@ -48,8 +48,8 @@ export interface AiContext {
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	personaColors: Record<AiId, string>;
 	wallName: string;
-	prevDiskSnapshot?: string;
-	prevDiskEntities?: Record<string, DiskEntityState>;
+	prevDiskSnapshot?: string | undefined;
+	prevDiskEntities?: Record<string, DiskEntityState> | undefined;
 	pendingBroadcasts: string[];
 	activeDirectives: string[];
 	objectives: Objective[];
@@ -60,8 +60,8 @@ export interface AiContext {
 }
 
 export interface BuildAiContextOpts {
-	prevDiskSnapshot?: string;
-	prevDiskEntities?: Record<string, DiskEntityState>;
+	prevDiskSnapshot?: string | undefined;
+	prevDiskEntities?: Record<string, DiskEntityState> | undefined;
 }
 
 function blueCuriosityField(
@@ -130,12 +130,8 @@ export function buildAiContext(
 		pendingBroadcasts,
 		activeDirectives,
 		objectives: game.objectives,
-		...(opts?.prevDiskSnapshot !== undefined
-			? { prevDiskSnapshot: opts.prevDiskSnapshot }
-			: {}),
-		...(opts?.prevDiskEntities !== undefined
-			? { prevDiskEntities: opts.prevDiskEntities }
-			: {}),
+		prevDiskSnapshot: opts?.prevDiskSnapshot,
+		prevDiskEntities: opts?.prevDiskEntities,
 		diskSnapshot() {
 			diskSnapshot ??= buildDiskSnapshot(this);
 			return diskSnapshot;

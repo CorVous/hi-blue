@@ -7,6 +7,7 @@ import {
 	resolveExpiredDirectives,
 	tickComplication,
 } from "./complication-engine";
+import { isGridPosition, positionsEqual } from "./direction";
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advanceRound,
@@ -19,7 +20,11 @@ import {
 	resolveToolDisables,
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
-import { buildAiContext, renderPerceptionDelta } from "./prompt-builder";
+import {
+	buildAiContext,
+	type DiskEntityState,
+	renderPerceptionDelta,
+} from "./prompt-builder";
 import type {
 	LifecyclePhase,
 	OpenAiMessage,
@@ -39,7 +44,6 @@ import type {
 	ComplicationResult,
 	ConversationEntry,
 	GameState,
-	GridPosition,
 	RoundActionRecord,
 	RoundResult,
 	ToolName,
@@ -52,17 +56,12 @@ import {
 	checkWinCondition,
 } from "./win-condition";
 
-type DiskEntityStates = Record<
-	string,
-	{ inVista: boolean; satisfied: boolean }
->;
-
 export interface RunRoundResult {
 	nextState: GameState;
 	result: RoundResult;
 	toolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>>;
 	diskSnapshots: Partial<Record<AiId, string>>;
-	diskEntities: Partial<Record<AiId, DiskEntityStates>>;
+	diskEntities: Partial<Record<AiId, Record<string, DiskEntityState>>>;
 }
 
 export interface RunRoundOptions {
@@ -73,7 +72,9 @@ export interface RunRoundOptions {
 	priorDiskSnapshots?: Partial<Record<AiId, string>> | undefined;
 	onAiTurnComplete?: ((aiId: AiId) => void) | undefined;
 	onLifecycle?: ((event: LifecyclePhase) => void) | undefined;
-	priorDiskEntities?: Partial<Record<AiId, DiskEntityStates>> | undefined;
+	priorDiskEntities?:
+		| Partial<Record<AiId, Record<string, DiskEntityState>>>
+		| undefined;
 }
 
 const DRIFT_TO_SILENCE_NUDGE =
@@ -163,7 +164,9 @@ export async function runRound(
 	const roundActions: RoundActionRecord[] = [];
 	const newToolRoundtrip: Partial<Record<AiId, ToolRoundtripMessage>> = {};
 	const newDiskSnapshots: Partial<Record<AiId, string>> = {};
-	const newDiskEntities: Partial<Record<AiId, DiskEntityStates>> = {};
+	const newDiskEntities: Partial<
+		Record<AiId, Record<string, DiskEntityState>>
+	> = {};
 
 	for (const aiId of turnOrder) {
 		if (isDaemonExhausted(state, aiId)) {
@@ -178,15 +181,9 @@ export async function runRound(
 			continue;
 		}
 
-		const priorSnapshot = priorDiskSnapshots?.[aiId];
-		const priorEntities = priorDiskEntities?.[aiId];
 		const ctx = buildAiContext(state, aiId, {
-			...(priorSnapshot !== undefined
-				? { prevDiskSnapshot: priorSnapshot }
-				: {}),
-			...(priorEntities !== undefined
-				? { prevDiskEntities: priorEntities }
-				: {}),
+			prevDiskSnapshot: priorDiskSnapshots?.[aiId],
+			prevDiskEntities: priorDiskEntities?.[aiId],
 		});
 		newDiskSnapshots[aiId] = ctx.diskSnapshot();
 		const promptEntities = ctx.diskEntities();
@@ -605,30 +602,22 @@ function evaluateConvergenceObjectives(
 		if (tier === tierAtRoundStart && !convergenceComplete) continue;
 
 		const spaceEntity = state.world.entities.find((e) => e.id === spaceId);
-		const spaceCell =
-			spaceEntity &&
-			typeof spaceEntity.holder === "object" &&
-			spaceEntity.holder !== null
-				? (spaceEntity.holder as GridPosition)
-				: null;
-
-		if (!spaceCell) continue;
+		if (!spaceEntity || !isGridPosition(spaceEntity.holder)) continue;
+		const spaceCell = spaceEntity.holder;
 
 		const witnessFlavor =
 			tier === 1
-				? (spaceEntity?.convergenceTier1Flavor ?? "Something stirs here.")
-				: (spaceEntity?.convergenceTier2Flavor ?? "Two presences converge.");
+				? (spaceEntity.convergenceTier1Flavor ?? "Something stirs here.")
+				: (spaceEntity.convergenceTier2Flavor ?? "Two presences converge.");
 		const actorFlavor =
 			tier === 1
-				? (spaceEntity?.convergenceTier1ActorFlavor ??
+				? (spaceEntity.convergenceTier1ActorFlavor ??
 					"You linger here; the place feels poised for company.")
-				: (spaceEntity?.convergenceTier2ActorFlavor ??
+				: (spaceEntity.convergenceTier2ActorFlavor ??
 					"You stand here; another presence shares the place with you.");
 
 		for (const [daemonId, spatial] of Object.entries(state.personaSpatial)) {
-			const isOccupant =
-				spatial.position.row === spaceCell.row &&
-				spatial.position.col === spaceCell.col;
+			const isOccupant = positionsEqual(spatial.position, spaceCell);
 			const witnessesCell = vistaContains(spatial.position, spaceCell);
 			if (!isOccupant && !witnessesCell) continue;
 
