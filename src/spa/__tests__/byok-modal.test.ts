@@ -165,6 +165,49 @@ describe("storage helpers", () => {
 	});
 });
 
+describe("storage helpers when storage refuses writes", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("writeKeyAndMeta reports failure and removes a half-written key", () => {
+		const store: Record<string, string> = {};
+		vi.stubGlobal("localStorage", {
+			getItem: (k: string) => store[k] ?? null,
+			setItem: (k: string, v: string) => {
+				if (k === "openrouter_key_meta") {
+					throw new DOMException("full", "QuotaExceededError");
+				}
+				store[k] = v;
+			},
+			removeItem: (k: string) => {
+				delete store[k];
+			},
+		});
+
+		const stored = writeKeyAndMeta("sk-or-v1-mykey", {
+			validatedAt: "",
+			status: "unverified",
+			keySuffix: "ykey",
+		});
+
+		expect(stored).toBe(false);
+		expect(store.openrouter_key).toBeUndefined();
+	});
+
+	it("clearKey reports failure instead of throwing when storage is blocked", () => {
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => undefined,
+			removeItem: () => {
+				throw new DOMException("blocked", "SecurityError");
+			},
+		});
+
+		expect(clearKey()).toBe(false);
+	});
+});
+
 describe("formatRelativeTime", () => {
 	it('< 1 minute → "just now"', () => {
 		const now = Date.now();
@@ -378,6 +421,55 @@ describe("openByokModal UI", () => {
 		});
 
 		expect(getEl("byok-status").textContent).toBe("Key validated.");
+	});
+
+	it("a validated key that storage refuses says so instead of hanging on 'Validating…'", async () => {
+		vi.stubGlobal("localStorage", {
+			getItem: () => null,
+			setItem: () => {
+				throw new DOMException("full", "QuotaExceededError");
+			},
+			removeItem: () => undefined,
+		});
+		openByokModal();
+		initByokModal();
+
+		getEl<HTMLInputElement>("byok-key-input").value = "sk-or-v1-goodkey";
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				status: 200,
+				json: async () => ({ data: {} }),
+			}),
+		);
+
+		getEl("byok-validate-save").click();
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toContain(
+				"Couldn't store the key",
+			);
+		});
+		expect(closeSpy).not.toHaveBeenCalled();
+	});
+
+	it("Clear key keeps the dialog open and explains when storage is blocked", () => {
+		store.openrouter_key = "sk-or-v1-somekey";
+		openByokModal();
+		initByokModal();
+		vi.stubGlobal("localStorage", {
+			getItem: (k: string) => store[k] ?? null,
+			setItem: () => undefined,
+			removeItem: () => {
+				throw new DOMException("blocked", "SecurityError");
+			},
+		});
+
+		getEl("byok-clear").click();
+
+		expect(getEl("byok-status").textContent).toContain(
+			"Couldn't clear the key",
+		);
+		expect(closeSpy).not.toHaveBeenCalled();
 	});
 
 	it("401 → renders verbatim 401 copy, no storage write", async () => {

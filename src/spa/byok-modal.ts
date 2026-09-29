@@ -111,14 +111,36 @@ export function readMeta(): KeyMeta | null {
 	}
 }
 
-export function writeKeyAndMeta(key: string, meta: KeyMeta): void {
-	localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, key);
-	localStorage.setItem(LOCALSTORAGE_META_KEY, JSON.stringify(meta));
-}
+const STORE_FAILED_MESSAGE =
+	"Couldn't store the key: this browser blocked or filled its storage. Allow site storage and try again.";
+const CLEAR_FAILED_MESSAGE =
+	"Couldn't clear the key: this browser blocked its storage.";
 
-export function clearKey(): void {
+function removeKeyAndMeta(): void {
 	localStorage.removeItem(OPENROUTER_KEY_STORAGE_KEY);
 	localStorage.removeItem(LOCALSTORAGE_META_KEY);
+}
+
+export function writeKeyAndMeta(key: string, meta: KeyMeta): boolean {
+	try {
+		localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, key);
+		localStorage.setItem(LOCALSTORAGE_META_KEY, JSON.stringify(meta));
+		return true;
+	} catch {
+		try {
+			removeKeyAndMeta();
+		} catch {}
+		return false;
+	}
+}
+
+export function clearKey(): boolean {
+	try {
+		removeKeyAndMeta();
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 export function formatRelativeTime(iso: string, nowMs: number): string {
@@ -283,13 +305,18 @@ export function initByokModal(): void {
 		saveUnverifiedBtn.addEventListener("click", () => {
 			const key = keyAwaitingUnverifiedSave;
 			if (!key) return;
-			keyAwaitingUnverifiedSave = null;
 			const keySuffix = key.slice(-4);
-			writeKeyAndMeta(key, {
+			const stored = writeKeyAndMeta(key, {
 				validatedAt: "",
 				status: "unverified",
 				keySuffix,
 			});
+			if (!stored) {
+				const statusEl = getEl("byok-status");
+				if (statusEl) statusEl.textContent = STORE_FAILED_MESSAGE;
+				return;
+			}
+			keyAwaitingUnverifiedSave = null;
 			const dialog = getEl<HTMLDialogElement>("byok-dialog");
 			dialog?.close();
 		});
@@ -331,7 +358,11 @@ export function initByokModal(): void {
 	const clearBtn = getEl("byok-clear");
 	if (clearBtn) {
 		clearBtn.addEventListener("click", () => {
-			clearKey();
+			if (!clearKey()) {
+				const statusEl = getEl("byok-status");
+				if (statusEl) statusEl.textContent = CLEAR_FAILED_MESSAGE;
+				return;
+			}
 			const dialog = getEl<HTMLDialogElement>("byok-dialog");
 			dialog?.close();
 		});
@@ -351,11 +382,15 @@ function handleValidationResult({
 }): void {
 	if (result.kind === "validated") {
 		const keySuffix = key.slice(-4);
-		writeKeyAndMeta(key, {
+		const stored = writeKeyAndMeta(key, {
 			validatedAt: new Date().toISOString(),
 			status: "validated",
 			keySuffix,
 		});
+		if (!stored) {
+			statusEl.textContent = STORE_FAILED_MESSAGE;
+			return;
+		}
 		renderModalState();
 		statusEl.textContent = "Key validated.";
 	} else if (result.kind === "rejected-401") {
