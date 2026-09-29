@@ -2977,7 +2977,7 @@ describe("renderPerceptionDelta", () => {
 		expect(delta).toHaveLength(0);
 	});
 
-	it("emits persona first-sight with name only, no flavor", () => {
+	it("names a peer that came into view by its handle, with no flavor", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
@@ -2990,11 +2990,11 @@ describe("renderPerceptionDelta", () => {
 		const ctx = buildAiContext(game, "red");
 		const prevEntities = {};
 		const delta = renderPerceptionDelta(ctx, prevEntities);
-		const greenLine = delta.find((line) => line.includes("Sage"));
-		expect(greenLine).toBe("Came into view: Sage");
+		const greenLine = delta.find((line) => line.includes("*green"));
+		expect(greenLine).toBe("Came into view: *green");
 	});
 
-	it("emits persona departure with name only, no flavor", () => {
+	it("names a peer lost from view by its handle, with no flavor", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
@@ -3007,8 +3007,8 @@ describe("renderPerceptionDelta", () => {
 		const ctx = buildAiContext(game, "red");
 		const prevEntities = { green: { inVista: true, satisfied: false } };
 		const delta = renderPerceptionDelta(ctx, prevEntities);
-		const greenLine = delta.find((line) => line.includes("Sage"));
-		expect(greenLine).toBe("Lost from view: Sage");
+		const greenLine = delta.find((line) => line.includes("*green"));
+		expect(greenLine).toBe("Lost from view: *green");
 	});
 
 	it("does not emit both first-sight and transition for newly satisfied entity", () => {
@@ -3298,7 +3298,7 @@ describe("perception delta — the own cell is part of the Vista", () => {
 			gameWith(origin, north, []),
 			gameWith(origin, origin, []),
 		);
-		expect(delta.filter((l) => l.includes("Sage"))).toEqual([]);
+		expect(delta.filter((l) => l.includes("*green"))).toEqual([]);
 	});
 
 	it("says nothing when the Daemon steps onto a peer's cell", () => {
@@ -3306,7 +3306,7 @@ describe("perception delta — the own cell is part of the Vista", () => {
 			gameWith(origin, north, []),
 			gameWith(north, north, []),
 		);
-		expect(delta.filter((l) => l.includes("Sage"))).toEqual([]);
+		expect(delta.filter((l) => l.includes("*green"))).toEqual([]);
 	});
 
 	it("does not announce an item the Daemon has just put down", () => {

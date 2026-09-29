@@ -47,7 +47,6 @@ export interface AiContext {
 	budget: AiBudget;
 	personaSpatial: Record<AiId, PersonaSpatialState>;
 	personaColors: Record<AiId, string>;
-	personaNames: Record<AiId, string>;
 	wallName: string;
 	prevDiskSnapshot?: string;
 	prevDiskEntities?: Record<string, DiskEntityState>;
@@ -105,10 +104,6 @@ export function buildAiContext(
 		Object.entries(game.personas).map(([id, p]) => [id, p.color]),
 	);
 
-	const personaNames: Record<AiId, string> = Object.fromEntries(
-		Object.entries(game.personas).map(([id, p]) => [id, p.name]),
-	);
-
 	let diskSnapshot: string | undefined;
 	let diskEntities: Record<string, DiskEntityState> | undefined;
 
@@ -131,7 +126,6 @@ export function buildAiContext(
 		budget,
 		personaSpatial,
 		personaColors,
-		personaNames,
 		wallName,
 		pendingBroadcasts,
 		activeDirectives,
@@ -301,7 +295,7 @@ export function renderPerceptionDelta(
 
 		const isPersona = ctx.personaSpatial[entityId] !== undefined;
 		if (isPersona) {
-			lines.push(`Lost from view: ${ctx.personaNames[entityId] ?? entityId}`);
+			lines.push(`Lost from view: *${entityId}`);
 			continue;
 		}
 
@@ -323,7 +317,7 @@ export function renderPerceptionDelta(
 
 		const isPersona = ctx.personaSpatial[entityId] !== undefined;
 		if (isPersona) {
-			lines.push(`Came into view: ${ctx.personaNames[entityId] ?? entityId}`);
+			lines.push(`Came into view: *${entityId}`);
 			continue;
 		}
 
