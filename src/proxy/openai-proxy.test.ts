@@ -1,7 +1,11 @@
 import { env, reset, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PINNED_PROVIDER_ROUTING } from "../model";
-import { OPENROUTER_URL, PINNED_MODEL } from "./openai-proxy";
+import {
+	FORWARDED_BODY_FIELDS,
+	OPENROUTER_URL,
+	PINNED_MODEL,
+} from "./openai-proxy";
 import { _setPricingCacheForTests } from "./pricing";
 import { globalKey, perIpKey } from "./rate-guard";
 
@@ -155,6 +159,84 @@ describe("POST /v1/chat/completions — model pinning", () => {
 		});
 
 		expect(capturedBody?.provider).toEqual(PINNED_PROVIDER_ROUTING);
+	});
+});
+
+describe("POST /v1/chat/completions — forwarded body fields", () => {
+	async function forwardedBodyFor(
+		body: Record<string, unknown>,
+	): Promise<Record<string, unknown> | undefined> {
+		let capturedBody: Record<string, unknown> | undefined;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+				capturedBody = JSON.parse(init.body as string) as Record<
+					string,
+					unknown
+				>;
+				return new Response("{}", {
+					status: 200,
+					headers: { "Content-Type": "application/json" },
+				});
+			}),
+		);
+		await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		return capturedBody;
+	}
+
+	it("forwards every field the SPA sends", async () => {
+		const spaFields = {
+			messages: [{ role: "user", content: "hi" }],
+			stream: false,
+			usage: { include: true },
+			tools: [{ type: "function", function: { name: "message" } }],
+			tool_choice: "auto",
+			parallel_tool_calls: true,
+			reasoning: { enabled: false },
+			response_format: { type: "json_object" },
+		};
+
+		const forwarded = await forwardedBodyFor(spaFields);
+
+		expect(forwarded).toMatchObject(spaFields);
+	});
+
+	it("forwards standard sampling fields", async () => {
+		const sampling = {
+			temperature: 0.7,
+			top_p: 0.9,
+			max_tokens: 256,
+			stop: ["\n"],
+			seed: 42,
+		};
+
+		const forwarded = await forwardedBodyFor({
+			messages: [{ role: "user", content: "hi" }],
+			...sampling,
+		});
+
+		expect(forwarded).toMatchObject(sampling);
+	});
+
+	it("drops fields outside the allow-list", async () => {
+		const forwarded = await forwardedBodyFor({
+			messages: [{ role: "user", content: "hi" }],
+			models: ["openai/gpt-4o", "anthropic/claude-opus"],
+			transforms: ["middle-out"],
+			plugins: [{ id: "web" }],
+		});
+
+		expect(forwarded).toBeDefined();
+		expect(forwarded).not.toHaveProperty("models");
+		expect(forwarded).not.toHaveProperty("transforms");
+		expect(forwarded).not.toHaveProperty("plugins");
+		for (const key of Object.keys(forwarded ?? {})) {
+			expect([...FORWARDED_BODY_FIELDS, "model", "provider"]).toContain(key);
+		}
 	});
 });
 

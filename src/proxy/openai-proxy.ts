@@ -149,12 +149,45 @@ function hasNonEmptyMessages(body: unknown): body is Record<string, unknown> {
 	return Array.isArray(messages) && messages.length >= 1;
 }
 
+export const FORWARDED_BODY_FIELDS: readonly string[] = [
+	"messages",
+	"stream",
+	"stream_options",
+	"usage",
+	"tools",
+	"tool_choice",
+	"parallel_tool_calls",
+	"reasoning",
+	"response_format",
+	"temperature",
+	"top_p",
+	"top_k",
+	"min_p",
+	"max_tokens",
+	"max_completion_tokens",
+	"stop",
+	"seed",
+	"frequency_penalty",
+	"presence_penalty",
+	"repetition_penalty",
+];
+
+function pickForwardedFields(
+	body: Record<string, unknown>,
+): Record<string, unknown> {
+	const picked: Record<string, unknown> = {};
+	for (const field of FORWARDED_BODY_FIELDS) {
+		if (body[field] !== undefined) picked[field] = body[field];
+	}
+	return picked;
+}
+
 function pinModelProviderAndRequestUsage(
 	body: Record<string, unknown>,
 	isStream: boolean,
 ): Record<string, unknown> {
 	const upstreamBody: Record<string, unknown> = {
-		...body,
+		...pickForwardedFields(body),
 		model: PINNED_MODEL,
 		provider: PINNED_PROVIDER_ROUTING,
 	};
