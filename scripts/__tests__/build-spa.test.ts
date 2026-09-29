@@ -32,4 +32,20 @@ describe("build-spa.mjs (one-shot, no --watch)", () => {
 		expect(html).toContain(`./assets/${jsName}`);
 		expect(html).toContain(`./assets/${cssName}`);
 	});
+
+	it("falls back to the local worker URL when WORKER_BASE_URL is empty", () => {
+		const result = spawnSync("node", [script], {
+			cwd: root,
+			encoding: "utf-8",
+			timeout: 30_000,
+			env: { ...process.env, WORKER_BASE_URL: "" },
+		});
+
+		expect(result.status).toBe(0);
+		expect(result.stdout).toContain("WORKER_BASE_URL=http://localhost:8787 ");
+		const version = JSON.parse(
+			fs.readFileSync(path.join(root, "package.json"), "utf8"),
+		).version;
+		expect(result.stdout).toContain(`VERSION=${version} `);
+	});
 });
