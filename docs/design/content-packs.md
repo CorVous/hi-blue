@@ -19,7 +19,7 @@ Three interfaces isolate every LLM call so tests and evals never touch the netwo
 | `RoundLLMProvider` | `BrowserLLMProvider` (`browser-llm-provider.ts`) | `MockRoundLLMProvider` | `round-llm-provider.ts` |
 
 - The browser implementations are the only code that calls `llm-client.ts`. Mocks
-  record their inputs (`calls`, `dualCalls`) and return scripted results.
+  record their inputs (`calls`) and return scripted results.
   `MockRoundLLMProvider` cycles its scripted results in order. It accepts a bare
   string (just the text) or `{ toolCall }` (one tool call) as shorthand for a full
   `RoundTurnResult`.
@@ -80,10 +80,12 @@ Generation is type-first ([ADR 0014](../adr/0014-type-first-objective-authoring.
    ids, so a renamed id would break the Objective.
 
 A **binding** is the tie between one minted entity (two for Carry) and the
-Objective type it serves (CONTEXT.md, "Objective binding"). The dual (A/B)
-variant (#302) asks one call for two packs. The ids, binding types and structure
-are the same in both, and only names and flavor differ. One shared
-`ValidationSchedule` checks both packs.
+Objective type it serves (CONTEXT.md, "Objective binding"). Generation is always
+dual (A/B, #302): one call asks for two packs. The ids, binding types and
+structure are the same in both, and only names and flavor differ. One shared
+`ValidationSchedule` checks both packs. The older single-pack path
+(`generateContentPacks`, `buildBindingPrompt`, `CONTENT_PACK_SYSTEM_PROMPT`,
+`validateBoundContentPack`) had no production caller and was deleted.
 
 ## Validation (`binding-aware-validator.ts`)
 
@@ -98,12 +100,12 @@ import the provider and the two modules do not form an import cycle.
 
 The field lists at the top of the module mirror the system prompt. Each binding
 has a `*_REQUIRED_FIELDS` list and, where it applies, a `*_FORBIDDEN_FIELDS` list.
-When you change one, change `CONTENT_PACK_SYSTEM_PROMPT`,
-`DUAL_CONTENT_PACK_SYSTEM_PROMPT` and `describeSkeletonInUserMessage` with it.
+When you change one, change `DUAL_CONTENT_PACK_SYSTEM_PROMPT` and
+`describeSkeletonInUserMessage` with it.
 
 | Rule | Checks |
 |---|---|
-| `missing-field` | A required string field is absent or empty, or a binding, decoy, obstacle or the top-level `pack`/`phases`/`packA`/`packB` is missing. |
+| `missing-field` | A required string field is absent or empty, or a binding, decoy, obstacle or the top-level `phases`/`packA`/`packB` is missing. |
 | `binding-forbidden-field` | A field outside the binding's shape is present. Decoys may not carry `activationFlavor` or `post*` fields. |
 | `wrong-id` | The id differs from the minted one. The message includes the exact JSON shape, because the model most often drops the `id` from a sub-object. |
 | `wrong-count` | The pack does not have exactly two decoys. |
@@ -131,8 +133,8 @@ therefore needs a clue in its `examineDescription`:
 - **Use-Space and Use-Item.** `examineMentionsUseTell` matches whole words from
   `USE_TELL_KEYWORDS`, so "use" does not match inside "fuse". The list joins the
   Use-Space cue set (#335) and the extra Use-Item cues (#334: crank, handle, flip,
-  twist, wind). Keep it in sync with the cue lists written out in both system
-  prompts, including `DECOY_FORBIDDEN_WORDS`, the base forms a decoy must avoid.
+  twist, wind). Keep it in sync with the cue lists written out in the system
+  prompt, including `DECOY_FORBIDDEN_WORDS`, the base forms a decoy must avoid.
   The decoy line spells the words out, and says they are banned even in an
   innocent sense, because DeepSeek otherwise writes "handle" or "turn" into
   ordinary objects: in the 2026-09-28 content-pack eval, 3 of 10 packs failed
@@ -149,8 +151,7 @@ therefore needs a clue in its `examineDescription`:
 
 ## Retry strategy (`BrowserContentPackProvider`)
 
-Each generation makes up to `OUTER_ATTEMPT_BUDGET` (3) attempts. The dual path
-uses the same logic.
+Each generation makes up to `OUTER_ATTEMPT_BUDGET` (3) attempts.
 
 - **Validation failure.** The next attempt resends the system and user prompts,
   the previous raw JSON as an assistant turn, and a corrective user turn.

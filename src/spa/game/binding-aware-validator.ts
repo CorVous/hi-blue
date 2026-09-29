@@ -655,44 +655,6 @@ function validateBoundPack(
 	}
 }
 
-export function validateBoundContentPack(
-	rawResponse: unknown,
-	schedule: ValidationSchedule,
-): ValidationResult<{ warnings: ValidationError[] }> {
-	const errors: ValidationError[] = [];
-	const warnings: ValidationError[] = [];
-
-	if (rawResponse == null || typeof rawResponse !== "object") {
-		errors.push({
-			entityId: "",
-			field: "<root>",
-			rule: "structural",
-			message: "Response is not an object",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
-		});
-		return { ok: false, errors };
-	}
-
-	const resp = rawResponse as Record<string, unknown>;
-	const pack = resp.pack as RawBoundPack | undefined;
-	if (!pack || typeof pack !== "object") {
-		errors.push({
-			entityId: "",
-			field: "pack",
-			rule: "missing-field",
-			message: "Response missing 'pack' field",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
-		});
-		return { ok: false, errors };
-	}
-
-	validateBoundPack(pack, schedule, 0, errors, warnings);
-
-	return errors.length === 0
-		? { ok: true, value: { warnings } }
-		: { ok: false, errors };
-}
-
 export function validateBoundDualContentPack(
 	rawResponse: unknown,
 	schedule: ValidationSchedule,

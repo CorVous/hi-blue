@@ -1,14 +1,8 @@
 import { CapHitError, chatCompletionJson } from "../llm-client.js";
 import type { RawBoundPack } from "./binding-aware-validator.js";
-import {
-	validateBoundContentPack,
-	validateBoundDualContentPack,
-} from "./binding-aware-validator.js";
+import { validateBoundDualContentPack } from "./binding-aware-validator.js";
 import type { BindingSkeleton } from "./binding-prompt-builder.js";
-import {
-	buildBindingPrompt,
-	buildDualBindingPrompt,
-} from "./binding-prompt-builder.js";
+import { buildDualBindingPrompt } from "./binding-prompt-builder.js";
 import { recordContentPackAttempt } from "./content-pack-attempts.js";
 import type { ValidationError } from "./content-pack-validation.js";
 
@@ -16,72 +10,6 @@ export type { ValidationError } from "./content-pack-validation.js";
 
 const DECOY_FORBIDDEN_WORDS =
 	'"use", "activate", "press", "trigger", "engage", "operate", "interact", "channel", "invoke", "summon", "ignite", "pull", "turn", "twist", "flip", "wind", "crank", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "handle", "mechanism"';
-
-export const CONTENT_PACK_SYSTEM_PROMPT = `You generate content packs for a text-based grid game.
-
-You are given pre-minted entity skeletons grouped by binding type. Author ONLY the flavor fields listed for each binding. Do NOT invent new entity IDs — use EXACTLY the IDs provided.
-
-Per-binding field requirements:
-
-CARRY binding:
-  object fields: name (2-4 words, thematic to setting+theme), examineDescription (1-2 sentences; MUST reference the paired space by name), useOutcome (1 stateless sentence), placementFlavor (1 sentence; MUST contain literal "{actor}"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"; no placing language). Must be a portable physical item.
-  space fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain use-cue or activation-cue keywords; MUST NOT have activationFlavor/satisfactionFlavor/convergence tier fields), proximityFlavor (1 sentence, daemon's POV; no "{actor}"). Fixed location.
-
-USE_SPACE binding:
-  space fields: name (2-4 words), examineDescription (1-2 sentences; MUST contain at least one activation/use cue word: "use", "activate", "press", "trigger", "engage", "operate", "lever", "button", "switch", "control", "panel", "console", "dial", "knob", "channel", "invoke", "summon", "ignite", "pull", "turn", "interact", or "mechanism"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), activationFlavor (1 sentence, world third-person; no "{actor}"; no meta-narrative), satisfactionFlavor (1 sentence, witness POV; no "{actor}"), postExamineDescription (1-2 sentences), postLookFlavor (1 sentence). FORBIDDEN: convergenceTier* fields. Fixed location.
-
-CONVERGENCE binding:
-  space fields: name (2-4 words), examineDescription (1-2 sentences; MUST hint that shared occupancy or another presence matters — e.g. "a meeting place", "where two are needed", "becomes significant when shared", "gathering point", "the space awaits company"; MUST NOT contain activation/use-cue keywords), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), convergenceTier1Flavor (1 sentence, witness POV, fires when exactly one daemon is on space; no "{actor}"), convergenceTier2Flavor (1 sentence, witness POV, fires when two+ daemons share space; no "{actor}"), convergenceTier1ActorFlavor (1 sentence, first-person "you", daemon alone on space; no "{actor}"), convergenceTier2ActorFlavor (1 sentence, first-person "you", moment of convergence; no "{actor}"; sensory only). FORBIDDEN: activationFlavor, satisfactionFlavor, postExamineDescription, postLookFlavor. Fixed location.
-
-USE_ITEM binding:
-  item fields: name (2-4 words, thematic to setting+theme), examineDescription (1-2 sentences; MUST contain a verb-of-activation cue: "use", "activate", "press", "pull", "turn", "twist", "flip", "wind", "engage", "trigger", or a control noun: "control", "switch", "lever", "trigger", "button", "dial", "handle", "crank"), proximityFlavor (1 sentence, daemon's POV; no "{actor}"; no activating language), useOutcome (1 stateless sentence), activationFlavor (1 sentence, world third-person; no "{actor}"; no objective-complete language), postExamineDescription (1-2 sentences; no "{actor}"), postLookFlavor (1 sentence; no "{actor}"). Must be a portable physical item.
-
-DECOY (always exactly 2 per pack):
-  fields: name (2-4 words), examineDescription (1-2 sentences; MUST NOT contain any of these words in any form (plural, -ed, -ing), even in an innocent sense such as a cup handle or the wind: ${DECOY_FORBIDDEN_WORDS} — decoys are identifiable by lack of tell), proximityFlavor (1 sentence, daemon's POV; no "{actor}"), useOutcome (1 sentence). FORBIDDEN: activationFlavor, postExamineDescription, postLookFlavor. Must be a portable physical item.
-
-OBSTACLE:
-  fields: name (2-4 words, thematic to setting), examineDescription (1 sentence), shiftFlavor (1 sentence, witness POV; no cardinal direction words; no "{actor}"). Fixed and impassable.
-
-WALL NAME: a setting-flavored 2-4 word noun phrase for the impassable boundary (e.g. "subway tunnel wall", "laboratory bulkhead").
-
-Global rules:
-- Use EXACTLY the entity IDs provided — do NOT invent your own.
-- placementFlavor MUST contain the literal string "{actor}".
-- activationFlavor, postExamineDescription, postLookFlavor MUST NOT contain "{actor}".
-- Theme ("mundane"/"technological"/"magical") governs objects and spaces only.
-- All names and descriptions must be thematically consistent with the setting.
-
-Return ONLY valid JSON (no markdown, no preamble):
-{
-  "pack": {
-    "setting": "<setting>",
-    "wallName": "...",
-    "bindings": [
-      { "id": "carry-0", "type": "carry", "object": { "id": "carry-0-obj", "name": "...", "examineDescription": "...", "useOutcome": "...", "placementFlavor": "...{actor}...", "proximityFlavor": "..." }, "space": { "id": "carry-0-space", "name": "...", "examineDescription": "...", "proximityFlavor": "..." } },
-      { "id": "useSpace-1", "type": "use_space", "space": { "id": "useSpace-1-space", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "activationFlavor": "...", "satisfactionFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." } },
-      { "id": "useItem-2", "type": "use_item", "item": { "id": "useItem-2-item", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "useOutcome": "...", "activationFlavor": "...", "postExamineDescription": "...", "postLookFlavor": "..." } }
-    ],
-    "decoys": [
-      { "id": "decoy-0", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "useOutcome": "..." },
-      { "id": "decoy-1", "name": "...", "examineDescription": "...", "proximityFlavor": "...", "useOutcome": "..." }
-    ],
-    "obstacles": [
-      { "id": "obstacle-0", "name": "...", "examineDescription": "...", "shiftFlavor": "..." }
-    ]
-  }
-}`;
-
-export interface BindingContentPackInput {
-	phases: Array<{
-		setting: string;
-		theme: string;
-		weather: string;
-		timeOfDay: string;
-		bindings: BindingSkeleton[];
-		decoyIds: [string, string];
-		obstacleCount: number;
-	}>;
-}
 
 export interface DualBindingContentPackInput {
 	phases: Array<{
@@ -98,10 +26,6 @@ export interface DualBindingContentPackInput {
 	}>;
 }
 
-export interface BindingContentPackProviderResult {
-	phases: Array<{ rawPack: RawBoundPack }>;
-}
-
 export interface DualBindingContentPackProviderResult {
 	phases: Array<{ rawPackA: RawBoundPack; rawPackB: RawBoundPack }>;
 }
@@ -114,9 +38,6 @@ class ContentPackError extends Error {
 }
 
 export interface ContentPackProvider {
-	generateContentPacks(
-		input: BindingContentPackInput,
-	): Promise<BindingContentPackProviderResult>;
 	generateDualContentPacks(
 		input: DualBindingContentPackInput,
 	): Promise<DualBindingContentPackProviderResult>;
@@ -291,92 +212,6 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 		return { parsed, raw };
 	}
 
-	async generateContentPacks(
-		input: BindingContentPackInput,
-	): Promise<BindingContentPackProviderResult> {
-		const phase = input.phases[0];
-		if (!phase) {
-			throw new ContentPackError("generateContentPacks: input.phases is empty");
-		}
-		const schedule = {
-			skeletons: phase.bindings,
-			decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
-			obstacleCount: phase.obstacleCount,
-		};
-		const baseUserPrompt = buildBindingPrompt(
-			phase.bindings.map((b) => b.type),
-			phase.setting,
-			phase.theme,
-			phase.weather,
-			phase.timeOfDay,
-			phase.obstacleCount,
-		).userMessage;
-
-		const systemPrompt = CONTENT_PACK_SYSTEM_PROMPT;
-		let correctiveFeedback: string | null = null;
-		let prevAssistantRaw: string | null = null;
-
-		for (let attempt = 0; attempt < OUTER_ATTEMPT_BUDGET; attempt++) {
-			try {
-				const messages = buildOuterMessages(
-					systemPrompt,
-					baseUserPrompt,
-					prevAssistantRaw,
-					correctiveFeedback,
-				);
-				const { parsed: rawJson, raw } = await this.callAndParse(
-					messages,
-					"content-pack",
-				);
-				const validationResult = validateBoundContentPack(rawJson, schedule);
-				if (validationResult.ok) {
-					recordContentPackAttempt({
-						op: "single",
-						attempt,
-						outcome: "ok",
-						rawLength: raw.length,
-					});
-					return {
-						phases: [
-							{
-								rawPack: (rawJson as Record<string, unknown>)
-									.pack as RawBoundPack,
-							},
-						],
-					};
-				}
-				recordContentPackAttempt({
-					op: "single",
-					attempt,
-					outcome: "validation-failed",
-					validationErrors: validationResult.errors,
-					rawLength: raw.length,
-				});
-				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
-				prevAssistantRaw = raw;
-			} catch (err) {
-				if (err instanceof CapHitError) throw err;
-				recordContentPackAttempt({
-					op: "single",
-					attempt,
-					outcome: "hard-error",
-					errorMessage: err instanceof Error ? err.message : String(err),
-				});
-				if (attempt === OUTER_ATTEMPT_BUDGET - 1) throw err;
-				const backoffMs = BACKOFF_MS_BEFORE_RETRY[attempt];
-				if (backoffMs !== undefined) {
-					await sleep(backoffMs);
-				}
-				correctiveFeedback = null;
-				prevAssistantRaw = null;
-			}
-		}
-
-		throw new ContentPackError(
-			"content-pack generation exhausted retry budget",
-		);
-	}
-
 	async generateDualContentPacks(
 		input: DualBindingContentPackInput,
 	): Promise<DualBindingContentPackProviderResult> {
@@ -482,36 +317,23 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 }
 
 export class MockContentPackProvider implements ContentPackProvider {
-	readonly calls: BindingContentPackInput[] = [];
-	readonly dualCalls: DualBindingContentPackInput[] = [];
+	readonly calls: DualBindingContentPackInput[] = [];
 	private readonly fn: (
-		input: BindingContentPackInput,
-	) => BindingContentPackProviderResult;
-	private readonly dualFn: (
 		input: DualBindingContentPackInput,
 	) => DualBindingContentPackProviderResult;
 
 	constructor(
-		fn: (input: BindingContentPackInput) => BindingContentPackProviderResult,
-		dualFn?: (
+		fn: (
 			input: DualBindingContentPackInput,
 		) => DualBindingContentPackProviderResult,
 	) {
 		this.fn = fn;
-		this.dualFn = dualFn ?? (() => ({ phases: [] }));
-	}
-
-	async generateContentPacks(
-		input: BindingContentPackInput,
-	): Promise<BindingContentPackProviderResult> {
-		this.calls.push(input);
-		return this.fn(input);
 	}
 
 	async generateDualContentPacks(
 		input: DualBindingContentPackInput,
 	): Promise<DualBindingContentPackProviderResult> {
-		this.dualCalls.push(input);
-		return this.dualFn(input);
+		this.calls.push(input);
+		return this.fn(input);
 	}
 }

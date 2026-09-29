@@ -128,57 +128,6 @@ function describeSkeletonInUserMessage(sk: BindingSkeleton, i: number): string {
 	}
 }
 
-export function buildBindingPrompt(
-	types: ObjectiveType[],
-	setting: string,
-	theme: string,
-	weather: string,
-	timeOfDay: string,
-	obstacleCount: number,
-): BindingPromptResult {
-	const skeletons = types.map((t, i) => mintSkeleton(t, i));
-	const decoys = mintDecoys();
-
-	const lines: string[] = [
-		`Generate a content pack for:`,
-		`  setting="${setting}", theme="${theme}", weather="${weather}", timeOfDay="${timeOfDay}"`,
-		``,
-		`Entity bindings to author (use EXACTLY these IDs):`,
-	];
-
-	for (let i = 0; i < skeletons.length; i++) {
-		// biome-ignore lint/style/noNonNullAssertion: bounded index
-		lines.push(describeSkeletonInUserMessage(skeletons[i]!, i));
-	}
-
-	lines.push(``);
-	lines.push(`Decoys (always exactly 2):`);
-	for (const d of decoys) {
-		lines.push(
-			`  decoy id="${d.id}": name, examineDescription (MUST NOT contain use-cue), proximityFlavor, useOutcome`,
-		);
-	}
-
-	if (obstacleCount > 0) {
-		lines.push(``);
-		lines.push(`Obstacles (${obstacleCount}):`);
-		for (const id of obstacleIds(obstacleCount)) {
-			lines.push(
-				`  obstacle id="${id}": name, examineDescription, shiftFlavor (no {actor})`,
-			);
-		}
-	}
-
-	lines.push(``);
-	lines.push(`Also generate: wallName.`);
-
-	return {
-		skeletons,
-		decoys,
-		userMessage: lines.join("\n"),
-	};
-}
-
 export function buildDualBindingPrompt(
 	types: ObjectiveType[],
 	settingA: string,

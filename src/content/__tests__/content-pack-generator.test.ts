@@ -4,8 +4,6 @@ import type {
 	RawBoundPack,
 } from "../../spa/game/binding-aware-validator.js";
 import type {
-	BindingContentPackInput,
-	BindingContentPackProviderResult,
 	DualBindingContentPackInput,
 	DualBindingContentPackProviderResult,
 } from "../../spa/game/content-pack-provider.js";
@@ -45,7 +43,7 @@ const SETTING_POOL_2: readonly string[] = [
 const AI_IDS = ["red", "green", "cyan"];
 
 function makeRawBinding(
-	binding: BindingContentPackInput["phases"][number]["bindings"][number],
+	binding: DualBindingContentPackInput["phases"][number]["bindings"][number],
 	phaseIdx: number,
 	bindingIdx: number,
 ): RawBinding {
@@ -119,9 +117,6 @@ function makeRawBinding(
 
 function makeDualMockProvider(): MockContentPackProvider {
 	return new MockContentPackProvider(
-		(_input: BindingContentPackInput): BindingContentPackProviderResult => ({
-			phases: [],
-		}),
 		(
 			input: DualBindingContentPackInput,
 		): DualBindingContentPackProviderResult => {
@@ -254,8 +249,7 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 			AI_IDS,
 		);
 
-		expect(provider.dualCalls).toHaveLength(1);
-		expect(provider.calls).toHaveLength(0);
+		expect(provider.calls).toHaveLength(1);
 	});
 
 	it("throws when settings pool has fewer than 2 entries", async () => {

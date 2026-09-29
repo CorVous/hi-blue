@@ -1,13 +1,31 @@
 import { describe, expect, it } from "vitest";
-import {
-	buildBindingPrompt,
-	buildDualBindingPrompt,
-} from "../binding-prompt-builder.js";
+import { buildDualBindingPrompt } from "../binding-prompt-builder.js";
 import type { ObjectiveType } from "../types.js";
 
-describe("buildBindingPrompt — ID minting", () => {
+function promptForSettingA(
+	types: ObjectiveType[],
+	settingA: string,
+	theme: string,
+	weatherA: string,
+	timeOfDayA: string,
+	obstacleCount: number,
+) {
+	return buildDualBindingPrompt(
+		types,
+		settingA,
+		"forest clearing",
+		theme,
+		weatherA,
+		"clear",
+		timeOfDayA,
+		"dusk",
+		obstacleCount,
+	);
+}
+
+describe("buildDualBindingPrompt — ID minting", () => {
 	it("carry: mints objectId and spaceId with correct pattern", () => {
-		const { skeletons } = buildBindingPrompt(
+		const { skeletons } = promptForSettingA(
 			["carry"],
 			"lab",
 			"mundane",
@@ -24,7 +42,7 @@ describe("buildBindingPrompt — ID minting", () => {
 	});
 
 	it("use_space: mints spaceId with correct pattern", () => {
-		const { skeletons } = buildBindingPrompt(
+		const { skeletons } = promptForSettingA(
 			["use_space"],
 			"lab",
 			"mundane",
@@ -39,7 +57,7 @@ describe("buildBindingPrompt — ID minting", () => {
 	});
 
 	it("use_item: mints itemId with correct pattern", () => {
-		const { skeletons } = buildBindingPrompt(
+		const { skeletons } = promptForSettingA(
 			["use_item"],
 			"lab",
 			"mundane",
@@ -54,7 +72,7 @@ describe("buildBindingPrompt — ID minting", () => {
 	});
 
 	it("convergence: mints spaceId with correct pattern", () => {
-		const { skeletons } = buildBindingPrompt(
+		const { skeletons } = promptForSettingA(
 			["convergence"],
 			"lab",
 			"mundane",
@@ -70,13 +88,13 @@ describe("buildBindingPrompt — ID minting", () => {
 
 	it("IDs are stable/deterministic given the same types array", () => {
 		const types: ObjectiveType[] = ["carry", "use_item", "convergence"];
-		const r1 = buildBindingPrompt(types, "s", "t", "w", "tod", 0);
-		const r2 = buildBindingPrompt(types, "s", "t", "w", "tod", 0);
+		const r1 = promptForSettingA(types, "s", "t", "w", "tod", 0);
+		const r2 = promptForSettingA(types, "s", "t", "w", "tod", 0);
 		expect(r1.skeletons).toEqual(r2.skeletons);
 	});
 
 	it("3-carry: 3 pairs (6 inner ids) plus 2 decoys", () => {
-		const { skeletons, decoys } = buildBindingPrompt(
+		const { skeletons, decoys } = promptForSettingA(
 			["carry", "carry", "carry"],
 			"s",
 			"t",
@@ -95,7 +113,7 @@ describe("buildBindingPrompt — ID minting", () => {
 	});
 
 	it("3-use_item: 3 useItem entities plus 2 decoys", () => {
-		const { skeletons, decoys } = buildBindingPrompt(
+		const { skeletons, decoys } = promptForSettingA(
 			["use_item", "use_item", "use_item"],
 			"s",
 			"t",
@@ -111,20 +129,20 @@ describe("buildBindingPrompt — ID minting", () => {
 	});
 });
 
-describe("buildBindingPrompt — decoys", () => {
+describe("buildDualBindingPrompt — decoys", () => {
 	it("always returns exactly 2 decoys", () => {
 		const types: ObjectiveType[] = ["carry", "use_space", "use_item"];
-		const { decoys } = buildBindingPrompt(types, "s", "t", "w", "tod", 0);
+		const { decoys } = promptForSettingA(types, "s", "t", "w", "tod", 0);
 		expect(decoys).toHaveLength(2);
 		expect(decoys[0]?.id).toBe("decoy-0");
 		expect(decoys[1]?.id).toBe("decoy-1");
 	});
 });
 
-describe("buildBindingPrompt — userMessage", () => {
+describe("buildDualBindingPrompt — userMessage", () => {
 	it("mentions every minted entity id", () => {
 		const types: ObjectiveType[] = ["carry", "use_item", "convergence"];
-		const { skeletons, decoys, userMessage } = buildBindingPrompt(
+		const { skeletons, decoys, userMessage } = promptForSettingA(
 			types,
 			"abandoned lab",
 			"mundane",
@@ -143,7 +161,7 @@ describe("buildBindingPrompt — userMessage", () => {
 	});
 
 	it("mentions obstacle ids when obstacleCount > 0", () => {
-		const { userMessage } = buildBindingPrompt(
+		const { userMessage } = promptForSettingA(
 			["carry"],
 			"s",
 			"t",
@@ -157,7 +175,7 @@ describe("buildBindingPrompt — userMessage", () => {
 	});
 
 	it("includes setting, theme, weather, timeOfDay in message", () => {
-		const { userMessage } = buildBindingPrompt(
+		const { userMessage } = promptForSettingA(
 			["use_space"],
 			"abandoned station",
 			"technological",
@@ -188,24 +206,6 @@ describe("buildDualBindingPrompt", () => {
 		);
 		expect(userMessage).toContain("subway station");
 		expect(userMessage).toContain("forest clearing");
-	});
-
-	it("returns same skeletons as single-setting with same types", () => {
-		const types: ObjectiveType[] = ["carry", "use_space", "convergence"];
-		const dual = buildDualBindingPrompt(
-			types,
-			"settingA",
-			"settingB",
-			"t",
-			"wA",
-			"wB",
-			"todA",
-			"todB",
-			0,
-		);
-		const single = buildBindingPrompt(types, "settingA", "t", "wA", "todA", 0);
-		expect(dual.skeletons).toEqual(single.skeletons);
-		expect(dual.decoys).toEqual(single.decoys);
 	});
 
 	it("mentions every minted entity id in the message", () => {
