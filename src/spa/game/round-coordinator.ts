@@ -223,26 +223,14 @@ export async function runRound(
 
 		const action: AiTurnAction = { aiId };
 
+		type EmittedToolCall = { id: string; name: string; argumentsJson: string };
 		type PendingEntry =
-			| {
-					kind: "parseFail";
-					tc: { id: string; name: string; argumentsJson: string };
-					description: string;
-					reason: string;
-			  }
-			| {
-					kind: "message";
-					tc: { id: string; name: string; argumentsJson: string };
-			  }
-			| {
-					kind: "actionAccepted";
-					tc: { id: string; name: string; argumentsJson: string };
-			  }
+			| { kind: "message"; tc: EmittedToolCall }
+			| { kind: "actionAccepted"; tc: EmittedToolCall }
 			| {
 					kind: "rejected";
-					tc: { id: string; name: string; argumentsJson: string };
+					tc: EmittedToolCall;
 					description: string;
-					reason: string;
 			  };
 		const toolCallsInEmissionOrder: PendingEntry[] = [];
 
@@ -252,12 +240,22 @@ export async function runRound(
 		const round = state.round;
 		const actorName = state.personas[aiId]?.name ?? aiId;
 
+		function rejectToolCall(tc: EmittedToolCall, description: string) {
+			roundActions.push({
+				round,
+				actor: aiId,
+				kind: "tool_failure",
+				description,
+			});
+			toolCallsInEmissionOrder.push({ kind: "rejected", tc, description });
+		}
+
 		for (const tc of toolCalls) {
 			const parseResult = parseToolCallArguments(
 				tc.name as ToolName,
 				tc.argumentsJson,
 			);
-			const tcTriple = {
+			const tcTriple: EmittedToolCall = {
 				id: tc.id,
 				name: tc.name,
 				argumentsJson: tc.argumentsJson,
@@ -265,32 +263,10 @@ export async function runRound(
 
 			if (!parseResult.ok) {
 				const failDesc = `${actorName} tried to ${tc.name} but failed: ${parseResult.reason}`;
-				roundActions.push({
-					round,
-					actor: aiId,
-					kind: "tool_failure",
-					description: failDesc,
-				});
-				toolCallsInEmissionOrder.push({
-					kind: "parseFail",
-					tc: tcTriple,
-					description: failDesc,
-					reason: parseResult.reason,
-				});
+				rejectToolCall(tcTriple, failDesc);
 			} else if (tc.name === "message" && messageAssigned) {
 				const dupDesc = `${actorName} tried to send more than one message in a turn: ${ONE_MESSAGE_PER_TURN_REASON}`;
-				roundActions.push({
-					round,
-					actor: aiId,
-					kind: "tool_failure",
-					description: dupDesc,
-				});
-				toolCallsInEmissionOrder.push({
-					kind: "rejected",
-					tc: tcTriple,
-					description: dupDesc,
-					reason: ONE_MESSAGE_PER_TURN_REASON,
-				});
+				rejectToolCall(tcTriple, dupDesc);
 			} else if (tc.name === "message") {
 				messageAssigned = true;
 				const msgArgs = parseResult.args as { to: string; content: string };
@@ -311,18 +287,7 @@ export async function runRound(
 				toolCallsInEmissionOrder.push({ kind: "actionAccepted", tc: tcTriple });
 			} else {
 				const dupDesc = `${actorName} tried to take more than one action in a turn: ${ONE_ACTION_PER_TURN_REASON}`;
-				roundActions.push({
-					round,
-					actor: aiId,
-					kind: "tool_failure",
-					description: dupDesc,
-				});
-				toolCallsInEmissionOrder.push({
-					kind: "rejected",
-					tc: tcTriple,
-					description: dupDesc,
-					reason: ONE_ACTION_PER_TURN_REASON,
-				});
+				rejectToolCall(tcTriple, dupDesc);
 			}
 		}
 
@@ -374,22 +339,11 @@ export async function runRound(
 
 		const perceptionDeltaLines = renderPerceptionDelta(ctx, priorEntities);
 
-		const recordedAssistantToolCalls: Array<{
-			id: string;
-			name: string;
-			argumentsJson: string;
-		}> = [];
-		const recordedToolResults: Array<{
-			tool_call_id: string;
-			success: boolean;
-			description: string;
-			reason?: string;
-		}> = [];
-
-		let perceptionDeltaMerged = false;
+		const failedMessageCalls: EmittedToolCall[] = [];
+		const failedMessageResults: ToolRoundtripMessage["toolResults"] = [];
 
 		function appendToolCallEntry(
-			entry: PendingEntry,
+			tc: EmittedToolCall,
 			success: boolean,
 			description: string,
 			diskDelta?: string,
@@ -398,9 +352,9 @@ export async function runRound(
 				kind: "tool-call",
 				round: state.round,
 				aiId: aiId,
-				toolCallId: entry.tc.id,
-				toolArgumentsJson: entry.tc.argumentsJson,
-				toolName: entry.tc.name,
+				toolCallId: tc.id,
+				toolArgumentsJson: tc.argumentsJson,
+				toolName: tc.name,
 				result: description,
 				success,
 				...(diskDelta !== undefined ? { diskDelta } : {}),
@@ -414,73 +368,44 @@ export async function runRound(
 			};
 		}
 
+		function actionDiskDelta(): string | undefined {
+			const lines = [
+				...(dispatchResult.actorDiskDelta !== undefined
+					? [dispatchResult.actorDiskDelta]
+					: []),
+				...perceptionDeltaLines,
+			];
+			return lines.length > 0 ? lines.join("\n") : undefined;
+		}
+
 		let nextMessageIdx = 0;
 		for (const entry of toolCallsInEmissionOrder) {
-			if (entry.kind === "parseFail") {
-				recordedAssistantToolCalls.push(entry.tc);
-				recordedToolResults.push({
-					tool_call_id: entry.tc.id,
-					success: false,
-					description: entry.description,
-					reason: entry.reason,
-				});
-				appendToolCallEntry(entry, false, entry.description);
-			} else if (entry.kind === "rejected") {
-				recordedAssistantToolCalls.push(entry.tc);
-				recordedToolResults.push({
-					tool_call_id: entry.tc.id,
-					success: false,
-					description: entry.description,
-					reason: entry.reason,
-				});
-				appendToolCallEntry(entry, false, entry.description);
+			if (entry.kind === "rejected") {
+				appendToolCallEntry(entry.tc, false, entry.description);
 			} else if (entry.kind === "message") {
 				const rec = messageRecords[nextMessageIdx++];
-				const messageFailed = rec?.kind === "tool_failure";
-				if (messageFailed) {
-					recordedAssistantToolCalls.push(entry.tc);
-					recordedToolResults.push({
+				if (rec?.kind === "tool_failure") {
+					failedMessageCalls.push(entry.tc);
+					failedMessageResults.push({
 						tool_call_id: entry.tc.id,
 						success: false,
 						description: rec.description,
 					});
 				}
 			} else {
-				recordedAssistantToolCalls.push(entry.tc);
-				const pickUpAutoExamine = dispatchResult.actorPrivateToolResult;
-				if (pickUpAutoExamine !== undefined) {
-					const { description, success } = pickUpAutoExamine;
-					recordedToolResults.push({
-						tool_call_id: entry.tc.id,
-						success,
-						description,
-					});
-					appendToolCallEntry(entry, success, description);
-				} else {
-					const success = actionRecord?.kind === "tool_success";
-					const description = actionRecord?.description ?? "";
-					recordedToolResults.push({
-						tool_call_id: entry.tc.id,
-						success,
-						description,
-					});
-					let diskDelta = dispatchResult.actorDiskDelta;
-					if (!perceptionDeltaMerged && perceptionDeltaLines.length > 0) {
-						const perceptionDeltaText = perceptionDeltaLines.join("\n");
-						diskDelta = diskDelta
-							? `${diskDelta}\n${perceptionDeltaText}`
-							: perceptionDeltaText;
-						perceptionDeltaMerged = true;
-					}
-					appendToolCallEntry(entry, success, description, diskDelta);
-				}
+				const { success, description } =
+					dispatchResult.actorPrivateToolResult ?? {
+						success: actionRecord?.kind === "tool_success",
+						description: actionRecord?.description ?? "",
+					};
+				appendToolCallEntry(entry.tc, success, description, actionDiskDelta());
 			}
 		}
 
-		if (recordedAssistantToolCalls.length > 0) {
+		if (failedMessageCalls.length > 0) {
 			newToolRoundtrip[aiId] = {
-				assistantToolCalls: recordedAssistantToolCalls,
-				toolResults: recordedToolResults,
+				assistantToolCalls: failedMessageCalls,
+				toolResults: failedMessageResults,
 			};
 		}
 
