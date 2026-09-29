@@ -448,7 +448,7 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		expect(Number(gVal)).toBe(1500);
 	});
 
-	it("over-charge accepted: upstream usage 3000/6000 → counters stay at pre-charge (4000)", async () => {
+	it("over-charge is billed: upstream usage 3000/6000 → counters rise to the actual 9000", async () => {
 		const ip = "8.8.8.8";
 		const ssePayload =
 			'data: {"usage":{"prompt_tokens":3000,"completion_tokens":6000}}\n\ndata: [DONE]\n\n';
@@ -479,18 +479,14 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 
 		await resp.text();
 
-		const ipKey454 = perIpKey(ip, Date.now());
-		await waitForCounter(
-			kv(),
-			ipKey454,
-			String(VITEST_CONFIG_PRE_CHARGE_MICRO_USD),
-		);
-
-		const ipVal = await kv().get(ipKey454);
-		expect(Number(ipVal)).toBe(VITEST_CONFIG_PRE_CHARGE_MICRO_USD);
+		const now = Date.now();
+		await Promise.all([
+			waitForCounter(kv(), perIpKey(ip, now), "9000"),
+			waitForCounter(kv(), globalKey(now), "9000"),
+		]);
 	});
 
-	it("upstream non-2xx returns 502 to client and counters return to 0", async () => {
+	it("upstream 5xx returns 502 to client and counters return to 0", async () => {
 		const ip = "9.9.9.9";
 
 		vi.stubGlobal(

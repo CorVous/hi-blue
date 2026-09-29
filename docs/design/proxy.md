@@ -43,7 +43,10 @@ rules and tradeoffs the code cannot state by itself.
   `AGENTS.md` "Local development" for `pnpm dev:local`.
 - `PER_IP_DAILY_MICRO_USD_MAX`, `GLOBAL_DAILY_MICRO_USD_MAX`,
   `PRE_CHARGE_MICRO_USD` are optional. `configFromEnv` falls back to $1.00 per
-  IP per day, $10.00 globally per day, and a $0.005 pre-charge. The defaults
+  IP per day, $10.00 globally per day, and a $0.005 pre-charge. A value that
+  is empty, not a finite number, or negative also falls back to its default
+  (`numOr`). Without that guard a typo becomes `NaN`, every `>` comparison
+  with `NaN` is false, and the cap silently stops denying anything. The defaults
   are integer literals (`1_000_000`, `10_000_000`, `5_000`) rather than
   products of `USD_TO_MICRO_USD`, because the counters are written to KV as
   `String(counter + preCharge)` and a fractional default would corrupt them.
@@ -121,14 +124,31 @@ day:
 | Per IP | `cost:ip:<YYYY-MM-DD>:<ip>` | $1.00 |
 | Global | `cost:global:<YYYY-MM-DD>` | $10.00 |
 
-- **Flow:** `preCharge` deducts a fixed estimate from both counters at
-  request start. `reconcile` refunds the unused part once the actual cost is
-  known. `refundFull` rolls the pre-charge back on failure.
+- **Flow:** `preCharge` adds a fixed estimate to both counters at request
+  start. `reconcile` then moves both counters by the signed difference
+  between the actual cost and the pre-charge, through `adjustCharge`: unused
+  pre-charge is refunded and any overage is added. `refundFull` is
+  `adjustCharge` by minus the pre-charge. Counters never go below zero.
 - **Strict ceiling:** a request is denied when `current + preCharge > cap`.
-  Landing exactly on the cap is allowed.
-- **Over-charge is kept.** When the actual cost exceeds the pre-charge the
-  counters are left alone. That is the accepted cost of defence; only
-  unused pre-charge is ever refunded.
+  Landing exactly on the cap is allowed. An overage can push a counter past
+  the cap; the next request is then denied.
+- **Overage is charged.** The caps are in dollars, so the counters must track
+  what was actually spent. If only the pre-charge were kept, each request
+  would count as at most $0.005 whatever it cost, and the caps would limit
+  request counts instead of spend.
+- **Per-IP key.** The `CF-Connecting-IP` value is keyed by
+  `ipRateLimitSubject`: IPv4 as-is, IPv6 by its /64 prefix (for example
+  `2001:db8:1:2::/64`), and an IPv4-mapped IPv6 address by its IPv4 part. A
+  single IPv6 host usually controls a whole /64, so keying the full address
+  would let one client rotate through fresh per-IP budgets.
+- **Corrupt counters deny.** A counter value in KV that is not a finite
+  number reads as infinite: `preCharge` denies with that counter's reason,
+  and `adjustCharge` never writes a non-finite value back, so the bad value
+  is not replaced by `NaN`. This fails closed, like the cold-start pricing
+  below; the cost is that the affected IP (or, for the global counter,
+  everyone) is denied until the 25-hour TTL expires or someone deletes the
+  key. The proxy itself never writes such a value, so this only guards
+  against manual edits.
 - **No atomic compare-and-swap.** Workers KV has none, so concurrent
   requests can briefly over- or under-count. This is accepted: the caps are
   a wallet guard, not billing.

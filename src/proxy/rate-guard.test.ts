@@ -4,6 +4,7 @@ import {
 	type CostGuardConfig,
 	configFromEnv,
 	globalKey,
+	ipRateLimitSubject,
 	perIpKey,
 	preCharge,
 	rateLimitResponse,
@@ -239,11 +240,8 @@ describe("reconcile", () => {
 		expect(after).toBe(before);
 	});
 
-	it("is a no-op when actual > preCharged (over-charge — accepted as defense cost)", async () => {
+	it("charges the overage to both counters when actual > preCharged", async () => {
 		await preCharge(kv(), "1.2.3.4", DAY1_MS, TIGHT_CAPS);
-
-		const ipK = perIpKey("1.2.3.4", DAY1_MS);
-		const before = await kv().get(ipK);
 
 		await reconcile(
 			kv(),
@@ -253,8 +251,26 @@ describe("reconcile", () => {
 			9000,
 		);
 
-		const after = await kv().get(ipK);
-		expect(after).toBe(before);
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey("1.2.3.4", DAY1_MS)),
+			kv().get(globalKey(DAY1_MS)),
+		]);
+		expect(Number(ipVal)).toBe(9000);
+		expect(Number(gVal)).toBe(9000);
+	});
+
+	it("an overage pushes the counter past the cap so the next request is denied", async () => {
+		await preCharge(kv(), "1.2.3.4", DAY1_MS, TIGHT_CAPS);
+		await reconcile(
+			kv(),
+			"1.2.3.4",
+			DAY1_MS,
+			TIGHT_CAPS.preChargeMicroUsd,
+			TIGHT_CAPS.perIpDailyMicroUsdMax,
+		);
+
+		const next = await preCharge(kv(), "1.2.3.4", DAY1_MS, TIGHT_CAPS);
+		expect(next).toEqual({ allowed: false, reason: "per-ip-daily" });
 	});
 
 	it("never refunds below zero even if actual < 0 (edge case)", async () => {
@@ -270,6 +286,88 @@ describe("reconcile", () => {
 		const [ipVal, gVal] = await Promise.all([kv().get(ipK), kv().get(gK)]);
 		expect(Number(ipVal)).toBe(0);
 		expect(Number(gVal)).toBe(0);
+	});
+});
+
+describe("corrupt KV counters", () => {
+	it("denies a request when the per-IP counter is not a number", async () => {
+		const ipK = perIpKey("1.2.3.4", DAY1_MS);
+		await kv().put(ipK, "NaN", { expirationTtl: 25 * 3600 });
+
+		const result = await preCharge(kv(), "1.2.3.4", DAY1_MS, TIGHT_CAPS);
+
+		expect(result).toEqual({ allowed: false, reason: "per-ip-daily" });
+		expect(await kv().get(ipK)).toBe("NaN");
+		expect(await kv().get(globalKey(DAY1_MS))).toBeNull();
+	});
+
+	it("denies a request when the global counter is not a number", async () => {
+		await kv().put(globalKey(DAY1_MS), "garbage", {
+			expirationTtl: 25 * 3600,
+		});
+
+		const result = await preCharge(kv(), "1.2.3.4", DAY1_MS, TIGHT_CAPS);
+
+		expect(result).toEqual({ allowed: false, reason: "global-daily" });
+		expect(await kv().get(perIpKey("1.2.3.4", DAY1_MS))).toBeNull();
+	});
+
+	it("reconcile never writes a non-numeric value back", async () => {
+		const ipK = perIpKey("1.2.3.4", DAY1_MS);
+		const gK = globalKey(DAY1_MS);
+		await Promise.all([
+			kv().put(ipK, "NaN", { expirationTtl: 25 * 3600 }),
+			kv().put(gK, "8000", { expirationTtl: 25 * 3600 }),
+		]);
+
+		await reconcile(kv(), "1.2.3.4", DAY1_MS, 4000, 1000);
+
+		expect(await kv().get(ipK)).toBe("NaN");
+		expect(await kv().get(gK)).toBe("5000");
+	});
+
+	it("reconcile ignores a non-finite actual cost", async () => {
+		await preCharge(kv(), "1.2.3.4", DAY1_MS, TIGHT_CAPS);
+
+		await reconcile(kv(), "1.2.3.4", DAY1_MS, 4000, Number.NaN);
+
+		expect(await kv().get(perIpKey("1.2.3.4", DAY1_MS))).toBe("4000");
+	});
+});
+
+describe("ipRateLimitSubject", () => {
+	it("keeps an IPv4 address as-is", () => {
+		expect(ipRateLimitSubject("203.0.113.9")).toBe("203.0.113.9");
+	});
+
+	it("keys a full IPv6 address by its /64 prefix", () => {
+		expect(ipRateLimitSubject("2001:0db8:0001:0002:aaaa:bbbb:cccc:dddd")).toBe(
+			"2001:db8:1:2::/64",
+		);
+	});
+
+	it("expands :: before taking the /64 prefix", () => {
+		expect(ipRateLimitSubject("2001:db8::1")).toBe("2001:db8:0:0::/64");
+		expect(ipRateLimitSubject("2001:DB8:1:2::")).toBe("2001:db8:1:2::/64");
+		expect(ipRateLimitSubject("::1")).toBe("0:0:0:0::/64");
+	});
+
+	it("keys an IPv4-mapped IPv6 address by its IPv4 address", () => {
+		expect(ipRateLimitSubject("::ffff:203.0.113.9")).toBe("203.0.113.9");
+	});
+
+	it("keeps an unparseable value as-is", () => {
+		expect(ipRateLimitSubject("1::2::3")).toBe("1::2::3");
+		expect(ipRateLimitSubject("unknown")).toBe("unknown");
+	});
+
+	it("perIpKey shares one key across a /64 and separates different /64s", () => {
+		expect(perIpKey("2001:db8:1:2::1", DAY1_MS)).toBe(
+			perIpKey("2001:db8:1:2:ffff::9", DAY1_MS),
+		);
+		expect(perIpKey("2001:db8:1:2::1", DAY1_MS)).not.toBe(
+			perIpKey("2001:db8:1:3::1", DAY1_MS),
+		);
 	});
 });
 
@@ -351,5 +449,32 @@ describe("configFromEnv defaults", () => {
 		for (const value of Object.values(cfg)) {
 			expect(Number.isInteger(value)).toBe(true);
 		}
+	});
+
+	it("falls back to the defaults when env values are not finite non-negative numbers", () => {
+		const cfg = configFromEnv({
+			PER_IP_DAILY_MICRO_USD_MAX: "one dollar",
+			GLOBAL_DAILY_MICRO_USD_MAX: "",
+			PRE_CHARGE_MICRO_USD: "-5",
+		});
+		expect(cfg).toEqual({
+			perIpDailyMicroUsdMax: 1_000_000,
+			globalDailyMicroUsdMax: 10_000_000,
+			preChargeMicroUsd: 5_000,
+		});
+	});
+
+	it("uses valid env values", () => {
+		expect(
+			configFromEnv({
+				PER_IP_DAILY_MICRO_USD_MAX: "20000",
+				GLOBAL_DAILY_MICRO_USD_MAX: "1000000",
+				PRE_CHARGE_MICRO_USD: "4000",
+			}),
+		).toEqual({
+			perIpDailyMicroUsdMax: 20_000,
+			globalDailyMicroUsdMax: 1_000_000,
+			preChargeMicroUsd: 4_000,
+		});
 	});
 });
