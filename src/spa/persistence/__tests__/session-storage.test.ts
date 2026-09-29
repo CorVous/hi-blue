@@ -21,6 +21,7 @@ import {
 	getArchivedSessionInfo,
 	getSessionInfo,
 	hasLegacySave,
+	isSessionComplete,
 	LEGACY_KEY,
 	listArchivedSessions,
 	listSessions,
@@ -324,6 +325,16 @@ describe("saveActiveSession", () => {
 		expect(stub._store[`${SESSIONS_PREFIX}${dupId}/saving`]).toBeUndefined();
 		expect(stub._store[`${ARCHIVE_PREFIX}${id}/saving`]).toBeUndefined();
 		await expect(archiveSession(id)).rejects.toThrow(/incomplete/);
+	});
+
+	it("isSessionComplete is false exactly when archiveSession would refuse the session", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		expect(isSessionComplete(id)).toBe(false);
+		saveActiveSession(makeFreshGame());
+		expect(isSessionComplete(id)).toBe(true);
+		stub._store[`${SESSIONS_PREFIX}${id}/saving`] = "x";
+		expect(isSessionComplete(id)).toBe(false);
 	});
 
 	it("preserves createdAt from the existing meta.json on re-save", () => {

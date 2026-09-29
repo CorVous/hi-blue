@@ -33,7 +33,9 @@ Each session is a set of localStorage keys under one prefix:
     marker (best effort), reports the error, and the previous save still
     loads as `ok`. Once `meta.json` has been written, the marker stays and
     the session loads as `broken`. `archiveSession`
-    refuses a source that carries the marker. Only `.txt` keys count as
+    refuses a source that carries the marker, or lacks `meta.json` or
+    `engine.dat`; `isSessionComplete` answers the same question without
+    throwing, so the endgame can check before it starts. Only `.txt` keys count as
     daemon files, so the marker is never listed as one or copied by
     `dupSession` or `archiveSession`.
 - **`saveActiveSession` can target a session other than the active one.**

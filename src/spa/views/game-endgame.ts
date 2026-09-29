@@ -7,6 +7,7 @@ import { readStoredByokKey } from "../openrouter-key.js";
 import {
 	archiveSession,
 	getActiveSessionId,
+	isSessionComplete,
 	mintSessionId,
 	rmSession,
 	saveActiveSession,
@@ -23,6 +24,8 @@ import {
 const OBJECTIVES_COMPLETE_SUBTITLE = "You have completed the objectives.";
 const BUDGET_EXHAUSTED_SUBTITLE = "You have hit your budget.";
 const NEW_ROOM_BROADCAST = "The sysadmin has created a new room.";
+const INCOMPLETE_SAVE_NOTE =
+	"this game's last save was incomplete, so it was not archived";
 
 export function showEndgame(
 	root: HTMLElement,
@@ -176,10 +179,6 @@ function wireEndgameChoices(endedGame: EndedGame): void {
 	});
 }
 
-function archiveIfKnown(sessionId: string | null): Promise<void> {
-	return sessionId ? archiveSession(sessionId) : Promise.resolve();
-}
-
 function playerLeftEndedSession(choice: EndgameChoice): boolean {
 	return getActiveSessionId() !== choice.endedSessionId;
 }
@@ -204,17 +203,55 @@ function removeEndedSession(choice: EndgameChoice): void {
 	if (choice.endedSessionId) rmSession(choice.endedSessionId);
 }
 
-async function startWithNewDaemons(choice: EndgameChoice): Promise<void> {
+interface ArchivePlan {
+	archive: boolean;
+	note: string;
+}
+
+function withNote(plan: ArchivePlan, status: string): string {
+	return plan.note ? `${plan.note}. ${status}` : status;
+}
+
+function failArchive(choice: EndgameChoice, err: unknown): void {
+	failEndgameChoice(
+		choice,
+		`could not archive this game: ${failureDetail(err)}`,
+	);
+}
+
+function planArchive(choice: EndgameChoice): ArchivePlan | null {
+	const sessionId = choice.endedSessionId;
+	if (!sessionId) return { archive: false, note: "" };
+	try {
+		return isSessionComplete(sessionId)
+			? { archive: true, note: "" }
+			: { archive: false, note: INCOMPLETE_SAVE_NOTE };
+	} catch (err) {
+		failArchive(choice, err);
+		return null;
+	}
+}
+
+async function archiveAsPlanned(
+	choice: EndgameChoice,
+	plan: ArchivePlan,
+): Promise<boolean> {
+	if (!plan.archive || !choice.endedSessionId) return true;
 	choice.setStatus("archiving…");
 	try {
-		await archiveIfKnown(choice.endedSessionId);
+		await archiveSession(choice.endedSessionId);
+		return true;
 	} catch (err) {
-		failEndgameChoice(
-			choice,
-			`could not archive this game: ${failureDetail(err)}`,
-		);
-		return;
+		failArchive(choice, err);
+		return false;
 	}
+}
+
+async function startWithNewDaemons(choice: EndgameChoice): Promise<void> {
+	const plan = planArchive(choice);
+	if (!plan) return;
+	if (!(await archiveAsPlanned(choice, plan))) return;
+	if (plan.note) choice.setStatus(plan.note);
 	const playerMovedOn = playerLeftEndedSession(choice);
 	removeEndedSession(choice);
 	if (playerMovedOn) return;
@@ -224,8 +261,9 @@ async function startWithNewDaemons(choice: EndgameChoice): Promise<void> {
 
 async function buildNewRoom(
 	choice: EndgameChoice,
+	plan: ArchivePlan = { archive: false, note: "" },
 ): Promise<GameSession | null> {
-	choice.setStatus("spinning up a new room…");
+	choice.setStatus(withNote(plan, "spinning up a new room…"));
 	try {
 		return await buildSameDaemonsSession(choice.endedState.personas);
 	} catch (err) {
@@ -238,19 +276,12 @@ async function buildNewRoom(
 }
 
 async function restartWithSameDaemons(choice: EndgameChoice): Promise<void> {
-	const newRoom = await buildNewRoom(choice);
+	const plan = planArchive(choice);
+	if (!plan) return;
+	const newRoom = await buildNewRoom(choice, plan);
 	if (!newRoom || playerLeftEndedSession(choice)) return;
 
-	choice.setStatus("archiving…");
-	try {
-		await archiveIfKnown(choice.endedSessionId);
-	} catch (err) {
-		failEndgameChoice(
-			choice,
-			`could not archive this game: ${failureDetail(err)}`,
-		);
-		return;
-	}
+	if (!(await archiveAsPlanned(choice, plan))) return;
 	if (playerLeftEndedSession(choice)) return;
 
 	const newSessionId = mintSessionId();

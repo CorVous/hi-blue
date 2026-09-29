@@ -366,8 +366,19 @@ it hides the other routes' screens and shows or hides the global chrome
   means giving up leaves nothing half-done. "Continue" saves under the ended
   session's own id. "New daemons" removes the ended session only after
   `archiveSession` succeeds.
+- **A torn final save is discarded, not archived.** `archiveSession` refuses
+  a session whose `saving` marker is still there, and nothing on the
+  endgame screen can clear it, so every click on "new daemons" or "same
+  daemons" used to fail with the same archive error, and "same daemons" paid
+  for a content-pack generation before finding that out. Both choices now ask
+  `isSessionComplete` first (`planArchive`), before building a room. An
+  incomplete session is not archived: the choice goes ahead, removes the torn
+  session as usual, and the status line says the last save was incomplete
+  (on "same daemons" alongside "spinning up a new room…"; "new daemons"
+  leaves the screen at once). The finished game is still in memory, so the
+  download button keeps working until the player chooses.
 - **A failed choice keeps the finished game.** If archiving throws (a full
-  storage quota, or a save interrupted earlier), the room cannot be built, or
+  storage quota, or an unreadable `meta.json`), the room cannot be built, or
   the new room cannot be saved, `failEndgameChoice` writes the reason to
   `#endgame-choice-status` and enables the choice buttons again. Before, a
   failed archive still deleted the session, so the only copy of the finished

@@ -436,17 +436,24 @@ export function rmArchivedSession(id: string): void {
 	ignoringStorageErrors(() => removeKeysUnder(`${ARCHIVE_PREFIX}${id}/`));
 }
 
-export async function archiveSession(sessionId: string): Promise<void> {
+export function isSessionComplete(sessionId: string): boolean {
 	const srcPrefix = `${SESSIONS_PREFIX}${sessionId}/`;
-	const metaJson = localStorage.getItem(`${srcPrefix}meta.json`);
-	const engineVal = localStorage.getItem(`${srcPrefix}engine.dat`);
-	const saveWasInterrupted =
-		localStorage.getItem(savingMarkerKey(SESSIONS_PREFIX, sessionId)) !== null;
-	if (metaJson === null || engineVal === null || saveWasInterrupted) {
+	return (
+		localStorage.getItem(`${srcPrefix}meta.json`) !== null &&
+		localStorage.getItem(`${srcPrefix}engine.dat`) !== null &&
+		localStorage.getItem(savingMarkerKey(SESSIONS_PREFIX, sessionId)) === null
+	);
+}
+
+export async function archiveSession(sessionId: string): Promise<void> {
+	if (!isSessionComplete(sessionId)) {
 		throw new Error(
 			`archiveSession: session "${sessionId}" is incomplete or missing`,
 		);
 	}
+	const srcPrefix = `${SESSIONS_PREFIX}${sessionId}/`;
+	const metaJson = localStorage.getItem(`${srcPrefix}meta.json`) as string;
+	const engineVal = localStorage.getItem(`${srcPrefix}engine.dat`) as string;
 	const daemonEntries = readDaemonEntries(srcPrefix);
 	let meta: MetaFile;
 	try {

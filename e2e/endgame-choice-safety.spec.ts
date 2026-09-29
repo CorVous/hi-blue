@@ -140,7 +140,7 @@ for (const choice of [
 
 		const endedSessionId = await reachEndgame(page);
 		await page.evaluate((id) => {
-			localStorage.setItem(`hi-blue:sessions/${id}/saving`, "stuck");
+			localStorage.setItem(`hi-blue:sessions/${id}/meta.json`, "{not json");
 		}, endedSessionId);
 
 		await page.locator(choice.button).click();
@@ -159,3 +159,61 @@ for (const choice of [
 		await expectNoPageErrors(page, pageErrors);
 	});
 }
+
+function markFinalSaveTorn(page: Page, sessionId: string): Promise<void> {
+	return page.evaluate((id) => {
+		localStorage.setItem(`hi-blue:sessions/${id}/saving`, "stuck");
+	}, sessionId);
+}
+
+test("New daemons moves on from a torn final save without archiving it", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	const endedSessionId = await reachEndgame(page);
+	await markFinalSaveTorn(page, endedSessionId);
+
+	await page.locator("#endgame-new-daemons-btn").click();
+
+	await expect(page.locator('main[data-view="start"]')).toBeAttached({
+		timeout: 15_000,
+	});
+	await expect(page.locator("#endgame")).toBeHidden();
+	expect(await listSessionIds(page, "hi-blue:archive/")).toEqual([]);
+	expect(await listSessionIds(page, "hi-blue:sessions/")).not.toContain(
+		endedSessionId,
+	);
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("Same daemons notes a torn final save before building the new room", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	const endedSessionId = await reachEndgame(page);
+	await markFinalSaveTorn(page, endedSessionId);
+	const generation = await holdNewRoomGeneration(page);
+
+	await page.locator("#endgame-same-daemons-btn").click();
+	await expect.poll(generation.requestCount).toBeGreaterThan(0);
+	await expect(page.locator("#endgame-choice-status")).toContainText(
+		"last save was incomplete, so it was not archived",
+	);
+
+	generation.release();
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
+	await expect(page.locator("#endgame")).toBeHidden({ timeout: 15_000 });
+	await expect(page.locator("#composer")).toBeVisible();
+	expect(await listSessionIds(page, "hi-blue:archive/")).toEqual([]);
+	const sessionsAfter = await listSessionIds(page, "hi-blue:sessions/");
+	expect(sessionsAfter).not.toContain(endedSessionId);
+	expect(sessionsAfter).toHaveLength(1);
+	expect(await activeSessionId(page)).toBe(sessionsAfter[0]);
+
+	await expectNoPageErrors(page, pageErrors);
+});

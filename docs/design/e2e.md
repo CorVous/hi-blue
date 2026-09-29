@@ -189,7 +189,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `endgame-current-behaviour` | `game_ended` disables the composer, shows the choices, and keeps the URL. The active-session pointer survives until the player chooses. | #80, #101, #307 |
 | `endgame-outcome` | The endgame subtitle follows the outcome (win or budget exhausted), topinfo shows the final turn, the final round's Daemon lines appear on the endgame screen, and the finished round is saved so a reload reopens the endgame. The budget ending is reached by lowering every saved budget and reloading. Re-entering the endgame by toggling the picker must not stack button handlers: one click downloads once and starts one content-pack request. | #576 |
 | `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. After each choice (Same Daemons, Continue, and New Daemons followed by a new login) `#endgame` is hidden and `#prompt` is enabled again. | #307 |
-| `endgame-choice-safety` | Same Daemons and Continue leave a session the player loaded while the new room was generating untouched: no pointer move, no overwrite, no archive. When archiving the finished game fails, New Daemons and Same Daemons keep it, say why in `#endgame-choice-status` and re-enable the button. | |
+| `endgame-choice-safety` | Same Daemons and Continue leave a session the player loaded while the new room was generating untouched: no pointer move, no overwrite, no archive. When archiving the finished game fails, New Daemons and Same Daemons keep it, say why in `#endgame-choice-status` and re-enable the button. When the final save is torn (its `saving` marker is left), both go ahead without archiving and drop the torn session; Same Daemons shows the note before the new room is generated. | |
 | `round-session-switch` | A round still running when the player loads another session paints nothing into it and is saved under its own session; a round whose session was removed meanwhile is dropped without a warning. | |
 | `bootstrap-session-switch` | A loading flow that timed out and was abandoned does not take over the start screen when its bootstrap later succeeds, and a new game starts at epoch 01 after a later-epoch session was open. | |
 | `round-reentry` | Opening and closing the session picker while a round is in flight keeps Send disabled, a forced submit starts no second round, and the held round still completes with one request per Daemon. | |
@@ -237,8 +237,9 @@ specs that assert on generation failure check `#cap-hit` themselves.
   that nothing happens when a held generation is finally released, and there
   is no event for "nothing happened". They wait for the released response
   and then a fixed settle delay before asserting on storage and the view.
-  The failed-archive tests make `archiveSession` throw by writing the
-  session's `saving` marker, the same state an interrupted save leaves.
+  The failed-archive tests make `archiveSession` throw by overwriting the
+  session's `meta.json` with text that is not JSON. The torn-save tests write
+  the session's `saving` marker, the same state an interrupted save leaves.
 - **bootstrap-session-switch.** The loading timeout is 300 s, so the spec
   installs Playwright's clock before navigation and fast-forwards past it.
 - **start-screen.**
