@@ -106,6 +106,7 @@ const BRAILLE_SPINNER_FRAMES = [
 	"⠏",
 ];
 const SPINNER_INTERVAL_MS = 80;
+const PANEL_SPINNER_SELECTOR = ".panel-name .panel-spinner";
 const BRIGHTNESS_WIPE_TAU_MS = 60_000;
 const BRIGHTNESS_WIPE_MAX_PCT = 99;
 const NEW_ROOM_BROADCAST = "The sysadmin has created a new room.";
@@ -1127,6 +1128,17 @@ function appendPanelSpinners(panel: HTMLElement): HTMLElement[] {
 	return spinnerEls;
 }
 
+function animateSpinners(
+	spinnerEls: () => Iterable<HTMLElement>,
+): ReturnType<typeof setInterval> {
+	let frame = 0;
+	return setInterval(() => {
+		frame = (frame + 1) % BRAILLE_SPINNER_FRAMES.length;
+		const text = brailleFrameText(frame);
+		for (const spinnerEl of spinnerEls()) spinnerEl.textContent = text;
+	}, SPINNER_INTERVAL_MS);
+}
+
 function startRoundSpinners(
 	doc: Document,
 	aiIds: readonly AiId[],
@@ -1140,13 +1152,7 @@ function startRoundSpinners(
 		if (!panel) continue;
 		const els = appendPanelSpinners(panel);
 		if (els.length === 0) continue;
-		let frame = 0;
-		const intervalId = setInterval(() => {
-			frame = (frame + 1) % BRAILLE_SPINNER_FRAMES.length;
-			const text = brailleFrameText(frame);
-			for (const spinnerEl of els) spinnerEl.textContent = text;
-		}, SPINNER_INTERVAL_MS);
-		spinners.set(aiId, { els, intervalId });
+		spinners.set(aiId, { els, intervalId: animateSpinners(() => els) });
 	}
 	const strip = (aiId: AiId): void => {
 		const s = spinners.get(aiId);
@@ -1794,16 +1800,9 @@ function paintLoadingPersonaPanels(
 }
 
 function startLoadingSpinners(doc: Document, timers: LoadingTimers): void {
-	let frame = 0;
-	timers.spinnerInterval = setInterval(() => {
-		frame = (frame + 1) % BRAILLE_SPINNER_FRAMES.length;
-		const text = brailleFrameText(frame);
-		for (const spinnerEl of doc.querySelectorAll<HTMLElement>(
-			".panel-name .panel-spinner",
-		)) {
-			spinnerEl.textContent = text;
-		}
-	}, SPINNER_INTERVAL_MS);
+	timers.spinnerInterval = animateSpinners(() =>
+		doc.querySelectorAll<HTMLElement>(PANEL_SPINNER_SELECTOR),
+	);
 }
 
 function nowMs(): number {
@@ -1837,7 +1836,7 @@ function cleanupLoadingTimers(timers: LoadingTimers): void {
 
 function removeAllPanelSpinners(doc: Document): void {
 	for (const spinnerEl of doc.querySelectorAll<HTMLElement>(
-		".panel-name .panel-spinner",
+		PANEL_SPINNER_SELECTOR,
 	)) {
 		spinnerEl.remove();
 	}
