@@ -1,4 +1,5 @@
 import {
+	disabledToolsFor,
 	entityHandle,
 	type ItemToolName,
 	obstaclePositions,
@@ -75,6 +76,10 @@ export function resolveToolCall(
 	return { ...call, args: { ...call.args, item: target.id } };
 }
 
+function disabledToolReason(tool: ToolCall["name"]): string {
+	return `your ${tool} tool is disabled`;
+}
+
 function targetLabel(game: GameState, id: string | undefined): string {
 	const entity = game.world.entities.find((e) => e.id === id);
 	return entity ? entityHandle(game.world.entities, entity) : (id ?? "");
@@ -85,6 +90,8 @@ export function validateToolCall(
 	aiId: AiId,
 	rawCall: ToolCall,
 ): ValidationResult {
+	if (disabledToolsFor(game.activeComplications, aiId).has(rawCall.name))
+		return { valid: false, reason: disabledToolReason(rawCall.name) };
 	const call = resolveToolCall(game, aiId, rawCall);
 	const label = targetLabel(game, call.args.item);
 	const { world } = game;
@@ -364,7 +371,19 @@ function dispatchSpeechBeforeAction(
 	const round = game.round;
 	const actorName = game.personas[aiId]?.name ?? aiId;
 	const livePersonaIds = Object.keys(game.personaSpatial);
+	const messageDisabled = disabledToolsFor(game.activeComplications, aiId).has(
+		"message",
+	);
 	for (const msg of messages) {
+		if (messageDisabled) {
+			records.push({
+				round,
+				actor: aiId,
+				kind: "tool_failure",
+				description: `${actorName} tried to message "${msg.to}" but failed: ${disabledToolReason("message")}`,
+			});
+			continue;
+		}
 		const validRecipient =
 			msg.to === "blue" || (livePersonaIds.includes(msg.to) && msg.to !== aiId);
 		if (!validRecipient) {
