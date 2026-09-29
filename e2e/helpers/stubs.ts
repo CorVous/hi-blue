@@ -83,13 +83,12 @@ export function isRequestForDaemon(
 
 export function classifyJsonRequest(
 	body: ParsedBody,
-): "synthesis" | "dual-content-pack" | "content-pack" | "unknown" {
+): "synthesis" | "dual-content-pack" | "unknown" {
 	const userMsg = userMessageContent(body);
 	if (userMsg.startsWith("Synthesize blurbs for these personas:"))
 		return "synthesis";
 	if (userMsg.startsWith("Generate a dual A/B content pack for:"))
 		return "dual-content-pack";
-	if (userMsg.startsWith("Generate a content pack for:")) return "content-pack";
 	return "unknown";
 }
 
@@ -124,36 +123,12 @@ type BindingSpec = {
 	index: number;
 };
 
-type BindingContentPackSpec = {
-	setting: string;
-	bindings: BindingSpec[];
-	obstacleCount: number;
-};
-
 type DualBindingContentPackSpec = {
 	settingA: string;
 	settingB: string;
 	bindings: BindingSpec[];
 	obstacleCount: number;
 };
-
-function parseBindingContentPackSpec(userMsg: string): BindingContentPackSpec {
-	const settingMatch = /setting="([^"]*)"/.exec(userMsg);
-	const setting = settingMatch?.[1] ?? "stub-setting";
-
-	const bindingMatches = [
-		...userMsg.matchAll(/Binding\s+(\d+)\s+\(([^)]+)\):/g),
-	];
-	const bindings: BindingSpec[] = bindingMatches.map((m) => ({
-		index: Number(m[1]),
-		type: m[2] as BindingSpec["type"],
-	}));
-
-	const obstacleIds = [...userMsg.matchAll(/obstacle id="([^"]+)"/g)];
-	const obstacleCount = obstacleIds.length;
-
-	return { setting, bindings, obstacleCount };
-}
 
 function parseDualBindingContentPackSpec(
 	userMsg: string,
@@ -289,13 +264,6 @@ function buildBoundPack(
 	};
 }
 
-function buildBoundContentPackResponseBody(body: ParsedBody): string {
-	const spec = parseBindingContentPackSpec(userMessageContent(body));
-	const pack = buildBoundPack(spec.setting, spec.bindings, spec.obstacleCount);
-	const content = JSON.stringify({ pack });
-	return JSON.stringify({ choices: [{ message: { content } }] });
-}
-
 function buildBoundDualContentPackResponseBody(body: ParsedBody): string {
 	const spec = parseDualBindingContentPackSpec(userMessageContent(body));
 	const packA = buildBoundPack(
@@ -332,9 +300,7 @@ async function tryFulfillJsonMode(
 			? buildSynthesisResponseBody(body, blurbFor)
 			: kind === "dual-content-pack"
 				? buildBoundDualContentPackResponseBody(body)
-				: kind === "content-pack"
-					? buildBoundContentPackResponseBody(body)
-					: null;
+				: null;
 	if (responseBody === null) {
 		throw new Error(
 			`stubs.ts: unrecognised JSON-mode /v1/chat/completions caller. ` +

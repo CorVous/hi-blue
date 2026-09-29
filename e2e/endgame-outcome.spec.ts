@@ -136,7 +136,7 @@ test("re-entering the endgame without a reload does not stack its button handler
 		const body = parseRequestBody(request);
 		if (!isJsonModeRequest(body)) return;
 		const kind = classifyJsonRequest(body);
-		if (kind === "dual-content-pack" || kind === "content-pack") {
+		if (kind === "dual-content-pack") {
 			contentPackRequests++;
 		}
 	});

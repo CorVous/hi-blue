@@ -296,7 +296,9 @@ CONTEXT.md under **AiId** and **blue**.
   border, panel and mention highlight still show when Send is disabled, so a
   locked addressee still gets visual feedback.
 - `applyAddresseeChange` rewrites the first mention in place, keeping the cursor
-  on the same side of it. With no mention, it prepends `*name `.
+  on the same side of it. With no mention, it prepends `*name `. The mention
+  pattern captures only `[A-Za-z0-9]`, so trailing punctuation is never part of
+  the captured name and stays where it was after the rewrite.
 - `buildPersonaColorMap` reads the persona's `color` field, never the AiId, so
   changing the palette means changing only the persona records.
 

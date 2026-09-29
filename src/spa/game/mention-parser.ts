@@ -3,7 +3,6 @@ import type { AiId } from "./types.js";
 const MENTION_SIGIL = "*";
 const MENTION_PATTERN = /(?:^|\s)\*([A-Za-z0-9]+)/g;
 const TRAILING_PUNCTUATION = /[.,!?;:]/;
-const ENDS_WITH_PUNCTUATION = /[.,!?;:]$/;
 
 export interface MentionMatch {
 	aiId: AiId;
@@ -59,14 +58,11 @@ export function applyAddresseeChange({
 	for (const match of text.matchAll(MENTION_PATTERN)) {
 		const mentionedName = match[1];
 		if (!mentionedName) continue;
-		const name = ENDS_WITH_PUNCTUATION.test(mentionedName)
-			? mentionedName.slice(0, -1)
-			: mentionedName;
-		const id = personaNamesToId.get(name.toLowerCase());
+		const id = personaNamesToId.get(mentionedName.toLowerCase());
 		if (id !== undefined) {
 			const atStart = (match.index ?? 0) + match[0].indexOf(MENTION_SIGIL);
 			foundAtStart = atStart;
-			foundNameEnd = atStart + MENTION_SIGIL.length + name.length;
+			foundNameEnd = atStart + MENTION_SIGIL.length + mentionedName.length;
 			break;
 		}
 	}

@@ -55,8 +55,9 @@ itself fires, never `page.request.*`.
 - A request body's `messages[0]` is the system prompt and `messages[1]` the
   user message. A call is JSON mode when `stream === false` or it sets
   `response_format`. `classifyJsonRequest` tells the new-game callers apart by
-  their user-message preamble: persona synthesis, dual A/B content pack, or
-  single content pack.
+  their user-message preamble: persona synthesis or dual A/B content pack. The
+  game has no single-pack caller any more, so a single-pack preamble falls
+  through to the throw below.
 - An unrecognised JSON-mode call **throws**. Silently answering it with a
   persona-shaped reply was the bug this helper was written to prevent, so a new
   caller must fail loudly until the stub learns it.
