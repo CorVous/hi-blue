@@ -1,4 +1,4 @@
-import { GRID_COLS, GRID_ROWS } from "../game/direction.js";
+import { GRID_COLS, GRID_ROWS, isGridPosition } from "../game/direction.js";
 import type { GameSession } from "../game/game-session.js";
 import type {
 	AiId,
@@ -68,8 +68,11 @@ export function getMapFocus(): AiId | null {
 	return mapFocus;
 }
 
-function isGridPosition(holder: AiId | GridPosition): holder is GridPosition {
-	return typeof holder === "object" && holder !== null;
+function holderLabel(entity: WorldEntity, state: GameState): string {
+	const holderPersona = isGridPosition(entity.holder)
+		? null
+		: state.personas[entity.holder];
+	return !holderPersona ? "(none)" : `*${holderPersona.name}`;
 }
 
 function findHeldEntity(
@@ -146,10 +149,7 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 
 	if (objObj) {
 		const satisfaction = objObj.satisfactionState ?? "pending";
-		const holderPersona = isGridPosition(objObj.holder)
-			? null
-			: state.personas[objObj.holder];
-		const holder = !holderPersona ? "(none)" : `*${holderPersona.name}`;
+		const holder = holderLabel(objObj, state);
 		return {
 			glyph: "* ",
 			tooltip: `${objObj.name} · ${objObj.id} · ${satisfaction} · ${holder}`,
@@ -175,10 +175,7 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 	);
 	if (interesting) {
 		const satisfaction = interesting.satisfactionState ?? "pending";
-		const holderPersona = isGridPosition(interesting.holder)
-			? null
-			: state.personas[interesting.holder];
-		const holder = !holderPersona ? "(none)" : `*${holderPersona.name}`;
+		const holder = holderLabel(interesting, state);
 		return {
 			glyph: "o ",
 			tooltip: `${interesting.name} · ${interesting.id} · ${satisfaction} · ${holder}`,
@@ -193,6 +190,50 @@ function computeCellInfo(roomPos: GridPosition, state: GameState): CellInfo {
 		tooltip: `floor (${roomPos.row},${roomPos.col})`,
 		kind: "floor",
 	};
+}
+
+function paintCell(cell: HTMLElement, state: GameState): void {
+	const cellStr = cell.getAttribute("data-cell");
+	if (!cellStr) return;
+
+	const [rowStr, colStr] = cellStr.split(",");
+	const row = Number(rowStr);
+	const col = Number(colStr);
+
+	if (Number.isNaN(row) || Number.isNaN(col)) return;
+
+	const cellInfo = computeCellInfo({ row, col }, state);
+
+	const glyphSpan = cell.querySelector(".dev-map-glyph");
+	if (glyphSpan) glyphSpan.textContent = cellInfo.glyph;
+
+	const tooltipSpan = cell.querySelector(".dev-map-tooltip");
+	if (tooltipSpan) tooltipSpan.textContent = cellInfo.tooltip;
+
+	cell.setAttribute("data-kind", cellInfo.kind);
+
+	if (cellInfo.entityId) {
+		cell.setAttribute("data-entity-id", cellInfo.entityId);
+	} else {
+		cell.removeAttribute("data-entity-id");
+	}
+
+	if (cellInfo.aiId) {
+		cell.setAttribute("data-ai", cellInfo.aiId);
+		const persona = state.personas[cellInfo.aiId];
+		if (persona?.color) {
+			cell.style.color = persona.color;
+		}
+	} else {
+		cell.removeAttribute("data-ai");
+		cell.style.color = "";
+	}
+
+	if (cellInfo.satisfaction) {
+		cell.setAttribute("data-satisfaction", cellInfo.satisfaction);
+	} else {
+		cell.removeAttribute("data-satisfaction");
+	}
 }
 
 export function renderWorldMap(
@@ -212,38 +253,19 @@ export function renderWorldMap(
 
 	for (let row = 0; row < GRID_ROWS; row++) {
 		for (let col = 0; col < GRID_COLS; col++) {
-			const roomPos: GridPosition = { row, col };
-			const cellInfo = computeCellInfo(roomPos, state);
-
 			const cell = doc.createElement("span");
 			cell.className = "dev-map-cell";
 			cell.setAttribute("data-cell", `${row},${col}`);
-			cell.setAttribute("data-kind", cellInfo.kind);
-
-			if (cellInfo.entityId) {
-				cell.setAttribute("data-entity-id", cellInfo.entityId);
-			}
-			if (cellInfo.aiId) {
-				cell.setAttribute("data-ai", cellInfo.aiId);
-				const persona = state.personas[cellInfo.aiId];
-				if (persona?.color) {
-					cell.style.color = persona.color;
-				}
-			}
-			if (cellInfo.satisfaction) {
-				cell.setAttribute("data-satisfaction", cellInfo.satisfaction);
-			}
 
 			const glyphSpan = doc.createElement("span");
 			glyphSpan.className = "dev-map-glyph";
-			glyphSpan.textContent = cellInfo.glyph;
 			cell.appendChild(glyphSpan);
 
 			const tooltipSpan = doc.createElement("span");
 			tooltipSpan.className = "dev-map-tooltip";
-			tooltipSpan.textContent = cellInfo.tooltip;
 			cell.appendChild(tooltipSpan);
 
+			paintCell(cell, state);
 			grid.appendChild(cell);
 		}
 	}
@@ -263,51 +285,9 @@ export function updateWorldMap(
 	const grid = containerEl.querySelector(".dev-map-grid");
 	if (!grid) return;
 
-	const cells = grid.querySelectorAll<HTMLElement>(".dev-map-cell");
-	cells.forEach((cell) => {
-		const cellStr = cell.getAttribute("data-cell");
-		if (!cellStr) return;
-
-		const [rowStr, colStr] = cellStr.split(",");
-		const row = Number(rowStr);
-		const col = Number(colStr);
-
-		if (Number.isNaN(row) || Number.isNaN(col)) return;
-
-		const roomPos: GridPosition = { row, col };
-		const cellInfo = computeCellInfo(roomPos, state);
-
-		const glyphSpan = cell.querySelector(".dev-map-glyph");
-		if (glyphSpan) glyphSpan.textContent = cellInfo.glyph;
-
-		const tooltipSpan = cell.querySelector(".dev-map-tooltip");
-		if (tooltipSpan) tooltipSpan.textContent = cellInfo.tooltip;
-
-		cell.setAttribute("data-kind", cellInfo.kind);
-
-		if (cellInfo.entityId) {
-			cell.setAttribute("data-entity-id", cellInfo.entityId);
-		} else {
-			cell.removeAttribute("data-entity-id");
-		}
-
-		if (cellInfo.aiId) {
-			cell.setAttribute("data-ai", cellInfo.aiId);
-			const persona = state.personas[cellInfo.aiId];
-			if (persona?.color) {
-				cell.style.color = persona.color;
-			}
-		} else {
-			cell.removeAttribute("data-ai");
-			cell.style.color = "";
-		}
-
-		if (cellInfo.satisfaction) {
-			cell.setAttribute("data-satisfaction", cellInfo.satisfaction);
-		} else {
-			cell.removeAttribute("data-satisfaction");
-		}
-	});
+	for (const cell of grid.querySelectorAll<HTMLElement>(".dev-map-cell")) {
+		paintCell(cell, state);
+	}
 
 	activeSession = session;
 	applyVistaTint(containerEl, state);

@@ -31,6 +31,28 @@ function formatElapsed(startedAtMs: number | undefined): string | undefined {
 	return `${elapsed.toFixed(1)}s elapsed`;
 }
 
+function field(containerEl: HTMLElement, name: string): HTMLElement | null {
+	return containerEl.querySelector<HTMLElement>(`[data-field="${name}"]`);
+}
+
+function showOptional(
+	sep: HTMLElement | null,
+	el: HTMLElement | null,
+	text: string | undefined,
+): void {
+	if (sep) {
+		sep.setAttribute("hidden", "");
+		if (text) sep.removeAttribute("hidden");
+	}
+	if (!el) return;
+	if (text) {
+		el.textContent = text;
+		el.removeAttribute("hidden");
+	} else {
+		el.setAttribute("hidden", "");
+	}
+}
+
 function updatePendingStripContent(
 	containerEl: HTMLElement,
 	pending: PendingBootstrap,
@@ -38,99 +60,45 @@ function updatePendingStripContent(
 ): void {
 	const statusInfo = getStatusInfo(pending.status);
 
-	const pipEl = containerEl.querySelector<HTMLElement>('[data-field="pip"]');
+	const pipEl = field(containerEl, "pip");
 	if (pipEl) {
 		pipEl.textContent = statusInfo.pip;
 		pipEl.setAttribute("data-state", statusInfo.state);
 	}
 
-	const statusWordEl = containerEl.querySelector<HTMLElement>(
-		'[data-field="status-word"]',
-	);
+	const statusWordEl = field(containerEl, "status-word");
 	if (statusWordEl) {
 		statusWordEl.textContent = statusInfo.word;
 	}
 
-	const callNameEl = containerEl.querySelector<HTMLElement>(
-		'[data-field="call-name"]',
-	);
-	if (callNameEl) {
-		if (callMeta?.callName) {
-			callNameEl.textContent = callMeta.callName;
-			callNameEl.removeAttribute("hidden");
-		} else {
-			callNameEl.setAttribute("hidden", "");
-		}
-	}
+	showOptional(null, field(containerEl, "call-name"), callMeta?.callName);
 
-	const sepRetryEl = containerEl.querySelector<HTMLElement>(
-		'[data-field="sep-retry"]',
+	showOptional(
+		field(containerEl, "sep-retry"),
+		field(containerEl, "retry"),
+		callMeta?.retryCount && callMeta.retryCount > 0
+			? `retry ${callMeta.retryCount}/${callMeta.retryMax ?? 3}`
+			: undefined,
 	);
-	const retryEl = containerEl.querySelector<HTMLElement>(
-		'[data-field="retry"]',
-	);
-	const showRetry = callMeta?.retryCount && callMeta.retryCount > 0;
-	if (sepRetryEl) {
-		sepRetryEl.setAttribute("hidden", "");
-		if (showRetry) sepRetryEl.removeAttribute("hidden");
-	}
-	if (retryEl) {
-		if (showRetry) {
-			retryEl.textContent = `retry ${callMeta.retryCount}/${callMeta.retryMax ?? 3}`;
-			retryEl.removeAttribute("hidden");
-		} else {
-			retryEl.setAttribute("hidden", "");
-		}
-	}
 
-	const sepElapsedEl = containerEl.querySelector<HTMLElement>(
-		'[data-field="sep-elapsed"]',
+	showOptional(
+		field(containerEl, "sep-elapsed"),
+		field(containerEl, "elapsed"),
+		formatElapsed(callMeta?.startedAtMs),
 	);
-	const elapsedEl = containerEl.querySelector<HTMLElement>(
-		'[data-field="elapsed"]',
-	);
-	const elapsedText = formatElapsed(callMeta?.startedAtMs);
-	if (sepElapsedEl) {
-		sepElapsedEl.setAttribute("hidden", "");
-		if (elapsedText) sepElapsedEl.removeAttribute("hidden");
-	}
-	if (elapsedEl) {
-		if (elapsedText) {
-			elapsedEl.textContent = elapsedText;
-			elapsedEl.removeAttribute("hidden");
-		} else {
-			elapsedEl.setAttribute("hidden", "");
-		}
-	}
 
-	const sepErrorEl = containerEl.querySelector<HTMLElement>(
-		'[data-field="sep-error"]',
+	showOptional(
+		field(containerEl, "sep-error"),
+		field(containerEl, "last-error"),
+		callMeta?.lastError ? `last error: ${callMeta.lastError}` : undefined,
 	);
-	const lastErrorEl = containerEl.querySelector<HTMLElement>(
-		'[data-field="last-error"]',
-	);
-	const showError = callMeta?.lastError;
-	if (sepErrorEl) {
-		sepErrorEl.setAttribute("hidden", "");
-		if (showError) sepErrorEl.removeAttribute("hidden");
-	}
-	if (lastErrorEl) {
-		if (showError) {
-			lastErrorEl.textContent = `last error: ${callMeta.lastError}`;
-			lastErrorEl.removeAttribute("hidden");
-		} else {
-			lastErrorEl.setAttribute("hidden", "");
-		}
-	}
 }
 
 function updateElapsedSpan(
 	containerEl: HTMLElement,
 	callMeta?: PendingCallMeta,
 ): void {
-	const elapsedEl = containerEl.querySelector<HTMLElement>(
-		'[data-field="elapsed"]',
-	);
+	const elapsedEl = field(containerEl, "elapsed");
 	if (!elapsedEl) return;
 	const elapsedText = formatElapsed(callMeta?.startedAtMs);
 	if (elapsedText) {
@@ -138,15 +106,34 @@ function updateElapsedSpan(
 	}
 }
 
+const PENDING_STRIP_SPANS: readonly {
+	field: string;
+	text?: string;
+	className?: string;
+}[] = [
+	{ field: "pip", className: "dev-pending-pip dev-footer-pip" },
+	{ field: "status-word" },
+	{ field: "call-name" },
+	{ field: "sep-retry", text: "·" },
+	{ field: "retry" },
+	{ field: "sep-elapsed", text: "·" },
+	{ field: "elapsed" },
+	{ field: "sep-error", text: "·" },
+	{ field: "last-error" },
+];
+
+function stopTicker(): void {
+	if (_tickerInterval) clearInterval(_tickerInterval);
+	_tickerInterval = undefined;
+	_tickerContainer = undefined;
+}
+
 export function renderPendingStrip(
 	containerEl: HTMLElement,
 	pending: PendingBootstrap,
 	callMeta?: PendingCallMeta,
 ): void {
-	if (_tickerInterval) {
-		clearInterval(_tickerInterval);
-		_tickerInterval = undefined;
-	}
+	stopTicker();
 
 	_currentMeta = callMeta;
 	_tickerContainer = containerEl;
@@ -159,45 +146,13 @@ export function renderPendingStrip(
 	line.className = "dev-strip-line";
 	line.setAttribute("data-line", "pending");
 
-	const pipEl = containerEl.ownerDocument.createElement("span");
-	pipEl.className = "dev-pending-pip dev-footer-pip";
-	pipEl.setAttribute("data-field", "pip");
-	line.appendChild(pipEl);
-
-	const statusWord = containerEl.ownerDocument.createElement("span");
-	statusWord.setAttribute("data-field", "status-word");
-	line.appendChild(statusWord);
-
-	const callName = containerEl.ownerDocument.createElement("span");
-	callName.setAttribute("data-field", "call-name");
-	line.appendChild(callName);
-
-	const sepRetry = containerEl.ownerDocument.createElement("span");
-	sepRetry.setAttribute("data-field", "sep-retry");
-	sepRetry.textContent = "·";
-	line.appendChild(sepRetry);
-
-	const retry = containerEl.ownerDocument.createElement("span");
-	retry.setAttribute("data-field", "retry");
-	line.appendChild(retry);
-
-	const sepElapsed = containerEl.ownerDocument.createElement("span");
-	sepElapsed.setAttribute("data-field", "sep-elapsed");
-	sepElapsed.textContent = "·";
-	line.appendChild(sepElapsed);
-
-	const elapsed = containerEl.ownerDocument.createElement("span");
-	elapsed.setAttribute("data-field", "elapsed");
-	line.appendChild(elapsed);
-
-	const sepError = containerEl.ownerDocument.createElement("span");
-	sepError.setAttribute("data-field", "sep-error");
-	sepError.textContent = "·";
-	line.appendChild(sepError);
-
-	const lastError = containerEl.ownerDocument.createElement("span");
-	lastError.setAttribute("data-field", "last-error");
-	line.appendChild(lastError);
+	for (const { field: name, text, className } of PENDING_STRIP_SPANS) {
+		const span = containerEl.ownerDocument.createElement("span");
+		if (className) span.className = className;
+		span.setAttribute("data-field", name);
+		if (text) span.textContent = text;
+		line.appendChild(span);
+	}
 
 	containerEl.appendChild(line);
 
@@ -205,11 +160,7 @@ export function renderPendingStrip(
 
 	_tickerInterval = setInterval(() => {
 		if (!_tickerContainer?.isConnected) {
-			if (_tickerInterval) {
-				clearInterval(_tickerInterval);
-				_tickerInterval = undefined;
-			}
-			_tickerContainer = undefined;
+			stopTicker();
 			return;
 		}
 		updateElapsedSpan(_tickerContainer, _currentMeta);
@@ -226,11 +177,7 @@ export function updatePendingStrip(
 }
 
 export function clearPendingStrip(containerEl: HTMLElement | null): void {
-	if (_tickerInterval) {
-		clearInterval(_tickerInterval);
-		_tickerInterval = undefined;
-	}
-	_tickerContainer = undefined;
+	stopTicker();
 	_currentMeta = undefined;
 	if (!containerEl) return;
 	containerEl.classList.remove("dev-strip", "dev-pending-strip");
@@ -239,8 +186,6 @@ export function clearPendingStrip(containerEl: HTMLElement | null): void {
 }
 
 export function __resetPendingStripForTests(): void {
-	if (_tickerInterval) clearInterval(_tickerInterval);
-	_tickerInterval = undefined;
-	_tickerContainer = undefined;
+	stopTicker();
 	_currentMeta = undefined;
 }

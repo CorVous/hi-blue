@@ -3,9 +3,8 @@ import type { PendingBootstrap } from "../game/pending-bootstrap.js";
 import { getPendingCallMeta } from "../game/pending-bootstrap.js";
 import {
 	clearDaemonTurnResults,
+	refreshDaemonFooter,
 	renderDaemonFooter,
-	updateDaemonFooterDetails,
-	updateDaemonFooterSummary,
 } from "./daemon-footer.js";
 import { renderGameStrip } from "./game-strip.js";
 import { clearPendingStrip, renderPendingStrip } from "./pending-strip.js";
@@ -67,8 +66,7 @@ function renderSessionInspector(
 		);
 		if (panel) {
 			renderDaemonFooter(panel, aiId, session);
-			updateDaemonFooterSummary(panel, aiId, session);
-			updateDaemonFooterDetails(panel, aiId, session);
+			refreshDaemonFooter(panel, aiId, session);
 		}
 	}
 	setMapFocus(getMapFocus());

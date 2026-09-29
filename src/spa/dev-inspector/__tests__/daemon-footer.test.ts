@@ -10,14 +10,35 @@ import {
 	recordDaemonRound,
 	recordDaemonSystemPrompt,
 	recordDaemonTurnResult,
+	refreshDaemonFooter,
 	renderDaemonFooter,
 	setDaemonFooterInFlight,
-	updateDaemonFooterDetails,
-	updateDaemonFooterSummary,
 } from "../daemon-footer";
 import { renderInspector } from "../index";
 
+function panelFor(aiId: string): HTMLElement {
+	const panel = document.querySelector<HTMLElement>(
+		`.ai-panel[data-ai="${aiId}"]`,
+	);
+	if (!panel) throw new Error(`${aiId} panel not found`);
+	return panel;
+}
+
+function renderAndRefresh(
+	panel: HTMLElement,
+	aiId: string,
+	session: GameSession,
+): void {
+	renderDaemonFooter(panel, aiId, session);
+	refreshDaemonFooter(panel, aiId, session);
+}
+
 describe("daemon-footer", () => {
+	let session: GameSession;
+	let redPanel: HTMLElement;
+	let greenPanel: HTMLElement;
+	let cyanPanel: HTMLElement;
+
 	beforeEach(() => {
 		document.body.innerHTML = `
       <article class="ai-panel" data-ai="red">
@@ -31,18 +52,15 @@ describe("daemon-footer", () => {
       </article>
     `;
 		clearDaemonTurnResults();
+		const contentPack = STATIC_CONTENT_PACKS[0];
+		if (!contentPack) throw new Error("Content pack missing");
+		session = new GameSession(contentPack, STATIC_PERSONAS);
+		redPanel = panelFor("red");
+		greenPanel = panelFor("green");
+		cyanPanel = panelFor("cyan");
 	});
 
 	it("renderDaemonFooter builds the four field spans in order with pip initialized to idle ○", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		renderDaemonFooter(redPanel, "red", session);
 
 		const summary = redPanel.querySelector('[data-line="summary"]');
@@ -67,15 +85,6 @@ describe("daemon-footer", () => {
 	});
 
 	it("renderDaemonFooter removes the hidden attribute from .dev-daemon-footer", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		const footerEl = redPanel.querySelector<HTMLElement>(".dev-daemon-footer");
 		expect(footerEl?.hasAttribute("hidden")).toBe(true);
 
@@ -85,15 +94,6 @@ describe("daemon-footer", () => {
 	});
 
 	it("setDaemonFooterInFlight flips pip glyph and data-state across all three values", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		renderDaemonFooter(redPanel, "red", session);
 
 		const pip = redPanel.querySelector<HTMLElement>('[data-field="pip"]');
@@ -113,10 +113,7 @@ describe("daemon-footer", () => {
 		expect(pip?.getAttribute("data-state")).toBe("idle");
 	});
 
-	it("updateDaemonFooterSummary lists last-round tool calls from conversationLogs, comma-separated", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
+	it("refreshDaemonFooter lists last-round tool calls from conversationLogs, comma-separated", () => {
 		const state = session.getState();
 
 		const modifiedState: GameState = {
@@ -150,13 +147,7 @@ describe("daemon-footer", () => {
 
 		const restoredSession = GameSession.restore(modifiedState);
 
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
-		renderDaemonFooter(redPanel, "red", restoredSession);
-		updateDaemonFooterSummary(redPanel, "red", restoredSession);
+		renderAndRefresh(redPanel, "red", restoredSession);
 
 		const toolsSpan = redPanel.querySelector<HTMLElement>(
 			'[data-field="last-tools"]',
@@ -164,10 +155,7 @@ describe("daemon-footer", () => {
 		expect(toolsSpan?.textContent).toBe("go, pick_up");
 	});
 
-	it("updateDaemonFooterSummary includes the message tool when the last round was a successful message-only turn", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
+	it("refreshDaemonFooter includes the message tool when the last round was a successful message-only turn", () => {
 		const state = session.getState();
 
 		const modifiedState: GameState = {
@@ -188,13 +176,7 @@ describe("daemon-footer", () => {
 
 		const restoredSession = GameSession.restore(modifiedState);
 
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
-		renderDaemonFooter(redPanel, "red", restoredSession);
-		updateDaemonFooterSummary(redPanel, "red", restoredSession);
+		renderAndRefresh(redPanel, "red", restoredSession);
 
 		const toolsSpan = redPanel.querySelector<HTMLElement>(
 			'[data-field="last-tools"]',
@@ -202,16 +184,7 @@ describe("daemon-footer", () => {
 		expect(toolsSpan?.textContent).toBe("message");
 	});
 
-	it("updateDaemonFooterSummary renders the LLM line from recordDaemonTurnResult data", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("refreshDaemonFooter renders the LLM line from recordDaemonTurnResult data", () => {
 		recordDaemonTurnResult("red", {
 			promptTokens: 1200,
 			completionTokens: 80,
@@ -219,8 +192,7 @@ describe("daemon-footer", () => {
 			costUsd: 0.0042,
 		});
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterSummary(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		const llmSpan = redPanel.querySelector<HTMLElement>(
 			'[data-field="llm-line"]',
@@ -228,18 +200,8 @@ describe("daemon-footer", () => {
 		expect(llmSpan?.textContent).toBe("[tok 1200→80 cache 50% $0.0042]");
 	});
 
-	it("updateDaemonFooterSummary renders empty LLM line when no turn result recorded yet", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterSummary(redPanel, "red", session);
+	it("refreshDaemonFooter renders empty LLM line when no turn result recorded yet", () => {
+		renderAndRefresh(redPanel, "red", session);
 
 		const llmSpan = redPanel.querySelector<HTMLElement>(
 			'[data-field="llm-line"]',
@@ -247,10 +209,7 @@ describe("daemon-footer", () => {
 		expect(llmSpan?.textContent).toBe("");
 	});
 
-	it("updateDaemonFooterSummary renders complication chips filtered by target=aiId", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
+	it("refreshDaemonFooter renders complication chips filtered by target=aiId", () => {
 		const state = session.getState();
 
 		const modifiedState: GameState = {
@@ -278,13 +237,7 @@ describe("daemon-footer", () => {
 
 		const restoredSession = GameSession.restore(modifiedState);
 
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
-		renderDaemonFooter(redPanel, "red", restoredSession);
-		updateDaemonFooterSummary(redPanel, "red", restoredSession);
+		renderAndRefresh(redPanel, "red", restoredSession);
 
 		const chipsSpan = redPanel.querySelector<HTMLElement>(
 			'[data-field="complication-chips"]',
@@ -326,23 +279,14 @@ describe("daemon-footer", () => {
 		expect(chipTexts).toEqual(["[tool-dis:pick_up]"]);
 	});
 
-	it("updateDaemonFooterSummary does NOT mutate the pip span", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("refreshDaemonFooter does NOT mutate the pip span", () => {
 		renderDaemonFooter(redPanel, "red", session);
 		setDaemonFooterInFlight(redPanel, "in-flight");
 
 		const pip = redPanel.querySelector<HTMLElement>('[data-field="pip"]');
 		const pipId = pip;
 
-		updateDaemonFooterSummary(redPanel, "red", session);
+		refreshDaemonFooter(redPanel, "red", session);
 
 		const pipAfter = redPanel.querySelector<HTMLElement>('[data-field="pip"]');
 		expect(pipAfter).toBe(pipId);
@@ -352,9 +296,6 @@ describe("daemon-footer", () => {
 	});
 
 	it("per-Daemon footers show their own last-round number — three footers can disagree", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
 		const state = session.getState();
 
 		const modifiedState: GameState = {
@@ -402,26 +343,13 @@ describe("daemon-footer", () => {
 
 		const restoredSession = GameSession.restore(modifiedState);
 
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		const greenPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="green"]',
-		);
-		const cyanPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="cyan"]',
-		);
-
-		if (!redPanel || !greenPanel || !cyanPanel)
-			throw new Error("Panels not found");
-
 		renderDaemonFooter(redPanel, "red", restoredSession);
 		renderDaemonFooter(greenPanel, "green", restoredSession);
 		renderDaemonFooter(cyanPanel, "cyan", restoredSession);
 
-		updateDaemonFooterSummary(redPanel, "red", restoredSession);
-		updateDaemonFooterSummary(greenPanel, "green", restoredSession);
-		updateDaemonFooterSummary(cyanPanel, "cyan", restoredSession);
+		refreshDaemonFooter(redPanel, "red", restoredSession);
+		refreshDaemonFooter(greenPanel, "green", restoredSession);
+		refreshDaemonFooter(cyanPanel, "cyan", restoredSession);
 
 		const redTools = redPanel.querySelector<HTMLElement>(
 			'[data-field="last-tools"]',
@@ -438,10 +366,7 @@ describe("daemon-footer", () => {
 		expect(cyanTools).toBe("use");
 	});
 
-	it("updateDaemonFooterSummary shows empty last-tools when conversation log is empty", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
+	it("refreshDaemonFooter shows empty last-tools when conversation log is empty", () => {
 		const state = session.getState();
 
 		const modifiedState: GameState = {
@@ -454,13 +379,7 @@ describe("daemon-footer", () => {
 
 		const restoredSession = GameSession.restore(modifiedState);
 
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
-		renderDaemonFooter(redPanel, "red", restoredSession);
-		updateDaemonFooterSummary(redPanel, "red", restoredSession);
+		renderAndRefresh(redPanel, "red", restoredSession);
 
 		const toolsSpan = redPanel.querySelector<HTMLElement>(
 			'[data-field="last-tools"]',
@@ -469,15 +388,6 @@ describe("daemon-footer", () => {
 	});
 
 	it("renderInspector clears stale daemon turn results from previous sessions", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		recordDaemonTurnResult("red", {
 			promptTokens: 1200,
 			completionTokens: 80,
@@ -485,8 +395,7 @@ describe("daemon-footer", () => {
 			costUsd: 0.0042,
 		});
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterSummary(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 		let llmSpan = redPanel.querySelector<HTMLElement>(
 			'[data-field="llm-line"]',
 		);
@@ -496,20 +405,11 @@ describe("daemon-footer", () => {
 
 		llmSpan = redPanel.querySelector<HTMLElement>('[data-field="llm-line"]');
 
-		updateDaemonFooterSummary(redPanel, "red", session);
+		refreshDaemonFooter(redPanel, "red", session);
 		expect(llmSpan?.textContent).toBe("");
 	});
 
 	it("renderDaemonFooter builds five <details> blocks in stable order, all default closed", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		renderDaemonFooter(redPanel, "red", session);
 
 		const details = redPanel.querySelectorAll(".dev-footer-details");
@@ -532,15 +432,6 @@ describe("daemon-footer", () => {
 	});
 
 	it("renderDaemonFooter initialises empty <pre> contents for the four non-persona disclosures", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		renderDaemonFooter(redPanel, "red", session);
 
 		const disclosures = [
@@ -565,15 +456,6 @@ describe("daemon-footer", () => {
 	});
 
 	it("renderDaemonFooter initialises summaries without round suffix when no round captured yet", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		renderDaemonFooter(redPanel, "red", session);
 
 		const disclosures = [
@@ -598,15 +480,6 @@ describe("daemon-footer", () => {
 	});
 
 	it("renderDaemonFooter populates the persona-card content from state.personas[aiId]", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		renderDaemonFooter(redPanel, "red", session);
 
 		const personaDiv = redPanel.querySelector(".dev-footer-persona");
@@ -635,21 +508,11 @@ describe("daemon-footer", () => {
 		expect(blurbEl?.textContent?.length).toBeGreaterThan(0);
 	});
 
-	it("recordDaemonSystemPrompt + updateDaemonFooterDetails renders the prompt into pre[data-content='system-prompt']", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("recordDaemonSystemPrompt + refreshDaemonFooter renders the prompt into pre[data-content='system-prompt']", () => {
 		const systemPrompt = "You are a helpful assistant.";
 		recordDaemonSystemPrompt("red", systemPrompt);
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		const pre = redPanel.querySelector<HTMLElement>(
 			'[data-disclosure="system-prompt"] pre[data-content="system-prompt"]',
@@ -657,23 +520,13 @@ describe("daemon-footer", () => {
 		expect(pre?.textContent).toBe(systemPrompt);
 	});
 
-	it("updateDaemonFooterDetails renders lastRawCompletion from recordDaemonTurnResult", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("refreshDaemonFooter renders lastRawCompletion from recordDaemonTurnResult", () => {
 		const completion = "This is the assistant response.";
 		recordDaemonTurnResult("red", {
 			lastRawCompletion: completion,
 		});
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		const pre = redPanel.querySelector<HTMLElement>(
 			'[data-disclosure="raw-completion"] pre[data-content="raw-completion"]',
@@ -681,16 +534,7 @@ describe("daemon-footer", () => {
 		expect(pre?.textContent).toBe(completion);
 	});
 
-	it("updateDaemonFooterDetails renders tool calls one per line in name(argsJson) format", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("refreshDaemonFooter renders tool calls one per line in name(argsJson) format", () => {
 		recordDaemonTurnResult("red", {
 			lastToolCalls: [
 				{ name: "go", argumentsJson: '{"direction": "north"}' },
@@ -698,8 +542,7 @@ describe("daemon-footer", () => {
 			],
 		});
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		const pre = redPanel.querySelector<HTMLElement>(
 			'[data-disclosure="tool-calls"] pre[data-content="tool-calls"]',
@@ -709,18 +552,8 @@ describe("daemon-footer", () => {
 		);
 	});
 
-	it("updateDaemonFooterDetails renders empty error pre when no error recorded", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+	it("refreshDaemonFooter renders empty error pre when no error recorded", () => {
+		renderAndRefresh(redPanel, "red", session);
 
 		const pre = redPanel.querySelector<HTMLElement>(
 			'[data-disclosure="error"] pre[data-content="error"]',
@@ -728,16 +561,7 @@ describe("daemon-footer", () => {
 		expect(pre?.textContent).toBe("");
 	});
 
-	it("updateDaemonFooterDetails renders error with status code prefix when status present (CapHitError 429)", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("refreshDaemonFooter renders error with status code prefix when status present (CapHitError 429)", () => {
 		const error = new CapHitError({
 			message: "rate limit exceeded",
 			reason: "per-ip-daily",
@@ -746,8 +570,7 @@ describe("daemon-footer", () => {
 
 		recordDaemonError("red", error);
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		const pre = redPanel.querySelector<HTMLElement>(
 			'[data-disclosure="error"] pre[data-content="error"]',
@@ -755,22 +578,12 @@ describe("daemon-footer", () => {
 		expect(pre?.textContent).toBe("429 rate limit exceeded");
 	});
 
-	it("updateDaemonFooterDetails renders error message only when no status field (generic Error)", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("refreshDaemonFooter renders error message only when no status field (generic Error)", () => {
 		const error = new Error("something went wrong");
 
 		recordDaemonError("red", error);
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		const pre = redPanel.querySelector<HTMLElement>(
 			'[data-disclosure="error"] pre[data-content="error"]',
@@ -778,20 +591,10 @@ describe("daemon-footer", () => {
 		expect(pre?.textContent).toBe("something went wrong");
 	});
 
-	it("updateDaemonFooterDetails handles non-Error error payloads via String(error)", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("refreshDaemonFooter handles non-Error error payloads via String(error)", () => {
 		recordDaemonError("red", "string error payload");
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		const pre = redPanel.querySelector<HTMLElement>(
 			'[data-disclosure="error"] pre[data-content="error"]',
@@ -800,19 +603,9 @@ describe("daemon-footer", () => {
 	});
 
 	it("recordDaemonRound suffixes round number into the four non-persona summaries", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		recordDaemonRound("red", 3);
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		const disclosures = [
 			"system-prompt",
@@ -834,16 +627,7 @@ describe("daemon-footer", () => {
 		expect(personaSummary?.textContent).toBe("persona card");
 	});
 
-	it("updateDaemonFooterDetails preserves <details> open state across updates", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("refreshDaemonFooter preserves <details> open state across updates", () => {
 		renderDaemonFooter(redPanel, "red", session);
 
 		const details = redPanel.querySelector<HTMLDetailsElement>(
@@ -854,7 +638,7 @@ describe("daemon-footer", () => {
 		(details as HTMLDetailsElement).open = true;
 
 		recordDaemonSystemPrompt("red", "test prompt");
-		updateDaemonFooterDetails(redPanel, "red", session);
+		refreshDaemonFooter(redPanel, "red", session);
 
 		const detailsAfter = redPanel.querySelector<HTMLDetailsElement>(
 			'[data-disclosure="system-prompt"]',
@@ -867,16 +651,7 @@ describe("daemon-footer", () => {
 		).toBe("test prompt");
 	});
 
-	it("updateDaemonFooterDetails does NOT replace the persona-card outer details", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
+	it("refreshDaemonFooter does NOT replace the persona-card outer details", () => {
 		renderDaemonFooter(redPanel, "red", session);
 
 		const personaDetails = redPanel.querySelector<HTMLDetailsElement>(
@@ -886,7 +661,7 @@ describe("daemon-footer", () => {
 		const personaDetailsId = personaDetails;
 		(personaDetails as HTMLDetailsElement).open = true;
 
-		updateDaemonFooterDetails(redPanel, "red", session);
+		refreshDaemonFooter(redPanel, "red", session);
 
 		const personaDetailsAfter = redPanel.querySelector<HTMLDetailsElement>(
 			'[data-disclosure="persona-card"]',
@@ -896,23 +671,6 @@ describe("daemon-footer", () => {
 	});
 
 	it("per-Daemon details are isolated — three Daemons can have different captured system prompts simultaneously", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		const greenPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="green"]',
-		);
-		const cyanPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="cyan"]',
-		);
-
-		if (!redPanel || !greenPanel || !cyanPanel)
-			throw new Error("Panels not found");
-
 		recordDaemonSystemPrompt("red", "red prompt");
 		recordDaemonSystemPrompt("green", "green prompt");
 		recordDaemonSystemPrompt("cyan", "cyan prompt");
@@ -921,9 +679,9 @@ describe("daemon-footer", () => {
 		renderDaemonFooter(greenPanel, "green", session);
 		renderDaemonFooter(cyanPanel, "cyan", session);
 
-		updateDaemonFooterDetails(redPanel, "red", session);
-		updateDaemonFooterDetails(greenPanel, "green", session);
-		updateDaemonFooterDetails(cyanPanel, "cyan", session);
+		refreshDaemonFooter(redPanel, "red", session);
+		refreshDaemonFooter(greenPanel, "green", session);
+		refreshDaemonFooter(cyanPanel, "cyan", session);
 
 		const redPre = redPanel.querySelector(
 			'[data-disclosure="system-prompt"] pre[data-content="system-prompt"]',
@@ -941,22 +699,12 @@ describe("daemon-footer", () => {
 	});
 
 	it("clearDaemonTurnResults also clears system prompts, errors, and rounds", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		recordDaemonSystemPrompt("red", "test prompt");
 		recordDaemonError("red", new Error("test error"));
 		recordDaemonRound("red", 5);
 		recordDaemonTurnResult("red", { costUsd: 0.01 });
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		let systemPromptPre = redPanel.querySelector(
 			'[data-disclosure="system-prompt"] pre[data-content="system-prompt"]',
@@ -970,8 +718,7 @@ describe("daemon-footer", () => {
 
 		clearDaemonTurnResults();
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		systemPromptPre = redPanel.querySelector(
 			'[data-disclosure="system-prompt"] pre[data-content="system-prompt"]',
@@ -985,21 +732,11 @@ describe("daemon-footer", () => {
 	});
 
 	it("renderInspector clears the extended side-channel maps", () => {
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const redPanel = document.querySelector<HTMLElement>(
-			'.ai-panel[data-ai="red"]',
-		);
-		if (!redPanel) throw new Error("Red panel not found");
-
 		recordDaemonSystemPrompt("red", "test prompt");
 		recordDaemonError("red", new Error("test error"));
 		recordDaemonRound("red", 5);
 
-		renderDaemonFooter(redPanel, "red", session);
-		updateDaemonFooterDetails(redPanel, "red", session);
+		renderAndRefresh(redPanel, "red", session);
 
 		let systemPromptPre = redPanel.querySelector(
 			'[data-disclosure="system-prompt"] pre[data-content="system-prompt"]',

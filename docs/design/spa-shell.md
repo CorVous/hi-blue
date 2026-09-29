@@ -191,12 +191,15 @@ affordance such as `?winImmediately=1` would change a later test's round.
   footers' focus buttons are new elements, so without that call a focused
   Vista stayed tinted while every button read inactive, and the footers stayed
   blank until the next round.
-- **Update invariants.** `updateDaemonFooterSummary` never touches the pip,
-  which only `setDaemonFooterInFlight` changes.
-  `updateDaemonFooterDetails` never replaces a `<details>` element or its
-  `open` attribute, so a block the user expanded stays open. The persona card
-  is filled in once. `updateGameStripSummary` keeps the strip's `<details>`
-  element. `updateWorldMap` mutates the existing cells and never creates or
+- **Update invariants.** `refreshDaemonFooter` fills the summary and the
+  details together, because every caller needs both. It never touches the pip,
+  which only `setDaemonFooterInFlight` changes, and it never replaces a
+  `<details>` element or its `open` attribute, so a block the user expanded
+  stays open. The persona card is filled in once. `renderGameStrip` builds
+  empty spans from the same field table that `updateGameStripSummary` fills,
+  so the two cannot drift, and `updateGameStripSummary` keeps the strip's
+  `<details>` element. `renderWorldMap` and `updateWorldMap` share one
+  `paintCell`; the update mutates the existing cells and never creates or
   removes nodes.
 - **Pending strip.** A 100 ms ticker updates the elapsed time. Only
   `renderPendingStrip` restarts it; `updatePendingStrip` does not.

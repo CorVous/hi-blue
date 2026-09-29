@@ -75,104 +75,89 @@ function buildComplicationItem(
 	return li;
 }
 
+type StripField = readonly [field: string, value: (state: GameState) => string];
+type StripSegment = string | StripField;
+
+function countSatisfied(state: GameState): number {
+	return state.objectives.filter((obj) => isSatisfied(obj, state)).length;
+}
+
+const STRIP_LINES: readonly (readonly StripSegment[])[] = [
+	[
+		"round ",
+		["round", (state) => String(state.round)],
+		" · countdown ",
+		["countdown", (state) => String(state.complicationSchedule.countdown)],
+		" · pack ",
+		["pack", (state) => state.activePackId],
+		" · ",
+		["setting", (state) => state.setting],
+		" / ",
+		["weather", (state) => state.weather],
+		" / ",
+		["time-of-day", (state) => state.timeOfDay],
+	],
+	[
+		"cost $",
+		["cost", computeSpentUsd],
+		" · obj ",
+		["obj-satisfied", (state) => String(countSatisfied(state))],
+		"/",
+		["obj-total", (state) => String(state.objectives.length)],
+		" satisfied · ",
+		[
+			"active-complications",
+			(state) => String(state.activeComplications.length),
+		],
+		" active complications",
+	],
+];
+
+function buildStripSection(
+	doc: Document,
+	section: string,
+	heading: string,
+): HTMLDivElement {
+	const sectionEl = doc.createElement("div");
+	sectionEl.className = "dev-strip-section";
+	sectionEl.setAttribute("data-section", section);
+
+	const headingEl = doc.createElement("h4");
+	headingEl.textContent = heading;
+	sectionEl.appendChild(headingEl);
+
+	const list = doc.createElement("ul");
+	list.className = "dev-strip-list";
+	list.setAttribute("data-list", section);
+	sectionEl.appendChild(list);
+
+	return sectionEl;
+}
+
 export function renderGameStrip(
 	containerEl: HTMLElement,
 	session: GameSession,
 ): void {
-	const state = session.getState();
 	const doc = containerEl.ownerDocument;
 
 	containerEl.classList.add("dev-strip");
 	containerEl.replaceChildren();
 
-	const line1 = doc.createElement("div");
-	line1.className = "dev-strip-line";
-	line1.setAttribute("data-line", "1");
-
-	const line1Text = doc.createTextNode("round ");
-	line1.appendChild(line1Text);
-
-	const roundSpan = doc.createElement("span");
-	roundSpan.setAttribute("data-field", "round");
-	roundSpan.textContent = String(state.round);
-	line1.appendChild(roundSpan);
-
-	line1.appendChild(doc.createTextNode(" · countdown "));
-
-	const countdownSpan = doc.createElement("span");
-	countdownSpan.setAttribute("data-field", "countdown");
-	countdownSpan.textContent = String(state.complicationSchedule.countdown);
-	line1.appendChild(countdownSpan);
-
-	line1.appendChild(doc.createTextNode(" · pack "));
-
-	const packSpan = doc.createElement("span");
-	packSpan.setAttribute("data-field", "pack");
-	packSpan.textContent = state.activePackId;
-	line1.appendChild(packSpan);
-
-	line1.appendChild(doc.createTextNode(" · "));
-
-	const settingSpan = doc.createElement("span");
-	settingSpan.setAttribute("data-field", "setting");
-	settingSpan.textContent = state.setting;
-	line1.appendChild(settingSpan);
-
-	line1.appendChild(doc.createTextNode(" / "));
-
-	const weatherSpan = doc.createElement("span");
-	weatherSpan.setAttribute("data-field", "weather");
-	weatherSpan.textContent = state.weather;
-	line1.appendChild(weatherSpan);
-
-	line1.appendChild(doc.createTextNode(" / "));
-
-	const timeSpan = doc.createElement("span");
-	timeSpan.setAttribute("data-field", "time-of-day");
-	timeSpan.textContent = state.timeOfDay;
-	line1.appendChild(timeSpan);
-
-	containerEl.appendChild(line1);
-
-	const line2 = doc.createElement("div");
-	line2.className = "dev-strip-line";
-	line2.setAttribute("data-line", "2");
-
-	line2.appendChild(doc.createTextNode("cost $"));
-
-	const costSpan = doc.createElement("span");
-	costSpan.setAttribute("data-field", "cost");
-	costSpan.textContent = computeSpentUsd(state);
-	line2.appendChild(costSpan);
-
-	line2.appendChild(doc.createTextNode(" · obj "));
-
-	const satisfiedCount = state.objectives.filter((obj) =>
-		isSatisfied(obj, state),
-	).length;
-
-	const objSatisfiedSpan = doc.createElement("span");
-	objSatisfiedSpan.setAttribute("data-field", "obj-satisfied");
-	objSatisfiedSpan.textContent = String(satisfiedCount);
-	line2.appendChild(objSatisfiedSpan);
-
-	line2.appendChild(doc.createTextNode("/"));
-
-	const objTotalSpan = doc.createElement("span");
-	objTotalSpan.setAttribute("data-field", "obj-total");
-	objTotalSpan.textContent = String(state.objectives.length);
-	line2.appendChild(objTotalSpan);
-
-	line2.appendChild(doc.createTextNode(" satisfied · "));
-
-	const complicationsSpan = doc.createElement("span");
-	complicationsSpan.setAttribute("data-field", "active-complications");
-	complicationsSpan.textContent = String(state.activeComplications.length);
-	line2.appendChild(complicationsSpan);
-
-	line2.appendChild(doc.createTextNode(" active complications"));
-
-	containerEl.appendChild(line2);
+	STRIP_LINES.forEach((segments, index) => {
+		const line = doc.createElement("div");
+		line.className = "dev-strip-line";
+		line.setAttribute("data-line", String(index + 1));
+		for (const segment of segments) {
+			if (typeof segment === "string") {
+				line.appendChild(doc.createTextNode(segment));
+				continue;
+			}
+			const span = doc.createElement("span");
+			span.setAttribute("data-field", segment[0]);
+			line.appendChild(span);
+		}
+		containerEl.appendChild(line);
+	});
 
 	const details = doc.createElement("details");
 	details.className = "dev-strip-details";
@@ -182,47 +167,14 @@ export function renderGameStrip(
 	summary.textContent = "objectives + complications";
 	details.appendChild(summary);
 
-	const objectivesSection = doc.createElement("div");
-	objectivesSection.className = "dev-strip-section";
-	objectivesSection.setAttribute("data-section", "objectives");
-
-	const objectivesHeading = doc.createElement("h4");
-	objectivesHeading.textContent = "objectives";
-	objectivesSection.appendChild(objectivesHeading);
-
-	const objectivesList = doc.createElement("ul");
-	objectivesList.className = "dev-strip-list";
-	objectivesList.setAttribute("data-list", "objectives");
-
-	for (const objective of state.objectives) {
-		const li = buildObjectiveItem(doc, objective, state);
-		objectivesList.appendChild(li);
-	}
-
-	objectivesSection.appendChild(objectivesList);
-	details.appendChild(objectivesSection);
-
-	const complicationsSection = doc.createElement("div");
-	complicationsSection.className = "dev-strip-section";
-	complicationsSection.setAttribute("data-section", "complications");
-
-	const complicationsHeading = doc.createElement("h4");
-	complicationsHeading.textContent = "active complications";
-	complicationsSection.appendChild(complicationsHeading);
-
-	const complicationsList = doc.createElement("ul");
-	complicationsList.className = "dev-strip-list";
-	complicationsList.setAttribute("data-list", "complications");
-
-	for (const complication of state.activeComplications) {
-		const li = buildComplicationItem(doc, complication);
-		complicationsList.appendChild(li);
-	}
-
-	complicationsSection.appendChild(complicationsList);
-	details.appendChild(complicationsSection);
+	details.appendChild(buildStripSection(doc, "objectives", "objectives"));
+	details.appendChild(
+		buildStripSection(doc, "complications", "active complications"),
+	);
 
 	containerEl.appendChild(details);
+
+	updateGameStripSummary(containerEl, session);
 }
 
 export function updateGameStripSummary(
@@ -232,52 +184,16 @@ export function updateGameStripSummary(
 	const state = session.getState();
 	const doc = containerEl.ownerDocument;
 
-	const line1 = containerEl.querySelector('[data-line="1"]');
-	if (line1) {
-		const roundSpan = line1.querySelector('[data-field="round"]');
-		if (roundSpan) roundSpan.textContent = String(state.round);
-
-		const countdownSpan = line1.querySelector('[data-field="countdown"]');
-		if (countdownSpan)
-			countdownSpan.textContent = String(state.complicationSchedule.countdown);
-
-		const packSpan = line1.querySelector('[data-field="pack"]');
-		if (packSpan) packSpan.textContent = state.activePackId;
-
-		const settingSpan = line1.querySelector('[data-field="setting"]');
-		if (settingSpan) settingSpan.textContent = state.setting;
-
-		const weatherSpan = line1.querySelector('[data-field="weather"]');
-		if (weatherSpan) weatherSpan.textContent = state.weather;
-
-		const timeSpan = line1.querySelector('[data-field="time-of-day"]');
-		if (timeSpan) timeSpan.textContent = state.timeOfDay;
-	}
-
-	const line2 = containerEl.querySelector('[data-line="2"]');
-	if (line2) {
-		const costSpan = line2.querySelector('[data-field="cost"]');
-		if (costSpan) costSpan.textContent = computeSpentUsd(state);
-
-		const satisfiedCount = state.objectives.filter((obj) =>
-			isSatisfied(obj, state),
-		).length;
-
-		const objSatisfiedSpan = line2.querySelector(
-			'[data-field="obj-satisfied"]',
-		);
-		if (objSatisfiedSpan) objSatisfiedSpan.textContent = String(satisfiedCount);
-
-		const objTotalSpan = line2.querySelector('[data-field="obj-total"]');
-		if (objTotalSpan)
-			objTotalSpan.textContent = String(state.objectives.length);
-
-		const complicationsSpan = line2.querySelector(
-			'[data-field="active-complications"]',
-		);
-		if (complicationsSpan)
-			complicationsSpan.textContent = String(state.activeComplications.length);
-	}
+	STRIP_LINES.forEach((segments, index) => {
+		const line = containerEl.querySelector(`[data-line="${index + 1}"]`);
+		if (!line) return;
+		for (const segment of segments) {
+			if (typeof segment === "string") continue;
+			const [field, value] = segment;
+			const span = line.querySelector(`[data-field="${field}"]`);
+			if (span) span.textContent = value(state);
+		}
+	});
 
 	const objectivesList = containerEl.querySelector('[data-list="objectives"]');
 	if (objectivesList) {
