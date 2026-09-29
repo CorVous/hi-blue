@@ -145,7 +145,7 @@ it hides the other routes' screens and shows or hides the global chrome
   parameter, grouped by concern: bootstrap loading and recovery, restore
   from storage, composer wiring, transcript painting, round dispatch, and
   the endgame. Other state that must outlive one entry (`session`,
-  `hydratedSessionId`, `hydratedEpoch`, `gameEndHandled`) stays at module
+  `hydratedSessionId`, `hydratedEpoch`, `hydratedLastSavedAt`, `gameEndHandled`) stays at module
   level.
 - **One context per page.** The route is re-entered without a reload:
   toggling the session picker, Escape, Load, the bootstrap handover and the
@@ -193,7 +193,7 @@ it hides the other routes' screens and shows or hides the global chrome
 
 ### Session cache and the active pointer
 
-- Module state: `session`, `hydratedSessionId`, `hydratedEpoch`.
+- Module state: `session`, `hydratedSessionId`, `hydratedEpoch`, `hydratedLastSavedAt`.
   `hydratedSessionId` is the id that `session` was loaded from. Clicking
   Load in the picker writes a new active id and re-enters this route without
   a page refresh. When the pointer has moved (`activePointerMoved`), the
@@ -201,6 +201,24 @@ it hides the other routes' screens and shows or hides the global chrome
   instead of re-rendering the old one.
 - `gameEndHandled` stops a second `game_ended` event from binding the endgame
   handlers again. It is reset whenever a session is set up.
+- **Two tabs on one session.** localStorage is shared by every tab of the
+  origin, but each tab caches its own `GameSession`. `hydratedLastSavedAt`
+  records the `meta.lastSavedAt` the cached session was loaded (or last
+  saved) with; the round save passes it as `expectedLastSavedAt`, so a save
+  from a tab that is behind is refused with `stale` instead of erasing the
+  other tab's rounds (persistence.md). A `storage` listener, added once per
+  page, notices another tab's writes under the cached session's directory.
+  It ignores them while a save is still in progress there (the `saving`
+  marker is present; the marker's removal fires the event that counts), and
+  when the stored `lastSavedAt` then differs it drops the cached session and
+  re-enters the route, which restores from storage without a warning. While
+  a round is in flight the listener does nothing: the round's save comes
+  back `stale`, and the view then paints nothing of that round, reloads from
+  storage and shows "This session changed in another tab — reloaded" in
+  `#persistence-warning`. The same reload and warning run at the end of a
+  round that failed, if the session changed meanwhile. The round played in
+  the tab that fell behind is lost, which is the point: only one tab's
+  history can survive, and the one already on disk wins.
 
 ### Bootstrap loading flow (`game-bootstrap-flow.ts`)
 
@@ -381,6 +399,24 @@ it hides the other routes' screens and shows or hides the global chrome
   Without that, each entry adds another click handler, and one click on
   download saves twice or one click on same daemons pays for two content-pack
   generations that race each other.
+- **A choice in flight survives re-entry.** `resetEndgameControls` runs on
+  every entry, so toggling the picker during a "same daemons" or "continue"
+  generation used to re-enable all three choices and clear the status,
+  inviting a second generation. `game-endgame.ts` keeps a module-level
+  `choiceInFlight` record (the ended session's id and the current status
+  text). While it names the ended session being shown, `showEndgame` keeps the
+  choices disabled and repaints the status. `runChoice` sets it on click and
+  clears it when the choice settles, whatever the exit path; a failed choice
+  clears it before enabling the buttons. The buttons and the status line are
+  looked up by selector each time, because the entry that started the choice
+  may have had its buttons replaced by clones since.
+- **Diagnostics submit once.** The submit button and the summary input are
+  disabled before the `fetch`, so a double or triple click sends one POST.
+  Re-entering the endgame enables them again.
+- **Continue follows the stored key both ways.** On every entry
+  `continueBtn.hidden` is set from `readStoredByokKey()`, so clearing the key
+  in the BYOK dialog hides Continue at the next entry. It used to be only
+  ever shown.
 - **Reloading a finished game.** A restored session with `isComplete` goes
   straight to the endgame screen. Mounting it as a playable round would let the
   player send another round into a finished game. The active pointer is kept,
@@ -440,6 +476,13 @@ it hides the other routes' screens and shows or hides the global chrome
   the player left is not reported on the session they are now looking at.
   `enterEndgame` takes the ended session's id from its caller for the same
   reason, instead of reading the active pointer.
+- **A failed round gives the message back.** `beginRound` resets the prompt
+  to `*<addressee> ` and paints the player's `.msg-you` line before the round
+  runs. When the round throws (in the session the player is still on), the
+  line is removed, since the round never happened, and the prompt gets
+  `*<addressee> <message>` back so the player can resend it. The prompt is
+  only restored while it still holds exactly the reset prefix, so anything
+  the player typed during the round is kept.
 - **Round errors (#231).** Failures other than `CapHitError` (a transient
   upstream 502/503/504, a dropped network connection, a malformed response)
   used to stop the round with no sign in the UI. They now show `#round-error`

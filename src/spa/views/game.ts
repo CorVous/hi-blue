@@ -150,6 +150,11 @@ interface RoundDraft {
 	message: string;
 }
 
+interface SubmittedDraft {
+	promptPrefix: string;
+	playerLine: HTMLElement | null;
+}
+
 interface RoundOutcome {
 	gameEnded: boolean;
 }
@@ -770,12 +775,13 @@ function appendTranscriptLine(
 	aiId: AiId,
 	text: string,
 	nonMentionClass?: string,
-): void {
+): HTMLElement | null {
 	const el = getTranscriptEl(doc, aiId);
-	if (!el) return;
+	if (!el) return null;
 	const line = openMsgLine(el);
 	appendMentionAwareText(line, text, currentPersonas(), nonMentionClass);
 	scrollTranscriptToBottom(el);
+	return line;
 }
 
 function updateBudget(doc: Document, aiId: AiId, remaining: number): void {
@@ -807,7 +813,7 @@ async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 		sessionId: hydratedSessionId,
 		lastSavedAt: hydratedLastSavedAt,
 	};
-	beginRound(ctx, activeSession, draft);
+	const submitted = beginRound(ctx, activeSession, draft);
 
 	const aiIds = Object.keys(activeSession.getState().personas);
 	const spinners = startRoundSpinners(ctx.doc, aiIds);
@@ -820,7 +826,10 @@ async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 			outcome,
 		});
 	} catch (err) {
-		if (!playerLeftRoundSession(owner)) reportRoundFailure(ctx, err);
+		if (!playerLeftRoundSession(owner)) {
+			reportRoundFailure(ctx, err);
+			restoreFailedDraft(ctx, draft, submitted);
+		}
 	} finally {
 		spinners.stripAll();
 		ctx.roundInFlight = false;
@@ -833,6 +842,19 @@ async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 			reloadChangedSession(ctx, { warn: true });
 		}
 	}
+}
+
+function restoreFailedDraft(
+	ctx: GameViewContext,
+	draft: RoundDraft,
+	submitted: SubmittedDraft,
+): void {
+	submitted.playerLine?.remove();
+	const promptStillHoldsResetPrefix =
+		ctx.promptInput.value === submitted.promptPrefix;
+	if (!promptStillHoldsResetPrefix) return;
+	ctx.promptInput.value = `${submitted.promptPrefix}${draft.message}`;
+	refreshComposerState(ctx);
 }
 
 function readSendableDraft(
@@ -862,7 +884,7 @@ function beginRound(
 	ctx: GameViewContext,
 	activeSession: GameSession,
 	draft: RoundDraft,
-): void {
+): SubmittedDraft {
 	const { doc, promptInput } = ctx;
 	ctx.roundInFlight = true;
 	ctx.sendBtn.disabled = true;
@@ -879,7 +901,13 @@ function beginRound(
 	promptInput.focus();
 	refreshComposerState(ctx);
 
-	appendTranscriptLine(doc, draft.addressee, `> ${draft.message}\n`, "msg-you");
+	const playerLine = appendTranscriptLine(
+		doc,
+		draft.addressee,
+		`> ${draft.message}\n`,
+		"msg-you",
+	);
+	return { promptPrefix: addresseePrefix, playerLine };
 }
 
 function setRoundInFlightMarker(doc: Document, inFlight: boolean): void {
