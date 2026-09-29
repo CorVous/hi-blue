@@ -203,10 +203,14 @@ export function saveActiveSession(
 		return { ok: false, reason: "unknown" };
 	}
 
+	const markerKey = savingMarkerKey(SESSIONS_PREFIX, sessionId);
+	let markerWritten = false;
+	let anyDataKeyWritten = false;
 	try {
-		const markerKey = savingMarkerKey(SESSIONS_PREFIX, sessionId);
 		localStorage.setItem(markerKey, now);
+		markerWritten = true;
 		localStorage.setItem(metaKey(SESSIONS_PREFIX, sessionId), files.meta);
+		anyDataKeyWritten = true;
 
 		for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 			localStorage.setItem(
@@ -221,6 +225,9 @@ export function saveActiveSession(
 
 		return { ok: true };
 	} catch (err) {
+		if (markerWritten && !anyDataKeyWritten) {
+			ignoringStorageErrors(() => localStorage.removeItem(markerKey));
+		}
 		if (err instanceof DOMException) {
 			const name = err.name;
 			if (

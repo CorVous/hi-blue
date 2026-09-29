@@ -27,9 +27,12 @@ Each session is a set of localStorage keys under one prefix:
     `sessions/<id>/saving`, then the three files, and removes the marker last.
     A present marker means a save was interrupted, and the loader reports the
     session as `broken` (without it, new meta and daemons beside the previous
-    `engine.dat` would load as `ok`). If the marker write itself fails, which
-    is the common quota case, nothing else has been touched: the error is
-    reported and the previous save still loads as `ok`. `archiveSession`
+    `engine.dat` would load as `ok`). If a write fails before any data key
+    has been written (the marker write itself, or `meta.json` right after
+    it), nothing but the marker has been touched: the save removes the
+    marker (best effort), reports the error, and the previous save still
+    loads as `ok`. Once `meta.json` has been written, the marker stays and
+    the session loads as `broken`. `archiveSession`
     refuses a source that carries the marker. Only `.txt` keys count as
     daemon files, so the marker is never listed as one or copied by
     `dupSession` or `archiveSession`.

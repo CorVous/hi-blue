@@ -237,7 +237,6 @@ describe("saveActiveSession", () => {
 	});
 
 	it.each([
-		"meta.json",
 		".txt",
 		"engine.dat",
 	])("a re-save that fails writing %s leaves the session broken, not the old engine", (failingSuffix) => {
@@ -255,6 +254,27 @@ describe("saveActiveSession", () => {
 		const result = saveActiveSession(makeFreshGame());
 		expect(result).toEqual({ ok: false, reason: "quota" });
 		expect(loadActiveSession().kind).toBe("broken");
+	});
+
+	it("a re-save that fails writing meta.json removes the marker and leaves the old save ok", () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		const game = makeFreshGame();
+		expect(saveActiveSession(game).ok).toBe(true);
+		const before = { ...stub._store };
+
+		stub.setItem.mockImplementation((key: string, value: string) => {
+			if (key.endsWith("meta.json")) {
+				throw new DOMException("quota", "QuotaExceededError");
+			}
+			stub._store[key] = value;
+		});
+		const result = saveActiveSession(game);
+		expect(result).toEqual({ ok: false, reason: "quota" });
+		expect(stub._store[`${SESSIONS_PREFIX}${id}/saving`]).toBeUndefined();
+		expect(stub._store).toEqual(before);
+		expect(loadActiveSession().kind).toBe("ok");
+		expect(getSessionInfo(id).kind).toBe("ok");
 	});
 
 	it("a re-save that fails writing the saving marker leaves the old save ok", () => {
