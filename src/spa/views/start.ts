@@ -1,8 +1,10 @@
 import {
 	getPendingBootstrap,
+	type PendingBootstrap,
 	startBootstrap,
 } from "../game/pending-bootstrap.js";
 import { getSpikeRng, setSpikeSeed } from "../game/spike-seed.js";
+import { CapHitError, upstreamMessageOf } from "../llm-client.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
 import {
 	renderReasonBanner,
@@ -233,6 +235,17 @@ function abortPreviousRender(): AbortSignal {
 	return _previousRender.signal;
 }
 
+function bootstrapFailureText(err: unknown): string {
+	const upstreamMessage = upstreamMessageOf(err);
+	return upstreamMessage === null
+		? "> the daemons failed to wake"
+		: `> the daemons failed to wake (${upstreamMessage})`;
+}
+
+function logBootstrapFailure(err: unknown): void {
+	console.error("[start] generation failed", err);
+}
+
 function formatUptime(elapsedMs: number): string {
 	const safe = Math.max(0, Math.floor(elapsedMs / 1000));
 	const days = Math.floor(safe / 86400);
@@ -364,12 +377,93 @@ export function renderStart(
 		revealLogin();
 	}
 
+	const seedRaw = searchParams.get("seed");
+	const seedNum = seedRaw !== null ? Number(seedRaw) : Number.NaN;
+	if (Number.isFinite(seedNum)) {
+		setSpikeSeed(seedNum | 0);
+	}
+
+	const engagementClauses =
+		searchParams.get("engagementClauses") === ENGAGEMENT_CLAUSES_ON;
+	const actionProfilesDisabled =
+		searchParams.get("actionProfiles") === ACTION_PROFILES_OFF;
+
+	const personasRng = getSpikeRng("personas");
+	const contentPackRng = getSpikeRng("contentPack");
+	const spikeOpts =
+		personasRng && contentPackRng ? { personasRng, contentPackRng } : undefined;
+	const engagementOpts = engagementClauses
+		? { engagementClauses: true }
+		: undefined;
+	const actionProfileOpts = actionProfilesDisabled
+		? { actionProfiles: false }
+		: undefined;
+	const mergedOpts =
+		spikeOpts || engagementOpts || actionProfileOpts
+			? { ...spikeOpts, ...engagementOpts, ...actionProfileOpts }
+			: undefined;
+
+	const bootstrapErrorEl = doc.querySelector<HTMLElement>(
+		"#start-bootstrap-error",
+	);
+	const bootstrapErrorTextEl = doc.querySelector<HTMLElement>(
+		"#start-bootstrap-error-text",
+	);
+	const bootstrapRetryBtn = doc.querySelector<HTMLButtonElement>(
+		"#start-bootstrap-retry",
+	);
+	const hideBootstrapError = () => {
+		bootstrapErrorEl?.setAttribute("hidden", "");
+	};
+	const showBootstrapError = (err: unknown) => {
+		if (!bootstrapErrorEl) return;
+		if (bootstrapErrorTextEl) {
+			bootstrapErrorTextEl.textContent = bootstrapFailureText(err);
+		}
+		bootstrapErrorEl.removeAttribute("hidden");
+	};
+	hideBootstrapError();
+
+	const watchGeneration = (bootstrap: PendingBootstrap): Promise<void> =>
+		Promise.all([
+			bootstrap.personasPromise,
+			bootstrap.contentPacksPromise,
+		]).then(
+			() => undefined,
+			(err: unknown) => {
+				const superseded = getPendingBootstrap() !== bootstrap;
+				const startVisible = startScreenEl ? !startScreenEl.hidden : false;
+				if (!superseded && startVisible) {
+					if (err instanceof CapHitError) {
+						const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
+						if (capHitEl) capHitEl.removeAttribute("hidden");
+						if (startScreenEl) startScreenEl.setAttribute("hidden", "");
+					} else {
+						showBootstrapError(err);
+					}
+				}
+				throw err;
+			},
+		);
+
+	const restartFailedGeneration = () => {
+		hideBootstrapError();
+		watchGeneration(startBootstrap(mergedOpts)).catch(logBootstrapFailure);
+	};
+
+	if (bootstrapRetryBtn) {
+		bootstrapRetryBtn.addEventListener("click", restartFailedGeneration, {
+			signal,
+		});
+	}
+
 	const proceedConnect = () => {
 		if (_connectSubmitInFlight) return;
 		_connectSubmitInFlight = true;
 		beginBtn.disabled = true;
 		if (pwEl) pwEl.disabled = true;
 		clearError();
+		if (getPendingBootstrap()?.status === "failed") restartFailedGeneration();
 		renderApp(root);
 	};
 
@@ -393,50 +487,5 @@ export function renderStart(
 	if (formEl) formEl.addEventListener("submit", handleSubmit, { signal });
 	beginBtn.addEventListener("click", handleSubmit, { signal });
 
-	const seedRaw = searchParams.get("seed");
-	const seedNum = seedRaw !== null ? Number(seedRaw) : Number.NaN;
-	if (Number.isFinite(seedNum)) {
-		setSpikeSeed(seedNum | 0);
-	}
-
-	const engagementClauses =
-		searchParams.get("engagementClauses") === ENGAGEMENT_CLAUSES_ON;
-	const actionProfilesDisabled =
-		searchParams.get("actionProfiles") === ACTION_PROFILES_OFF;
-
-	const existing = getPendingBootstrap();
-	const personasRng = getSpikeRng("personas");
-	const contentPackRng = getSpikeRng("contentPack");
-	const spikeOpts =
-		personasRng && contentPackRng ? { personasRng, contentPackRng } : undefined;
-	const engagementOpts = engagementClauses
-		? { engagementClauses: true }
-		: undefined;
-	const actionProfileOpts = actionProfilesDisabled
-		? { actionProfiles: false }
-		: undefined;
-	const mergedOpts =
-		spikeOpts || engagementOpts || actionProfileOpts
-			? { ...spikeOpts, ...engagementOpts, ...actionProfileOpts }
-			: undefined;
-	const bootstrap = existing ?? startBootstrap(mergedOpts);
-
-	const generationPromise = (async () => {
-		try {
-			await Promise.all([
-				bootstrap.personasPromise,
-				bootstrap.contentPacksPromise,
-			]);
-		} catch (err) {
-			const startVisible = startScreenEl ? !startScreenEl.hidden : false;
-			if (startVisible) {
-				const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
-				if (capHitEl) capHitEl.removeAttribute("hidden");
-				if (startScreenEl) startScreenEl.setAttribute("hidden", "");
-			}
-			throw err;
-		}
-	})();
-
-	return generationPromise;
+	return watchGeneration(startBootstrap(mergedOpts));
 }

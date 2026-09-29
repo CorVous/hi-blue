@@ -2497,6 +2497,103 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		expect(bodyEl?.textContent).toContain("the world generation timed out");
 	});
 
+	it("aborts the stalled bootstrap and marks it failed when the timeout fires", async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		let bootstrapSignal: AbortSignal | undefined;
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: (opts?: { signal?: AbortSignal }) => {
+					bootstrapSignal = opts?.signal;
+					return {
+						personasPromise: new Promise(() => {}),
+						contentPacksPromise: new Promise(() => {}),
+					};
+				},
+			};
+		});
+
+		vi.resetModules();
+		installLocalStorageStub();
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap, getPendingBootstrap } = await import(
+			"../game/pending-bootstrap.js"
+		);
+		const stalled = startBootstrap();
+
+		const { renderGame, BOOTSTRAP_LOADING_TIMEOUT_MS } = await import(
+			"../views/game.js"
+		);
+		const renderPromise = renderGame(getEl<HTMLElement>("main"));
+		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+		await renderPromise;
+
+		expect(bootstrapSignal?.aborted).toBe(true);
+		expect((bootstrapSignal?.reason as Error).name).toBe(
+			"BootstrapTimeoutError",
+		);
+		expect(stalled.status).toBe("failed");
+		expect(getPendingBootstrap()).toBe(stalled);
+	});
+
+	it("names the upstream error in the recovery copy", async () => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			const { HttpStatusError } = await import("../llm-client.js");
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => ({
+					personasPromise: Promise.resolve(STATIC_PERSONAS),
+					contentPacksPromise: Promise.reject(
+						new HttpStatusError({
+							status: 402,
+							statusText: "Payment Required",
+							upstreamMessage: "Insufficient credits",
+							retryAfterSec: null,
+						}),
+					),
+				}),
+			};
+		});
+
+		vi.resetModules();
+		installLocalStorageStub();
+
+		const { mintAndActivateNewSession } = await import(
+			"../persistence/session-storage.js"
+		);
+		mintAndActivateNewSession();
+
+		const { startBootstrap } = await import("../game/pending-bootstrap.js");
+		startBootstrap();
+
+		const { renderGame } = await import("../views/game.js");
+		await renderGame(getEl<HTMLElement>("main"));
+
+		expect(
+			document.querySelector("#bootstrap-recovery")?.hasAttribute("hidden"),
+		).toBe(false);
+		expect(
+			document.querySelector("#bootstrap-recovery-body")?.textContent,
+		).toContain("HTTP 402: Insufficient credits");
+	});
+
 	it("hides #bootstrap-recovery when bootstrap promise resolves after timeout has fired", async () => {
 		vi.useFakeTimers();
 		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");

@@ -32,44 +32,71 @@ const PENDING_CALL_RETRY_MAX = 3;
 
 let currentBootstrap: PendingBootstrap | undefined;
 let currentCallMeta: PendingCallMeta = {};
+const abortControllers = new WeakMap<PendingBootstrap, AbortController>();
+
+function isCurrent(entry: PendingBootstrap): boolean {
+	return currentBootstrap === entry;
+}
+
+function markFailed(entry: PendingBootstrap, err: unknown): void {
+	if (entry.status === "failed") return;
+	entry.status = "failed";
+	entry.error = err;
+	if (isCurrent(entry)) recordPendingRetry(err);
+}
+
+function watchContentPacks(entry: PendingBootstrap): void {
+	entry.contentPacksPromise.then(
+		() => {
+			if (entry.status !== "failed") entry.status = "ready";
+		},
+		(err: unknown) => markFailed(entry, err),
+	);
+}
+
+function install(
+	entry: PendingBootstrap,
+	controller: AbortController,
+): PendingBootstrap {
+	const previous = currentBootstrap;
+	currentBootstrap = entry;
+	abortControllers.set(entry, controller);
+	if (previous && previous !== entry) {
+		abortControllers.get(previous)?.abort();
+	}
+	return entry;
+}
 
 export function startBootstrap(opts?: BootstrapOpts): PendingBootstrap {
 	if (currentBootstrap && currentBootstrap.status !== "failed")
 		return currentBootstrap;
 
-	const split: SplitNewGameAssets = generateNewGameAssetsSplit(opts);
+	const controller = new AbortController();
+	const split: SplitNewGameAssets = generateNewGameAssetsSplit({
+		...opts,
+		signal: controller.signal,
+	});
 	const entry: PendingBootstrap = {
 		personasPromise: split.personasPromise,
 		contentPacksPromise: split.contentPacksPromise,
 		status: "pending",
 	};
 
+	install(entry, controller);
 	recordPendingCall("persona-synthesis");
 
 	split.personasPromise.then(
 		(personas) => {
 			entry.personas = personas;
 			if (entry.status === "pending") entry.status = "personas-ready";
-			recordPendingCall("content-pack");
+			if (isCurrent(entry) && entry.status !== "failed") {
+				recordPendingCall("content-pack");
+			}
 		},
-		(err: unknown) => {
-			entry.status = "failed";
-			entry.error = err;
-			recordPendingRetry(err);
-		},
+		(err: unknown) => markFailed(entry, err),
 	);
-	split.contentPacksPromise.then(
-		() => {
-			entry.status = "ready";
-		},
-		(err: unknown) => {
-			entry.status = "failed";
-			entry.error = err;
-			recordPendingRetry(err);
-		},
-	);
+	watchContentPacks(entry);
 
-	currentBootstrap = entry;
 	return entry;
 }
 
@@ -87,9 +114,10 @@ export function restartContentPacks(): PendingBootstrap {
 		return startBootstrap();
 	}
 
-	recordPendingCall("content-pack");
-
-	const split = generateContentPacksOnlySplit(cached);
+	const controller = new AbortController();
+	const split = generateContentPacksOnlySplit(cached, {
+		signal: controller.signal,
+	});
 	const entry: PendingBootstrap = {
 		personasPromise: split.personasPromise,
 		contentPacksPromise: split.contentPacksPromise,
@@ -97,24 +125,26 @@ export function restartContentPacks(): PendingBootstrap {
 		personas: cached,
 	};
 
-	split.contentPacksPromise.then(
-		() => {
-			entry.status = "ready";
-		},
-		(err: unknown) => {
-			entry.status = "failed";
-			entry.error = err;
-			recordPendingRetry(err);
-		},
-	);
+	install(entry, controller);
+	recordPendingCall("content-pack");
+	watchContentPacks(entry);
 
-	currentBootstrap = entry;
 	return entry;
 }
 
+export function failPendingBootstrap(
+	entry: PendingBootstrap,
+	reason: unknown,
+): void {
+	markFailed(entry, reason);
+	abortControllers.get(entry)?.abort(reason);
+}
+
 export function clearPendingBootstrap(): void {
+	const cleared = currentBootstrap;
 	currentBootstrap = undefined;
 	clearPendingCallMeta();
+	if (cleared) abortControllers.get(cleared)?.abort();
 }
 
 export function recordPendingCall(callName: string): void {

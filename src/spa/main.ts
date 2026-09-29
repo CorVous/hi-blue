@@ -35,7 +35,13 @@ if (!rootEl) {
 	throw new Error('main: root element "main" not found');
 }
 
-renderApp(rootEl);
+function renderAppLoggingFailures(root: HTMLElement): void {
+	Promise.resolve(renderApp(root)).catch((err: unknown) => {
+		console.error("[main] render failed", err);
+	});
+}
+
+renderAppLoggingFailures(rootEl);
 initByokModal();
 
 const sessionsIconBtn =
@@ -43,7 +49,7 @@ const sessionsIconBtn =
 if (sessionsIconBtn) {
 	sessionsIconBtn.addEventListener("click", () => {
 		togglePickerOpen();
-		renderApp(rootEl);
+		renderAppLoggingFailures(rootEl);
 	});
 }
 
@@ -61,5 +67,5 @@ document.addEventListener("keydown", (e) => {
 	if (byokDialog?.open) return;
 	if (isTypingInVisibleField(e.target)) return;
 	setPickerOpen(false);
-	renderApp(rootEl);
+	renderAppLoggingFailures(rootEl);
 });

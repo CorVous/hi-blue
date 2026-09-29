@@ -238,6 +238,56 @@ test("an upstream provider 429 during generation is retried, not shown as #cap-h
 	await expectNoPageErrors(page, pageErrors);
 });
 
+test("a non-cap generation failure shows a retryable error on the start screen, not #cap-hit", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await stubNewGameLLM(page, { sse: ["stub reply"] });
+
+	let rejectSynthesis = true;
+	let synthesisRequests = 0;
+	await page.route("**/v1/chat/completions", async (route, request) => {
+		const body = parseRequestBody(request);
+		const isSynthesis =
+			isJsonModeRequest(body) && classifyJsonRequest(body) === "synthesis";
+		if (isSynthesis) synthesisRequests += 1;
+		if (isSynthesis && rejectSynthesis) {
+			await route.fulfill({
+				status: 401,
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					error: { message: "No auth credentials found", code: 401 },
+				}),
+			});
+			return;
+		}
+		await route.fallback();
+	});
+
+	await page.goto("/?skipDialup=1");
+
+	const errorEl = page.locator("#start-bootstrap-error");
+	await expect(errorEl).toBeVisible({ timeout: 10_000 });
+	await expect(errorEl).toContainText("HTTP 401: No auth credentials found");
+	await expect(page.locator("#cap-hit")).toBeHidden();
+	await expect(page.locator("#start-screen")).toBeVisible();
+	expect(synthesisRequests).toBe(1);
+
+	rejectSynthesis = false;
+	await page.locator("#start-bootstrap-retry").click();
+	await expect(errorEl).toBeHidden();
+
+	await page.locator("#password").fill("password");
+	await page.locator("#begin").click();
+	await expect(page.locator("#composer")).toBeVisible({ timeout: 15_000 });
+	await expect(page.locator("#prompt")).toBeEnabled({ timeout: 15_000 });
+	expect(synthesisRequests).toBe(2);
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
 test("refresh during generation re-enters start screen and restarts generation", async ({
 	page,
 }) => {

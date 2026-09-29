@@ -41,6 +41,7 @@ import {
 } from "../game/mention-parser.js";
 import {
 	clearPendingBootstrap,
+	failPendingBootstrap,
 	getPendingBootstrap,
 	type PendingBootstrap,
 	restartContentPacks,
@@ -61,7 +62,7 @@ import type {
 	ConversationEntry,
 	GameState,
 } from "../game/types";
-import { CapHitError } from "../llm-client.js";
+import { CapHitError, upstreamMessageOf } from "../llm-client.js";
 import {
 	clearActiveSession,
 	deactivateActiveSession,
@@ -990,10 +991,14 @@ function hideRoundError(doc: Document): void {
 	roundErrorEl.setAttribute("hidden", "");
 }
 
-function showRoundError(doc: Document): void {
+function showRoundError(doc: Document, err: unknown): void {
 	const roundErrorEl = doc.querySelector<HTMLOutputElement>("#round-error");
 	if (!roundErrorEl) return;
-	roundErrorEl.textContent = "the daemons stuttered — try again";
+	const upstreamMessage = upstreamMessageOf(err);
+	roundErrorEl.textContent =
+		upstreamMessage === null
+			? "the daemons stuttered — try again"
+			: `the daemons stuttered (${upstreamMessage}) — try again`;
 	roundErrorEl.removeAttribute("hidden");
 }
 
@@ -1194,7 +1199,7 @@ function reportRoundFailure(ctx: GameViewContext, err: unknown): void {
 		return;
 	}
 	ctx.connectionUnstable = true;
-	showRoundError(ctx.doc);
+	showRoundError(ctx.doc, err);
 }
 
 function enterEndgame(
@@ -1222,11 +1227,16 @@ class BootstrapTimeoutError extends Error {
 	}
 }
 
-function withBootstrapTimeout<T>(work: Promise<T>): Promise<T> {
+function withBootstrapTimeout<T>(
+	work: Promise<T>,
+	onTimeout: (err: BootstrapTimeoutError) => void,
+): Promise<T> {
 	let timeoutId: ReturnType<typeof setTimeout> | undefined;
 	const timeout = new Promise<never>((_resolve, reject) => {
 		timeoutId = setTimeout(() => {
-			reject(new BootstrapTimeoutError());
+			const err = new BootstrapTimeoutError();
+			onTimeout(err);
+			reject(err);
 		}, BOOTSTRAP_LOADING_TIMEOUT_MS);
 	});
 	return Promise.race([work, timeout]).finally(() => {
@@ -1338,7 +1348,9 @@ function runBootstrapChain(
 		})
 		.then((assets) => handOverBootstrappedSession(ctx, flow, assets));
 
-	return withBootstrapTimeout(bootstrapPromise);
+	return withBootstrapTimeout(bootstrapPromise, (err) =>
+		failPendingBootstrap(pending, err),
+	);
 }
 
 function enterGeneratingRoom(
@@ -1497,37 +1509,20 @@ function handleBootstrapFailure(
 		return;
 	}
 
-	showBootstrapRecovery(ctx, flow, err instanceof BootstrapTimeoutError);
+	showBootstrapRecovery(ctx, flow, err);
 }
 
 function showBootstrapRecovery(
 	ctx: GameViewContext,
 	flow: LoadingFlow,
-	timedOut: boolean,
+	err: unknown,
 ): void {
 	const { doc, root } = ctx;
 	const recoveryEl = doc.querySelector<HTMLElement>("#bootstrap-recovery");
-	const recoveryTitleEl = doc.querySelector<HTMLElement>(
-		"#bootstrap-recovery-title",
-	);
-	const recoveryBodyEl = doc.querySelector<HTMLElement>(
-		"#bootstrap-recovery-body",
-	);
-
-	const recoveryUiMissing = !recoveryEl || !recoveryTitleEl || !recoveryBodyEl;
+	const recoveryUiMissing = !recoveryEl || !paintRecoveryCopy(doc, err);
 	if (recoveryUiMissing) {
 		abandonBootstrap(root);
 		return;
-	}
-
-	if (timedOut) {
-		recoveryTitleEl.textContent = "the room is taking too long";
-		recoveryBodyEl.textContent =
-			"the world generation timed out. try regenerating with the same daemons, or abandon and reconnect.";
-	} else {
-		recoveryTitleEl.textContent = "the room collapsed";
-		recoveryBodyEl.textContent =
-			"the world we tried to build was malformed. try regenerating with the same daemons, or abandon and reconnect.";
 	}
 
 	flow.blockedBy = "recovery";
@@ -1537,6 +1532,26 @@ function showBootstrapRecovery(
 
 	wireRegenerateButton(ctx, flow, recoveryEl);
 	wireAbandonLink(root);
+}
+
+function paintRecoveryCopy(doc: Document, err: unknown): boolean {
+	const titleEl = doc.querySelector<HTMLElement>("#bootstrap-recovery-title");
+	const bodyEl = doc.querySelector<HTMLElement>("#bootstrap-recovery-body");
+	if (!titleEl || !bodyEl) return false;
+	const nextSteps =
+		"try regenerating with the same daemons, or abandon and reconnect.";
+	const upstreamMessage = upstreamMessageOf(err);
+	if (err instanceof BootstrapTimeoutError) {
+		titleEl.textContent = "the room is taking too long";
+		bodyEl.textContent = `the world generation timed out. ${nextSteps}`;
+	} else if (upstreamMessage !== null) {
+		titleEl.textContent = "the room collapsed";
+		bodyEl.textContent = `the model answered with an error (${upstreamMessage}). ${nextSteps}`;
+	} else {
+		titleEl.textContent = "the room collapsed";
+		bodyEl.textContent = `the world we tried to build was malformed. ${nextSteps}`;
+	}
+	return true;
 }
 
 function abandonBootstrap(root: HTMLElement): void {
@@ -1608,6 +1623,7 @@ function showRegenerateFailure(
 		setGameSurfaceHidden(ctx.doc, true);
 		return;
 	}
+	paintRecoveryCopy(ctx.doc, regenErr);
 	flow.blockedBy = "recovery";
 	recoveryEl.removeAttribute("hidden");
 	setGameSurfaceHidden(ctx.doc, true);

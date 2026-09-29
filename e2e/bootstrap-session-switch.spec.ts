@@ -68,12 +68,21 @@ test("a timed-out loading flow that succeeds after the player abandoned it does 
 	await page.clock.install();
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 	const contentPacks = await holdContentPacks(page);
+	let abortedContentPackRequests = 0;
+	page.on("requestfailed", (request) => {
+		if (
+			classifyJsonRequest(parseRequestBody(request)) === "dual-content-pack"
+		) {
+			abortedContentPackRequests++;
+		}
+	});
 	await page.goto("/?skipDialup=1");
 	await connect(page);
 	await expect.poll(contentPacks.requestCount).toBeGreaterThan(0);
 
 	await page.clock.fastForward(BOOTSTRAP_LOADING_TIMEOUT_MS + 1_000);
 	await expect(page.locator("#bootstrap-recovery")).toBeVisible();
+	await expect.poll(() => abortedContentPackRequests).toBe(1);
 	await page.locator("#bootstrap-recovery-abandon").click();
 	await expect(page.locator('main[data-view="start"]')).toBeAttached();
 

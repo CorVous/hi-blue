@@ -29,6 +29,10 @@ const INDEX_BODY_HTML = `
         </div>
         <output id="login-error" hidden></output>
       </form>
+      <div id="start-bootstrap-error" hidden>
+        <span id="start-bootstrap-error-text"></span>
+        <button id="start-bootstrap-retry" type="button">[ retry ]</button>
+      </div>
       <pre id="login-postlog" class="dial"></pre>
     </div>
   </section>
@@ -296,6 +300,133 @@ describe("renderStart — CapHitError handling", () => {
 
 		expect(capHitEl?.hasAttribute("hidden")).toBe(false);
 		expect(startScreenEl?.hidden).toBe(true);
+	});
+});
+
+describe("renderStart — generation failures that are not the spend cap", () => {
+	beforeEach(() => {
+		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
+		vi.stubGlobal("__DEV__", true);
+		document.body.innerHTML = INDEX_BODY_HTML;
+		installLocalStorageStub();
+	});
+
+	afterEach(() => {
+		vi.doUnmock("../game/bootstrap.js");
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+		vi.resetModules();
+		document.body.innerHTML = "";
+	});
+
+	async function importStartWithSplits(
+		splits: Array<
+			() => {
+				personasPromise: Promise<unknown>;
+				contentPacksPromise: Promise<unknown>;
+			}
+		>,
+	) {
+		vi.resetModules();
+		const calls = { count: 0 };
+		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
+			const actual =
+				await importOriginal<typeof import("../game/bootstrap.js")>();
+			return {
+				...actual,
+				generateNewGameAssetsSplit: () => {
+					const make = splits[Math.min(calls.count, splits.length - 1)];
+					calls.count++;
+					if (!make) throw new Error("no split scripted");
+					return make();
+				},
+			};
+		});
+		const { renderStart } = await import("../views/start.js");
+		const pending = await import("../game/pending-bootstrap.js");
+		return { renderStart, pending, calls };
+	}
+
+	function rejectedSplit(err: unknown) {
+		return () => ({
+			personasPromise: Promise.reject(err),
+			contentPacksPromise: Promise.reject(err),
+		});
+	}
+
+	const hangingSplit = () => ({
+		personasPromise: new Promise<never>(() => {}),
+		contentPacksPromise: new Promise<never>(() => {}),
+	});
+
+	it("shows a retryable error with the upstream message, not #cap-hit", async () => {
+		let failure: unknown;
+		const { renderStart } = await importStartWithSplits([
+			() => rejectedSplit(failure)(),
+		]);
+		const { HttpStatusError } = await import("../llm-client.js");
+		failure = new HttpStatusError({
+			status: 401,
+			statusText: "Unauthorized",
+			upstreamMessage: "No auth credentials found",
+			retryAfterSec: null,
+		});
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		const errorEl = document.querySelector<HTMLElement>(
+			"#start-bootstrap-error",
+		);
+		expect(errorEl?.hidden).toBe(false);
+		expect(
+			document.querySelector("#start-bootstrap-error-text")?.textContent,
+		).toContain("HTTP 401: No auth credentials found");
+		expect(document.querySelector("#cap-hit")?.hasAttribute("hidden")).toBe(
+			true,
+		);
+		expect(document.querySelector<HTMLElement>("#start-screen")?.hidden).toBe(
+			false,
+		);
+	});
+
+	it("retry starts a fresh bootstrap and hides the error", async () => {
+		const { renderStart, pending, calls } = await importStartWithSplits([
+			rejectedSplit(new Error("network down")),
+			hangingSplit,
+		]);
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		const failed = pending.getPendingBootstrap();
+		expect(failed?.status).toBe("failed");
+
+		document
+			.querySelector<HTMLButtonElement>("#start-bootstrap-retry")
+			?.click();
+
+		expect(calls.count).toBe(2);
+		expect(pending.getPendingBootstrap()).not.toBe(failed);
+		expect(
+			document.querySelector<HTMLElement>("#start-bootstrap-error")?.hidden,
+		).toBe(true);
+	});
+
+	it("rendering the start screen again restarts a bootstrap that failed", async () => {
+		const { renderStart, pending, calls } = await importStartWithSplits([
+			rejectedSplit(new Error("network down")),
+			hangingSplit,
+		]);
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		const failed = pending.getPendingBootstrap();
+
+		void renderStart(getMain());
+
+		expect(calls.count).toBe(2);
+		expect(pending.getPendingBootstrap()).not.toBe(failed);
+		expect(pending.getPendingBootstrap()?.status).toBe("pending");
 	});
 });
 

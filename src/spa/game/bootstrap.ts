@@ -33,6 +33,30 @@ export interface BootstrapOpts {
 	contentPackRng?: () => number;
 	engagementClauses?: boolean;
 	actionProfiles?: boolean;
+	signal?: AbortSignal;
+}
+
+function signalOpt(signal: AbortSignal | undefined): { signal?: AbortSignal } {
+	return signal !== undefined ? { signal } : {};
+}
+
+async function generateContentPacks(
+	rng: () => number,
+	packLLM: ContentPackProvider,
+	aiIds: Promise<string[]>,
+): Promise<{
+	packsA: ContentPack[];
+	packsB: ContentPack[];
+	objectiveTypes: ObjectiveType[];
+}> {
+	const { packA, packB, objectiveTypes } = await generateDualContentPacks(
+		rng,
+		SETTING_POOL,
+		SINGLE_GAME_CONFIG,
+		packLLM,
+		aiIds,
+	);
+	return { packsA: [packA], packsB: [packB], objectiveTypes };
 }
 
 function suppressUnhandledRejection(promise: Promise<unknown>): void {
@@ -45,8 +69,11 @@ export function generateNewGameAssetsSplit(
 	const fallbackRng = opts?.rng ?? Math.random;
 	const personasRng = opts?.personasRng ?? fallbackRng;
 	const contentPackRng = opts?.contentPackRng ?? fallbackRng;
-	const synth = opts?.synthesis ?? new BrowserSynthesisProvider();
-	const packLLM = opts?.packProvider ?? new BrowserContentPackProvider();
+	const synth =
+		opts?.synthesis ?? new BrowserSynthesisProvider(signalOpt(opts?.signal));
+	const packLLM =
+		opts?.packProvider ??
+		new BrowserContentPackProvider(signalOpt(opts?.signal));
 
 	const personasPromise = generatePersonas(personasRng, synth, {
 		engagementClauses: opts?.engagementClauses ?? false,
@@ -56,16 +83,11 @@ export function generateNewGameAssetsSplit(
 	const aiIdsPromise = personasPromise.then((p) => Object.keys(p));
 	suppressUnhandledRejection(aiIdsPromise);
 
-	const contentPacksPromise = (async () => {
-		const { packA, packB, objectiveTypes } = await generateDualContentPacks(
-			contentPackRng,
-			SETTING_POOL,
-			SINGLE_GAME_CONFIG,
-			packLLM,
-			aiIdsPromise,
-		);
-		return { packsA: [packA], packsB: [packB], objectiveTypes };
-	})();
+	const contentPacksPromise = generateContentPacks(
+		contentPackRng,
+		packLLM,
+		aiIdsPromise,
+	);
 	suppressUnhandledRejection(contentPacksPromise);
 
 	return { personasPromise, contentPacksPromise };
@@ -73,26 +95,17 @@ export function generateNewGameAssetsSplit(
 
 export function generateContentPacksOnlySplit(
 	personas: Record<AiId, AiPersona>,
+	opts?: { signal?: AbortSignal },
 ): SplitNewGameAssets {
-	const packLLM = new BrowserContentPackProvider();
-	const aiIds = Object.keys(personas);
-
-	const personasPromise = Promise.resolve(personas);
-	suppressUnhandledRejection(personasPromise);
-
-	const contentPacksPromise = (async () => {
-		const { packA, packB, objectiveTypes } = await generateDualContentPacks(
-			Math.random,
-			SETTING_POOL,
-			SINGLE_GAME_CONFIG,
-			packLLM,
-			Promise.resolve(aiIds),
-		);
-		return { packsA: [packA], packsB: [packB], objectiveTypes };
-	})();
+	const packLLM = new BrowserContentPackProvider(signalOpt(opts?.signal));
+	const contentPacksPromise = generateContentPacks(
+		Math.random,
+		packLLM,
+		Promise.resolve(Object.keys(personas)),
+	);
 	suppressUnhandledRejection(contentPacksPromise);
 
-	return { personasPromise, contentPacksPromise };
+	return { personasPromise: Promise.resolve(personas), contentPacksPromise };
 }
 
 export async function buildSameDaemonsSession(
