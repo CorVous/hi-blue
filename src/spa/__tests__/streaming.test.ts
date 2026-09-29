@@ -395,35 +395,40 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 		expect(deltas).toEqual(["first", "last"]);
 	});
 
-	it("flushes accumulated tool calls when the stream closes without [DONE] or a finish_reason", async () => {
+	function toolCallChunks(finishReason: string | null): string[] {
+		return [
+			`data: ${JSON.stringify({
+				choices: [
+					{
+						delta: {
+							tool_calls: [
+								{
+									index: 0,
+									id: "call_1",
+									function: { name: "message", arguments: '{"to":' },
+								},
+							],
+						},
+					},
+				],
+			})}\n\n`,
+			`data: ${JSON.stringify({
+				choices: [
+					{
+						delta: {
+							tool_calls: [{ index: 0, function: { arguments: '"blue"}' } }],
+						},
+						finish_reason: finishReason,
+					},
+				],
+			})}\n\n`,
+		];
+	}
+
+	it("flushes accumulated tool calls when the stream closes after finish_reason stop without [DONE]", async () => {
 		const toolCalls: ToolCallResult[] = [];
 		await parseSSEStream(
-			makeSSEStream([
-				`data: ${JSON.stringify({
-					choices: [
-						{
-							delta: {
-								tool_calls: [
-									{
-										index: 0,
-										id: "call_1",
-										function: { name: "message", arguments: '{"to":' },
-									},
-								],
-							},
-						},
-					],
-				})}\n\n`,
-				`data: ${JSON.stringify({
-					choices: [
-						{
-							delta: {
-								tool_calls: [{ index: 0, function: { arguments: '"blue"}' } }],
-							},
-						},
-					],
-				})}\n\n`,
-			]),
+			makeSSEStream(toolCallChunks("stop")),
 			() => {},
 			undefined,
 			(call) => toolCalls.push(call),
@@ -432,6 +437,18 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 		expect(toolCalls).toEqual([
 			{ id: "call_1", name: "message", argumentsJson: '{"to":"blue"}' },
 		]);
+	});
+
+	it("drops accumulated tool calls when the stream closes without [DONE] or any finish_reason", async () => {
+		const toolCalls: ToolCallResult[] = [];
+		await parseSSEStream(
+			makeSSEStream(toolCallChunks(null)),
+			() => {},
+			undefined,
+			(call) => toolCalls.push(call),
+		);
+
+		expect(toolCalls).toEqual([]);
 	});
 
 	it("splits events delimited by CRLF, including a CR and LF that arrive in separate chunks", async () => {

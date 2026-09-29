@@ -128,13 +128,16 @@ re-render is a call to `renderApp` from a view.
   first half of a `\r\n` pair split across chunks. The unfinished trailing
   event stays in the buffer until the next read.
 - When the stream closes, the buffer is parsed as a final event even though
-  no blank line ended it, and any tool calls still accumulated are flushed.
-  An upstream that closes without `[DONE]` or a `tool_calls` finish reason
-  would otherwise lose its last chunk and its tool calls.
+  no blank line ended it, so an upstream that closes without `[DONE]` does
+  not lose its last chunk. Tool calls still accumulated at that point are
+  flushed only if some chunk carried a `finish_reason` (for example `stop`
+  with tool calls and no `[DONE]`): the model finished, so the calls are
+  whole. Without one, the stream was cut off (a mid-stream error, then a
+  close), the arguments may be truncated, and the calls are dropped.
 - Tool calls accumulate by `index`. The id and name arrive in the first
   fragment, and later fragments append to the arguments. The accumulated
   calls are flushed on `finish_reason: "tool_calls"`, `[DONE]` or the end of
-  the stream.
+  a stream that carried a `finish_reason`.
 - **Usage.** OpenRouter's final chunk has empty `choices` and a populated
   `usage` (`usageFromChunk`). `cached_tokens` is read from the OpenAI-style
   `prompt_tokens_details.cached_tokens`, falling back to the Anthropic-style

@@ -70,6 +70,7 @@ export async function parseSSEStream(
 		number,
 		{ id: string; name: string; argumentsJson: string }
 	> = new Map();
+	let finishReasonSeen = false;
 
 	function flushToolCalls(): void {
 		if (!onToolCall) return;
@@ -135,6 +136,9 @@ export async function parseSSEStream(
 				}
 
 				const finishReason = parsed?.choices?.[0]?.finish_reason;
+				if (typeof finishReason === "string" && finishReason.length > 0) {
+					finishReasonSeen = true;
+				}
 				if (finishReason === "tool_calls") {
 					flushToolCalls();
 				}
@@ -171,7 +175,7 @@ export async function parseSSEStream(
 				if (handleEvent(event)) return;
 			}
 			if (done) {
-				flushToolCalls();
+				if (finishReasonSeen) flushToolCalls();
 				return;
 			}
 		}
