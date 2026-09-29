@@ -33,6 +33,8 @@ Other sources, used here by reference rather than repeated:
 
 **Farewell line.** When a dispatch exhausts a Daemon's budget, it says goodbye to blue once. Later rounds take the exhausted branch.
 
+**Exhaustion drops held items.** The dispatch that exhausts a Daemon also drops everything it holds onto its own cell (`dropEverythingHeldBy` in `dispatcher.ts`). An exhausted Daemon never acts again, so an item it kept would be out of reach for the rest of the game, and a Carry Objective needing that item could never be satisfied. Daemons whose Vista contains the cell get a plain `put_down` witnessed-event per item, the same entry an ordinary put_down writes, without placement flavor. A drop that lands an Objective Object on its paired space satisfies the Carry Objective like any other placement.
+
 **Sysadmin directive issue order** (#298): draw the directive text, revoke any active directive for the same target (a private revocation message), apply the complication, fill in the text, then deliver it privately. `applyComplicationResult` appends the directive with `PENDING_DIRECTIVE_TEXT` because the engine has no content layer. The prompt builder filters that placeholder out as a guard. The sentinel lives in `types.ts` next to `ActiveComplication` rather than in `complication-engine.ts`, so the prompt-rendering layer does not import the complication engine (and through it `engine.ts`) just to read one constant. The rng is consumed in this order, and the tests' seeded draws rely on it.
 
 **Obstacle Shift** (#486): the obstacle moves, and every Daemon whose Vista contains the origin cell gets a `witnessed-obstacle-shift` entry carrying the obstacle's `shiftFlavor`. A missing obstacle id is skipped silently.

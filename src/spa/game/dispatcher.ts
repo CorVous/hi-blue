@@ -445,6 +445,40 @@ function isObservableAction(
 	);
 }
 
+export function dropEverythingHeldBy(game: GameState, aiId: AiId): GameState {
+	const heldIds = pickableEntities(game.world.entities)
+		.filter((e) => e.holder === aiId)
+		.map((e) => e.id);
+	if (heldIds.length === 0) return game;
+	const actorPosition =
+		game.personaSpatial[aiId]?.position ?? DROP_CELL_WITHOUT_SPATIAL_STATE;
+	let state: GameState = {
+		...game,
+		world: {
+			...game.world,
+			entities: game.world.entities.map((e) =>
+				heldIds.includes(e.id) ? { ...e, holder: { ...actorPosition } } : e,
+			),
+		},
+	};
+	for (const [witnessId, witnessSpatial] of Object.entries(
+		state.personaSpatial,
+	)) {
+		if (witnessId === aiId) continue;
+		if (!vistaContains(witnessSpatial.position, actorPosition)) continue;
+		for (const item of heldIds) {
+			state = appendLogEntry(state, witnessId, {
+				kind: "witnessed-event",
+				round: state.round,
+				actor: aiId,
+				actionKind: "put_down",
+				item,
+			});
+		}
+	}
+	return state;
+}
+
 export function dispatchAiTurn(
 	game: GameState,
 	action: AiTurnAction,
@@ -591,6 +625,9 @@ export function dispatchAiTurn(
 
 	const deductResult = deductBudget(state, aiId, options?.costUsd ?? 0);
 	state = deductResult.game;
+	if (deductResult.justExhausted) {
+		state = dropEverythingHeldBy(state, aiId);
+	}
 
 	return {
 		rejected: false,

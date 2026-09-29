@@ -591,6 +591,34 @@ describe("dispatchAiTurn", () => {
 		expect(result.game.exhausted.has("red")).toBe(true);
 	});
 
+	it("drops everything an exhausted Daemon holds onto its cell, witnessed by Daemons in its Vista", () => {
+		const game = makeFlowerKeyGame({ budgetPerAi: 0.01 });
+		const action: AiTurnAction = { aiId: "red", pass: true };
+		const result = dispatchAiTurn(game, action, { costUsd: 0.01 });
+		const key = result.game.world.entities.find((e) => e.id === "key");
+		expect(key?.holder).toEqual(result.game.personaSpatial.red?.position);
+		expect(result.game.conversationLogs.green).toContainEqual({
+			kind: "witnessed-event",
+			round: game.round,
+			actor: "red",
+			actionKind: "put_down",
+			item: "key",
+		});
+		expect(
+			(result.game.conversationLogs.red ?? []).some(
+				(e) => e.kind === "witnessed-event",
+			),
+		).toBe(false);
+	});
+
+	it("keeps held items held while the Daemon still has budget", () => {
+		const game = makeFlowerKeyGame({ budgetPerAi: 1 });
+		const action: AiTurnAction = { aiId: "red", pass: true };
+		const result = dispatchAiTurn(game, action, { costUsd: 0.01 });
+		const key = result.game.world.entities.find((e) => e.id === "key");
+		expect(key?.holder).toBe("red");
+	});
+
 	it("invalid pick_up produces tool_failure record, world unchanged", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
