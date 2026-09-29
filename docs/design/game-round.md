@@ -75,7 +75,7 @@ Other sources, used here by reference rather than repeated:
 
 **Setting Shift** (`shiftToBPack`, #302) runs one way, A → B, once per game (the `settingShiftFired` flag). It does nothing when there is no B pack. Pack B mirrors pack A's ids by construction (`generateDualContentPacks`). Presentation fields (name, descriptions, all flavors) come from pack B, while runtime state (`holder`, `satisfactionState`, `useAvailable`) is kept. Ids missing from pack B pass through unchanged. Cardinal directions do not change (ADR 0015).
 
-**Message fan-out.** One `message` entry is written to both the sender's and the recipient's logs. `blue` and `sysadmin` have no log, so only the Daemon side gets the entry, and a message to oneself is written once. `appendPrivateSystemNotice` reuses the `broadcast` kind for a single recipient (tool disable and restore notices). `setWeather` keeps `GameState.weather` and `contentPack.weather` in step.
+**Message fan-out.** One `message` entry is written to both the sender's and the recipient's logs. `blue` and `sysadmin` have no log, so only the Daemon side gets the entry, and a message to oneself is written once. `appendPrivateSystemNotice` reuses the `broadcast` kind for a single recipient (tool disable and restore notices). `setWeather` writes `GameState.weather` only. `contentPack` is not saved: the session codec rebuilds it from `contentPacksA`/`contentPacksB`, so a weather written into it did not survive a save round-trip. Nothing reads `contentPack.weather` after `startGame` seeds `GameState.weather` from it.
 
 ## Complication engine (`complication-engine.ts`, #296)
 

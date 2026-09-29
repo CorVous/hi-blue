@@ -286,11 +286,7 @@ export function appendBroadcast(game: GameState, content: string): GameState {
 }
 
 export function setWeather(game: GameState, weather: string): GameState {
-	return {
-		...game,
-		weather,
-		contentPack: { ...game.contentPack, weather },
-	};
+	return { ...game, weather };
 }
 
 export function appendPrivateSystemNotice(
