@@ -288,6 +288,57 @@ test("a non-cap generation failure shows a retryable error on the start screen, 
 	await expectNoPageErrors(page, pageErrors);
 });
 
+const RERENDER_SETTLE_MS = 500;
+
+test("toggling the session picker after a generation failure sends no new request", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	let completionRequests = 0;
+	await page.route("**/v1/chat/completions", async (route) => {
+		completionRequests += 1;
+		await route.fulfill({
+			status: 401,
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				error: { message: "No auth credentials found", code: 401 },
+			}),
+		});
+	});
+
+	await page.goto("/?skipDialup=1");
+
+	const errorEl = page.locator("#start-bootstrap-error");
+	await expect(errorEl).toBeVisible({ timeout: 10_000 });
+	const requestsAfterFailure = completionRequests;
+	expect(requestsAfterFailure).toBeGreaterThan(0);
+
+	const toggleSessionPicker = () =>
+		page.evaluate(() =>
+			document.querySelector<HTMLButtonElement>("#sessions-icon")?.click(),
+		);
+
+	const recoveryEl = page.locator("#bootstrap-recovery");
+
+	await toggleSessionPicker();
+	await expect(page.locator("#sessions-screen")).toBeVisible();
+	await toggleSessionPicker();
+	await expect(recoveryEl).toBeVisible();
+	await expect(recoveryEl).toContainText("HTTP 401: No auth credentials found");
+
+	await toggleSessionPicker();
+	await expect(page.locator("#sessions-screen")).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(recoveryEl).toBeVisible();
+
+	await page.waitForTimeout(RERENDER_SETTLE_MS);
+	expect(completionRequests).toBe(requestsAfterFailure);
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
 test("refresh during generation re-enters start screen and restarts generation", async ({
 	page,
 }) => {

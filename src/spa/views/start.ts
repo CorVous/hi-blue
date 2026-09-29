@@ -418,6 +418,22 @@ export function renderStart(
 	};
 	hideBootstrapError();
 
+	const reportGenerationFailure = (
+		bootstrap: PendingBootstrap,
+		err: unknown,
+	): void => {
+		const superseded = getPendingBootstrap() !== bootstrap;
+		const startVisible = startScreenEl ? !startScreenEl.hidden : false;
+		if (superseded || !startVisible) return;
+		if (err instanceof CapHitError) {
+			const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
+			if (capHitEl) capHitEl.removeAttribute("hidden");
+			if (startScreenEl) startScreenEl.setAttribute("hidden", "");
+		} else {
+			showBootstrapError(err);
+		}
+	};
+
 	const watchGeneration = (bootstrap: PendingBootstrap): Promise<void> =>
 		Promise.all([
 			bootstrap.personasPromise,
@@ -425,17 +441,7 @@ export function renderStart(
 		]).then(
 			() => undefined,
 			(err: unknown) => {
-				const superseded = getPendingBootstrap() !== bootstrap;
-				const startVisible = startScreenEl ? !startScreenEl.hidden : false;
-				if (!superseded && startVisible) {
-					if (err instanceof CapHitError) {
-						const capHitEl = doc.querySelector<HTMLElement>("#cap-hit");
-						if (capHitEl) capHitEl.removeAttribute("hidden");
-						if (startScreenEl) startScreenEl.setAttribute("hidden", "");
-					} else {
-						showBootstrapError(err);
-					}
-				}
+				reportGenerationFailure(bootstrap, err);
 				throw err;
 			},
 		);
@@ -481,5 +487,10 @@ export function renderStart(
 	if (formEl) formEl.addEventListener("submit", handleSubmit, { signal });
 	beginBtn.addEventListener("click", handleSubmit, { signal });
 
+	const failedBootstrap = getPendingBootstrap();
+	if (failedBootstrap?.status === "failed") {
+		reportGenerationFailure(failedBootstrap, failedBootstrap.error);
+		return Promise.reject(failedBootstrap.error);
+	}
 	return watchGeneration(startBootstrap(bootstrapOpts));
 }

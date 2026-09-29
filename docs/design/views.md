@@ -66,9 +66,19 @@ it hides the other routes' screens and shows or hides the global chrome
   one.
 - **Reusing the bootstrap.** If the player returns to the start screen,
   `startBootstrap` gives back the bootstrap already in progress, so generation
-  does not restart. A bootstrap that failed is not reused: the start screen
-  starts a fresh one. It used to reuse the failed entry, so every later
-  CONNECT went straight to the game route's recovery banner.
+  does not restart. A bootstrap that failed is kept too: a render of the start
+  screen while it is current shows its failure again (`#start-bootstrap-error`
+  or `#cap-hit`) and sends no request. Only `[ retry ]` and CONNECT start a
+  new one. Restarting on every render would re-send the generation calls
+  after a cap hit or a 401, which fail the same way every time. CONNECT used
+  to reuse the failed entry outright, so every later CONNECT went straight to
+  the game route's recovery banner. In practice `renderApp` hands a fresh
+  session with a pending bootstrap to the game route
+  (`pendingBootstrapOwnsFreshSession`), so closing the session picker or
+  pressing Escape after a failure lands on `#bootstrap-recovery`, which does
+  not restart generation either; the start-screen rule is what keeps any
+  other re-render from doing so. "Abandon and reconnect" clears the pending
+  bootstrap on purpose, so the start screen it leads to starts a new one.
 - **Generation failure.** A failure is shown here only while the start screen
   is still visible, and only for the bootstrap that is still current (an
   abandoned one is aborted, and its rejection must not paint anything). Once

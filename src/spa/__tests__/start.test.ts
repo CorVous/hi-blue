@@ -412,7 +412,62 @@ describe("renderStart — generation failures that are not the spend cap", () =>
 		).toBe(true);
 	});
 
-	it("rendering the start screen again restarts a bootstrap that failed", async () => {
+	it("rendering the start screen again keeps a failed bootstrap and shows its error without a new request", async () => {
+		const { renderStart, pending, calls } = await importStartWithSplits([
+			rejectedSplit(new Error("network down")),
+			hangingSplit,
+		]);
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		const failed = pending.getPendingBootstrap();
+		expect(failed?.status).toBe("failed");
+		const firstErrorText = document.querySelector(
+			"#start-bootstrap-error-text",
+		)?.textContent;
+
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		expect(calls.count).toBe(1);
+		expect(pending.getPendingBootstrap()).toBe(failed);
+		expect(
+			document.querySelector<HTMLElement>("#start-bootstrap-error")?.hidden,
+		).toBe(false);
+		expect(
+			document.querySelector("#start-bootstrap-error-text")?.textContent,
+		).toBe(firstErrorText);
+	});
+
+	it("rendering the start screen again after a cap hit shows #cap-hit without a new request", async () => {
+		let failure: unknown;
+		const { renderStart, pending, calls } = await importStartWithSplits([
+			() => rejectedSplit(failure)(),
+			hangingSplit,
+		]);
+		const { CapHitError } = await import("../llm-client.js");
+		failure = new CapHitError({
+			message: "rate limit",
+			reason: "per-ip-daily",
+			retryAfterSec: 86400,
+		});
+
+		setSearch("skipDialup=1");
+		await awaitIgnoringRejection(renderStart(getMain()));
+		expect(pending.getPendingBootstrap()?.status).toBe("failed");
+		document.querySelector("#cap-hit")?.setAttribute("hidden", "");
+
+		await awaitIgnoringRejection(renderStart(getMain()));
+
+		expect(calls.count).toBe(1);
+		expect(document.querySelector("#cap-hit")?.hasAttribute("hidden")).toBe(
+			false,
+		);
+		expect(document.querySelector<HTMLElement>("#start-screen")?.hidden).toBe(
+			true,
+		);
+	});
+
+	it("CONNECT with a failed bootstrap starts a fresh one", async () => {
 		const { renderStart, pending, calls } = await importStartWithSplits([
 			rejectedSplit(new Error("network down")),
 			hangingSplit,
@@ -422,7 +477,9 @@ describe("renderStart — generation failures that are not the spend cap", () =>
 		await awaitIgnoringRejection(renderStart(getMain()));
 		const failed = pending.getPendingBootstrap();
 
-		void renderStart(getMain());
+		const passwordEl = document.querySelector<HTMLInputElement>("#password");
+		if (passwordEl) passwordEl.dataset.real = "password";
+		document.querySelector<HTMLButtonElement>("#begin")?.click();
 
 		expect(calls.count).toBe(2);
 		expect(pending.getPendingBootstrap()).not.toBe(failed);
