@@ -128,6 +128,62 @@ So the stable part of a request is the system prompt **and the tool list**, and 
 | Messages over 3 sentences (drift) | 0 | 0 |
 | Cost per Daemon turn | $0.0001–0.0002 | $0.0003–0.0005 |
 
+### Retune of 2026-09-28
+
+All four harnesses were run on the pinned endpoint with thinking on: 30-round drift, 90-turn action-variation with profiles (3 scenarios × 3 personas × 10), 10 content packs, and the directions eval.
+
+| | Before | After |
+|---|---|---|
+| Drift: pick_up calls in 30 rounds | 13 (a pick_up → use loop from round 8 to 30) | 5 (with the "set into" tag only; the pick_up lock came after this run) |
+| Drift: turns with no `message` call | 13% | 10% |
+| Action-variation: messages over 3 sentences | 35 of 149 | 18 of 149 |
+| Objective scenario: chose `use` | 27 of 30 | 26 of 30 |
+| Content packs passing on the first attempt | 7 of 10 (all 3 failures a decoy `verb-of-activation`) | 9 of 10, no validation errors |
+| Directions eval | PASS, 100% coherence (first run of the updated runner, which now pins the provider) | not re-run (no prompt change targets directions) |
+
+What changed:
+
+- **A placed carry object no longer reads as dropped.** The state message tagged the flashlight "(on the ground — not held)" the round after the Daemon seated it in the mount. DeepSeek trusts the last user message over the history ("the flashlight rolled off"), so it picked the item back up, which undoes a Carry objective. It now renders as "(set into the wall mount)". See `docs/design/game-round.md`, "Listing rules".
+- **The `REMINDER` ends with "Keep each `message` to 1–3 sentences."** The rule was already in `<rules>`, but effusive and clipped personas broke it on up to a third of their messages. Restating it in the last user message halved the overruns without moving the objective scenario. Clipped personas still write strings of fragments ("Dead station. Strip-lights, damp.") that count as sentences. That is in character, not verbosity.
+- **The decoy prompt spells out its banned words** (`DECOY_FORBIDDEN_WORDS` in `content-pack-provider.ts`), including innocent uses such as a cup handle or the wind.
+
+Not changed, and why:
+
+- The "yes? yes?" tic in the action-variation eval comes from the eval's own Pip fixture, whose voice example is "here, take this one — yes? yes?". It is guideline 4 above at work, not a production problem.
+- The Objective scenario still loses about 1 in 10 turns to a step toward an item already in reach. That is within the ADR 0017 range.
+
+### Messaging blue (2026-09-28)
+
+Players found that DeepSeek Daemons messaged blue on almost every turn, even a Daemon blue had never spoken to. The prompt asked for it: `<rules>` called two `message` calls "one to a peer, one to blue" "the normal shape of a multi-party chat", and the `REMINDER` repeated "including two `message` calls (peer + blue) when both fit". Those lines were written for GLM-4.7, which drifted into silence. DeepSeek follows them literally. In the social scenario, where only a peer has spoken, 24–29 of 30 Daemons messaged blue anyway.
+
+ADR 0018 replaces that with two rules, and leaves the rest to the Daemon's personality and situation:
+
+- **One `message` per turn.** The round coordinator delivers the first `message` call and rejects any later one ("only one message tool call per turn"), just as it rejects a second action. The rules say the Daemon's `<personality>` and the situation decide who gets it.
+- **A reason to message blue.** `<rules>` says to message blue only with a reason of the Daemon's own (finding out who blue is, asking blue for help, answering blue because it wants to), that it does not owe blue an answer, and never to message blue just to report what it sees or does. The `REMINDER` repeats the reason clause.
+
+Measured on the pinned endpoint. The objective scenario ran 30 reps per persona; social, exploration and the new coordination scenario 20; drift once for 30 rounds.
+
+| | Before | Strict gate (reply only) | Forced answer | Final |
+|---|---|---|---|---|
+| Social (only a peer spoke): messaged blue | 24–29 of 30 | 0 of 30 | 0 of 60 | 0 of 60 |
+| Exploration (blue asked "let me know what you see"): answered blue | 30 of 30 | 30 of 30 | 60 of 60 | 39 of 60 |
+| Objective (blue asked "think you can fit it?"): answered blue | 30 of 30 | 30 of 30 | 90 of 90 | 79 of 90 |
+| Coordination (a peer proposes a plan, blue asks "who are you talking to?"): messaged the peer | — | — | — | 59 of 60 |
+| Drift: blue's 16 messages answered | 16 | 16 | 16 | 6 |
+| Objective: chose `use` | 83 of 90 | 73 of 90 | 80 of 90 | 76 of 90 |
+| Turns with more than one `message` call | 102 of 180 | — | 0 of 210 | 0 |
+
+The "Final" behaviour follows the persona. Pip, whose goal is to stay close to peers, answered blue's exploration request in 12 of 20 runs and spent the rest on a peer. Vex answers blue in clipped lines ("on it. mount's mine."). In coordination each persona takes the peer's deal in its own voice ("Deal. Watching. Flip it."; "Deal, deal — I'm watching my side, eyes wide."). In the social scenario, where blue never spoke, no run messaged blue.
+
+**Curious Daemons reach out.** A persona with the `curious` temperament gets one extra line in `<personality>` (`src/content/blue-curiosity.ts`): it is curious about blue, a little confused by them, and now and then messages blue unprompted. In the `quiet` scenario (nobody has spoken) curious variants messaged blue on 5–8 of 20 turns, non-curious ones on 0 of 20, with questions like "Who are you? I woke up in this station and there's nothing in it but lights."
+
+What did not work, so you do not retry it:
+
+- **Hard `MUST NOT message blue` lines in the per-turn state** for the never-messaged and already-answered cases. They stopped unprompted messages completely, but `use` fell from 83 to 73 of 90, mostly from the go-leaning persona stepping instead of using. It is the same effect as the grid-words rule (guideline 7): a speech rule the model reads last pulls its thinking away from acting.
+- **Forcing an answer.** A per-turn line "blue asked you something and is waiting on your answer: this turn's `message` goes to blue" made every Daemon answer every question, whatever its personality, and overrode peer coordination. That is the opposite of what the game wants.
+- **Reading Vex's `use` rate from one run.** The go-leaning Vex scored between 17 and 24 of 30 on the objective scenario across runs with an unchanged prompt, so a single run only flags a drop of about a third. Rerun before blaming a wording.
+- **A long list of reasons to ignore blue** ("a guarded, busy or distracted Daemon, or one in the middle of a plan with a peer…"). The go-leaning persona's `use` rate fell to 10 of 30. Keep the blue rule short.
+
 ## Open questions
 
 These came out of the research. Each is larger than a prompt edit and should get its own issue and eval run.
@@ -136,7 +192,7 @@ These came out of the research. Each is larger than a prompt edit and should get
 2. **Keep the tool list stable per session.** Fixed enums covering every id in the pack, with the dispatcher rejecting illegal moves, would keep the cache near 92% on long games instead of dropping to about 10% whenever an enum changes. The enums are guard-rails today, so this needs an ADR and an action-variation run.
 3. **Move Sysadmin directives out of the system prompt**, into a mid-conversation `system` message at the round they arrive or into the per-turn state, so the system prefix never changes mid-game.
 4. **Effort `low` against `high`** over whole games.
-5. **Two untested prompt lines:** adding "each `message` is 1–3 sentences" to the per-turn `REMINDER`, and one ban on the "not X, but Y" construction.
+5. **One untested prompt line:** a ban on the "not X, but Y" construction. (The `REMINDER` length line was tested on 2026-09-28 and shipped. See "Retune of 2026-09-28" above.)
 
 ## Unverified, or not reached
 

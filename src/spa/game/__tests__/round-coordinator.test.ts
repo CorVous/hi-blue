@@ -1824,7 +1824,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 		expect(pickupResult?.success).toBe(true);
 	});
 
-	it("[msg, msg]: both messages dispatched; neither in roundtrip (per ADR 0007)", async () => {
+	it("[msg, msg]: first message dispatched, second rejected as one message per turn", async () => {
 		const game = makeGame();
 		const provider = new MockRoundLLMProvider([
 			{
@@ -1873,7 +1873,7 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 					e.from === "red" &&
 					e.content.includes("Second msg"),
 			),
-		).toBe(true);
+		).toBe(false);
 
 		const redActions = result.actions.filter((a) => a.actor === "red");
 		expect(
@@ -1881,9 +1881,13 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 				(a) =>
 					a.kind === "tool_failure" && /only one message/i.test(a.description),
 			),
-		).toBe(false);
+		).toBe(true);
 
-		expect(toolRoundtrip.red).toBeUndefined();
+		const rt = toolRoundtrip.red;
+		expect(rt?.assistantToolCalls.map((c) => c.id)).toEqual(["msg_second_id"]);
+		expect(
+			rt?.toolResults.find((r) => r.tool_call_id === "msg_second_id")?.success,
+		).toBe(false);
 	});
 
 	it("[msg-ok, msg-fail, pick_up]: roundtrip contains only the failed message + action", async () => {

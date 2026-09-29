@@ -1,4 +1,7 @@
-import { withinInteractionRange } from "./available-tools.js";
+import {
+	pairedSpaceHoldingItem,
+	withinInteractionRange,
+} from "./available-tools.js";
 import {
 	applyDirection,
 	CARDINAL_DIRECTIONS,
@@ -99,6 +102,12 @@ export function validateToolCall(
 					valid: false,
 					reason: `Item "${call.args.item}" is out of reach — you can only pick up items in your own cell or the eight cells around it`,
 				};
+			const holdingSpace = pairedSpaceHoldingItem(item, world.entities);
+			if (holdingSpace)
+				return {
+					valid: false,
+					reason: `"${call.args.item}" is set into the ${holdingSpace.name} and will not come loose`,
+				};
 			return { valid: true };
 		}
 
@@ -152,6 +161,13 @@ export function validateToolCall(
 			if (item.holder !== aiId) {
 				if (isGridPosition(item.holder) && actorSpatial) {
 					const itemPos = item.holder as GridPosition;
+					const holdingSpace = pairedSpaceHoldingItem(item, world.entities);
+					if (holdingSpace) {
+						return {
+							valid: false,
+							reason: `"${call.args.item}" is set into the ${holdingSpace.name} and will not come loose`,
+						};
+					}
 					if (withinInteractionRange(actorSpatial.position, itemPos)) {
 						return {
 							valid: false,

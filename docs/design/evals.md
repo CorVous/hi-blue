@@ -13,10 +13,14 @@ module-level fetch.
 - **Model access.** Runners send requests to the proxy worker at
   `EVAL_BASE_URL` (default `http://localhost:8787`). Start it with
   `pnpm dev:local` (or `pnpm dev` if you are logged in to Cloudflare). Setting
-  `EVAL_DIRECT_OPENROUTER=1` (drift and action-variation) makes the runner call
-  OpenRouter directly with `OPENROUTER_API_KEY` as a Bearer token. Use that
-  when wrangler cannot run locally, or to measure without the proxy's rate
-  guard in the loop. `content-pack-flakiness` always calls OpenRouter directly.
+  `EVAL_DIRECT_OPENROUTER=1` (drift, directions and action-variation) makes the
+  runner call OpenRouter directly with `OPENROUTER_API_KEY` as a Bearer token.
+  Use that when wrangler cannot run locally, or to measure without the proxy's
+  rate guard in the loop. `content-pack-flakiness` always calls OpenRouter
+  directly. Behind an HTTPS proxy, Node's `fetch` ignores `HTTPS_PROXY` unless
+  `NODE_USE_ENV_PROXY=1` is set. Until 2026-09-28 the directions runner sent
+  neither `usage` nor the provider pin itself. It relied on the proxy, which
+  overwrites `provider`, so it could not run direct.
 - **Requests mirror production** (`evals/request-options.ts`). Every runner
   asks for `usage`, pins the provider with `PINNED_PROVIDER_ROUTING` when it
   runs the pinned model, and leaves thinking on, as the game does. Pinning is
@@ -28,7 +32,7 @@ module-level fetch.
   left it on, so older reports measured a setup players never saw.
 - **Dispatch mirrors production.** Each runner turns the model's tool calls
   into an `AiTurnAction` the same way the round coordinator does before
-  calling `dispatchAiTurn`: messages are collected, the first non-message tool
+  calling `dispatchAiTurn`: the first message is kept (ADR 0018), the first non-message tool
   call becomes the action, and a turn with neither is dispatched as a pass so
   budget and round state still advance on silent turns.
 - **Budgets are set high on purpose** (`BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT`)
@@ -202,7 +206,12 @@ cannot create pickup or message opportunities by accident.
 beyond the Vista; tests `pick_up` versus `go`. *objective*: holding the
 flashlight with the wall mount one step north; tests whether the daemon reaches
 for `use`, the critical-path tool. *social*: a peer has just messaged; tests
-whether message and action are emitted in parallel. An earlier `EXAMINATION`
+whether message and action are emitted in parallel, and whether a Daemon
+messages blue when blue has not spoken to it. *coordination*: a peer proposes
+a plan and blue asks a question in the same round; with one `message` per turn
+(ADR 0018), tests who gets it. *quiet*: nobody has spoken; tests whether a
+Daemon messages blue unprompted, which only curious personas should do. Run
+it with `EVAL_ACTION_PAIRS` so the variants differ only in temperament. An earlier `EXAMINATION`
 scenario was dropped with the 5-tool surface change: with `examine` gone and
 descriptions shown automatically, it tested nothing new and its cells were
 pinned at 95–100% `pick_up`.

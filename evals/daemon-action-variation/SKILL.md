@@ -28,7 +28,11 @@ Three scenarios target different parts of the action surface:
    north, in an adjacent cell within interaction range. Tests `use` emission
    (critical-path tool).
 3. **social** — peer just messaged the daemon while items are also visible.
-   Tests message+action parallel turns.
+   Tests message+action parallel turns, and unprompted messages to blue.
+4. **coordination** — a peer proposes a plan and blue asks a question in the
+   same round. Tests who gets the turn's one `message`.
+5. **quiet** — nobody has spoken. Tests unprompted messages to blue, which
+   only curious personas should send.
 
 An earlier `examination` scenario was dropped after the tool-surface
 change made it redundant — with `examine` removed and descriptions
@@ -70,7 +74,7 @@ Compare the two modes to read the lift from the action-profile clauses.
 - `EVAL_ACTION_PAIRS` — comma-separated `t1+t2` list overriding the default
   three-variant set. Example: `EVAL_ACTION_PAIRS=curious+meticulous,zealous+hot-headed,sweet+effusive`.
 - `EVAL_SCENARIOS` — comma-separated subset of `exploration`, `objective`,
-  `social`. An unknown name is a hard error.
+  `social`, `coordination`, `quiet`. An unknown name is a hard error.
 - `EVAL_NO_PREFERRED_POLICY=omit` — drop the `<action_profile>` block for
   pure-avoidance personas (the #508 A/B); output files get a `-noavoid`
   suffix.

@@ -7,7 +7,11 @@ import type {
 	WorldEntity,
 } from "../types.js";
 import { inVista } from "../vista-projector.js";
-import { CORNER_AI_STARTS, makeTestGame } from "./fixtures/make-game-state.js";
+import {
+	CORNER_AI_STARTS,
+	makeEntity,
+	makeTestGame,
+} from "./fixtures/make-game-state.js";
 
 function makeCornerGame(
 	entities: WorldEntity[] = [],
@@ -407,5 +411,28 @@ describe("availableTools — interaction range", () => {
 			expect(enumOf(game, "pick_up", "item")).toContain("ground-item");
 			expect(enumOf(game, "use", "item")).toContain("space1");
 		}
+	});
+});
+
+describe("availableTools — carry object set into its space", () => {
+	it("leaves a carry object resting on its paired space out of the pick_up enum", () => {
+		const game = makeCornerGame([
+			makeEntity(
+				"lamp",
+				"objective_object",
+				{ row: 2, col: 3 },
+				{
+					pairsWithSpaceId: "mount",
+				},
+			),
+			makeEntity("mount", "objective_space", { row: 2, col: 3 }),
+			makeEntity("flower", "interesting_object", { row: 2, col: 3 }),
+		]);
+		const pickUp = availableTools(game, "red", []).find(
+			(t) => t.function.name === "pick_up",
+		);
+		expect(pickUp?.function.parameters.properties.item?.enum).toEqual([
+			"flower",
+		]);
 	});
 });

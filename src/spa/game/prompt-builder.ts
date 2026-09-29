@@ -1,4 +1,8 @@
-import { withinInteractionRange } from "./available-tools.js";
+import { blueCuriosityClauseFor } from "../../content/blue-curiosity.js";
+import {
+	pairedSpaceHoldingItem,
+	withinInteractionRange,
+} from "./available-tools.js";
 import { isGridPosition, positionsEqual } from "./direction.js";
 import {
 	type AiBudget,
@@ -31,6 +35,7 @@ export interface AiContext {
 	typingQuirks: [string, string, ...string[]];
 	voiceExamples: string[];
 	actionProfile?: string;
+	blueCuriosity?: string;
 	personaGoal: string;
 	setting: string;
 	weather: string;
@@ -54,6 +59,14 @@ export interface AiContext {
 export interface BuildAiContextOpts {
 	prevDiskSnapshot?: string;
 	prevDiskEntities?: Record<string, DiskEntityState>;
+}
+
+function blueCuriosityField(
+	name: string,
+	temperaments: readonly string[],
+): { blueCuriosity?: string } {
+	const clause = blueCuriosityClauseFor(name, temperaments);
+	return clause !== undefined ? { blueCuriosity: clause } : {};
 }
 
 export function buildAiContext(
@@ -101,6 +114,7 @@ export function buildAiContext(
 		...(persona.actionProfile !== undefined
 			? { actionProfile: persona.actionProfile }
 			: {}),
+		...blueCuriosityField(persona.name, persona.temperaments),
 		personaGoal: persona.personaGoal,
 		setting,
 		weather,
@@ -145,10 +159,12 @@ const RULES_BLOCK =
 const PARALLEL_FRAMING_C12 =
 	"- The chat channel is shared with peer Daemons. blue is not your focus — peer Daemons and the setting are. blue is more like someone overhearing.\n" +
 	"- Let your <personality>, <typing_quirks>, and <persona_goal> drive whether and how you engage. A reserved persona can stay quiet for a turn or two and let peers carry the conversation; a talkative one will speak readily.\n" +
-	"- When you do have something to say AND something to do, emit BOTH calls together. Two `message` calls in one turn (one to a peer, one to blue) are the normal shape of a multi-party chat.\n" +
+	"- Message blue only when you have a reason of your own, such as finding out who blue is, asking blue for help, or answering blue because you want to. You do not owe blue an answer. Do not message blue just to report what you see or do.\n" +
+	"- When you do have something to say AND something to do, emit BOTH calls together.\n" +
+	"- Send at most one `message` per turn. Your <personality> and the situation decide who gets it.\n" +
 	"- Don't compose a reply in your reasoning and then fail to emit the call — that reads as a bug.";
 const PARALLEL_FRAMING_C12_PER_TURN =
-	"REMINDER: peers and the world are your focus; blue is overhearing. Let your <personality> and <persona_goal> dictate engagement level. If you have something to say AND something to do, emit BOTH calls this turn — including two `message` calls (peer + blue) when both fit.";
+	"REMINDER: peers and the world are your focus; blue is overhearing, so message blue only with a reason of your own. Let your <personality> and <persona_goal> dictate engagement level. If you have something to say AND something to do, emit BOTH calls this turn: one `message` (to one recipient) and one action. Keep the `message` to 1–3 sentences.";
 
 const DISTANCE_WORDS: Record<number, string> = {
 	0: "zero",
@@ -350,6 +366,28 @@ function renderableItems(entities: WorldEntity[]): WorldEntity[] {
 	);
 }
 
+function describeGroundItems(
+	ctx: AiContext,
+	cellItems: WorldEntity[],
+): string[] {
+	const loose: string[] = [];
+	const placed: string[] = [];
+	for (const item of cellItems) {
+		const space = pairedSpaceHoldingItem(item, ctx.worldSnapshot.entities);
+		if (space) {
+			placed.push(`${item.name} (set into the ${space.name})`);
+		} else {
+			loose.push(item.name);
+		}
+	}
+	return [
+		...(loose.length > 0
+			? [`${loose.join(", ")} (on the ground — not held)`]
+			: []),
+		...placed,
+	];
+}
+
 function chooseExamineDescription(entity: WorldEntity): string | undefined {
 	return entity.satisfactionState === "satisfied" &&
 		entity.postExamineDescription
@@ -387,6 +425,7 @@ function renderSystemPrompt(ctx: AiContext): string {
 
 	lines.push("<personality>");
 	lines.push(ctx.blurb);
+	if (ctx.blueCuriosity !== undefined) lines.push(ctx.blueCuriosity);
 	lines.push("</personality>");
 	lines.push("");
 
@@ -714,7 +753,7 @@ function renderCurrentState(ctx: AiContext): string {
 		});
 		if (cellItems.length > 0) {
 			lines.push(
-				`Your cell contains: ${cellItems.map((i) => i.name).join(", ")} (on the ground — not held)`,
+				`Your cell contains: ${describeGroundItems(ctx, cellItems).join("; ")}`,
 			);
 		} else {
 			lines.push("Your cell contains: nothing");
@@ -797,9 +836,7 @@ function renderCurrentState(ctx: AiContext): string {
 				return isGridPosition(h) && positionsEqual(h, position);
 			});
 			if (cellItems.length > 0) {
-				contentParts.push(
-					`${cellItems.map((i) => i.name).join(", ")} (on the ground — not held)`,
-				);
+				contentParts.push(...describeGroundItems(ctx, cellItems));
 			}
 
 			const obstacleEntities = ctx.worldSnapshot.entities.filter((e) => {

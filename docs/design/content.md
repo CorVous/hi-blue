@@ -100,6 +100,29 @@ prompt.
 - Off by default. `?engagementClauses=1` turns it on through
   `BootstrapOpts.engagementClauses`. With it off, output is byte-identical.
 
+## Blue curiosity (`blue-curiosity.ts`)
+
+ADR 0018 tells every Daemon to message blue only with a reason of its own, so
+by default a Daemon nobody has spoken to stays off blue's channel. A persona
+with the `curious` temperament gets that reason in writing: one line in
+`<personality>` saying it is curious about blue and a little confused by
+them, and now and then messages blue unprompted to ask. Like the engagement
+clauses, this is concrete per-persona behaviour rather than a shared
+permission.
+
+- The line is derived from `temperaments` when the prompt is built
+  (`buildAiContext`), not stored on the persona, so saves are unchanged and
+  existing curious personas pick it up.
+- `BLUE_CURIOUS_TEMPERAMENTS` lists the temperaments that get it. Only
+  `curious` is on it today.
+- The line says blue is "on their channel", not that blue "can talk to"
+  them. The earlier wording made Daemons say "I can hear you" to a blue who
+  had not spoken.
+- Measured 2026-09-28 in the action-variation `quiet` scenario (nobody has
+  spoken), with persona variants that differ only in temperament: curious
+  pairs messaged blue on 5–8 of 20 turns, non-curious pairs on 0 of 20. The
+  objective scenario's `use` rate did not drop (18 vs 18, 11 vs 8).
+
 ## Action-tool bias (`action-preference-bias.ts`)
 
 Daemons call `message` often but rarely use the action tools, even when the

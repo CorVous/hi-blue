@@ -308,7 +308,8 @@ function dispatchForParityWithLivePath(
 		if (!parseResult.ok) continue;
 		if (tc.name === "message") {
 			const msgArgs = parseResult.args as { to: string; content: string };
-			action.messages = action.messages ?? [];
+			if (action.messages !== undefined) continue;
+			action.messages = [];
 			action.messages.push({
 				to: msgArgs.to as AiId | "blue",
 				content: msgArgs.content,
@@ -449,7 +450,7 @@ function renderReport(
 		"Each (scenario × persona variant) cell repeats the *same* first turn with",
 		"identical context, so the per-cell distribution measures the model's tool",
 		"choice probability — not drift across rounds. See `scenarios.ts` for what",
-		"each scenario probes (exploration / objective / social).",
+		"each scenario probes (exploration / objective / social / coordination / quiet).",
 		"",
 		"## Overall",
 		"",
