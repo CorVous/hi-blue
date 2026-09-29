@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { CapHitError } from "../../llm-client.js";
+import { validateBoundDualContentPack } from "../binding-aware-validator.js";
 import {
 	BrowserContentPackProvider,
+	buildCorrectiveFeedback,
 	DUAL_CONTENT_PACK_SYSTEM_PROMPT,
 } from "../content-pack-provider.js";
 
@@ -499,6 +501,32 @@ describe("BrowserContentPackProvider — corrective feedback strengthening", () 
 			) ?? -1;
 		expect(assistantIdx).toBeGreaterThanOrEqual(0);
 		expect(correctiveIdx).toBeGreaterThan(assistantIdx);
+	});
+
+	it("groups identical errors from packA and packB under separate pack labels", () => {
+		const brokenPack = buildValidCarryPack();
+		const packObj = (brokenPack as Record<string, unknown>).pack as Record<
+			string,
+			unknown
+		>;
+		const bindings = packObj.bindings as [
+			Record<string, unknown>,
+			...Record<string, unknown>[],
+		];
+		delete (bindings[0].object as Record<string, unknown>).name;
+		const result = validateBoundDualContentPack(asDualResponse(brokenPack), {
+			skeletons: carryInput.phases[0]?.bindings ?? [],
+			decoys: [{ id: "decoy-0" }, { id: "decoy-1" }],
+			obstacleCount: 1,
+		});
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+
+		const feedback = buildCorrectiveFeedback(result.errors);
+		expect(feedback).toContain("For packA carry binding carry-0:");
+		expect(feedback).toContain("For packB carry binding carry-0:");
+		const missingName = /missing required field "name"/g;
+		expect(feedback.match(missingName)).toHaveLength(2);
 	});
 
 	it("names the offending keyword in the corrective feedback for a forbidden-use-cue decoy", async () => {

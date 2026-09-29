@@ -140,14 +140,17 @@ export const USE_CUE_KEYWORD_HINTS: readonly string[] = [
 	"mechanism",
 ];
 
-export type RetryUnit =
+export type PackLabel = "A" | "B";
+
+export type RetryUnit = (
 	| { kind: "objective-pair"; pairId: string }
 	| { kind: "obstacle"; entityId: string }
 	| { kind: "carry-binding"; bindingId: string }
 	| { kind: "use-space-binding"; bindingId: string }
 	| { kind: "use-item-binding"; bindingId: string }
 	| { kind: "convergence-binding"; bindingId: string }
-	| { kind: "decoy"; decoyId: string };
+	| { kind: "decoy"; decoyId: string }
+) & { pack?: PackLabel };
 
 type ValidationRule =
 	| "verb-of-activation"

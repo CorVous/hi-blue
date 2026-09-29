@@ -156,10 +156,14 @@ Each generation makes up to `OUTER_ATTEMPT_BUDGET` (3) attempts.
 
 - **Validation failure.** The next attempt resends the system and user prompts,
   the previous raw JSON as an assistant turn, and a corrective user turn.
-  `buildCorrectiveFeedback` groups the errors by `retryUnit` ("For carry binding
-  carry-0: …"), so the model sees every problem with one entity in one place, and
-  it removes duplicate messages. The model is asked to repair the JSON in place
-  and keep the ids and any fields that passed.
+  `buildCorrectiveFeedback` groups the errors by `retryUnit` ("For packA carry
+  binding carry-0: …"), so the model sees every problem with one entity in one
+  place, and it removes duplicate messages. The validator tags every error from
+  a pack with that pack's label (`retryUnit.pack`, `"A"` or `"B"`) and the group
+  header names it with the JSON key (`packA`, `packB`). Both packs share ids, so
+  without the label the same mistake in A and B collapsed into one bullet and
+  the model could not tell which pack to fix. The model is asked to repair the
+  JSON in place and keep the ids and any fields that passed.
 - **Hard error** (empty response, JSON parse failure, network). The provider
   waits `BACKOFF_MS_BEFORE_RETRY[attempt]` and retries from a clean conversation:
   the previous output and the feedback are both dropped.

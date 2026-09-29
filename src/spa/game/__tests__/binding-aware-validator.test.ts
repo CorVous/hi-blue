@@ -601,3 +601,36 @@ describe("validateBoundDualContentPack — pack-level fields", () => {
 		expect(result.ok).toBe(false);
 	});
 });
+
+describe("validateBoundDualContentPack — pack labels", () => {
+	it("tags each error with the pack it came from", () => {
+		const good = makeGoodCarryPack().pack;
+		const bad = makeGoodCarryPack().pack;
+		delete (bad.bindings[0]?.object as Record<string, unknown>).name;
+		const result = validateBoundDualContentPack(
+			{ phases: [{ packA: good, packB: bad }] },
+			makeCarrySchedule(),
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.errors.length).toBeGreaterThan(0);
+			for (const e of result.errors) expect(e.retryUnit.pack).toBe("B");
+		}
+	});
+
+	it("tags a missing pack with its own label", () => {
+		const result = validateBoundDualContentPack(
+			{ phases: [{ packA: makeGoodCarryPack().pack }] },
+			makeCarrySchedule(),
+		);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.errors).toEqual([
+				expect.objectContaining({
+					field: "packB",
+					retryUnit: expect.objectContaining({ pack: "B" }),
+				}),
+			]);
+		}
+	});
+});

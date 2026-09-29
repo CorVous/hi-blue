@@ -126,6 +126,11 @@ export function buildOuterMessages(
 }
 
 function retryUnitLabel(unit: ValidationError["retryUnit"]): string {
+	const unitLabel = retryUnitKindLabel(unit);
+	return unit.pack === undefined ? unitLabel : `pack${unit.pack} ${unitLabel}`;
+}
+
+function retryUnitKindLabel(unit: ValidationError["retryUnit"]): string {
 	switch (unit.kind) {
 		case "objective-pair":
 			return `objective pair ${unit.pairId}`;

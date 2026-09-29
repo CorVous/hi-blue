@@ -1,6 +1,7 @@
 import type { BindingSkeleton } from "./binding-prompt-builder.js";
 import { obstacleIds } from "./binding-prompt-builder.js";
 import type {
+	PackLabel,
 	ValidationError,
 	ValidationResult,
 } from "./content-pack-validation.js";
@@ -673,6 +674,37 @@ function validateBoundPack(
 	}
 }
 
+function labelWithPack(
+	error: ValidationError,
+	pack: PackLabel,
+): ValidationError {
+	return { ...error, retryUnit: { ...error.retryUnit, pack } };
+}
+
+function validateLabelledPack(
+	pack: RawBoundPack | undefined,
+	label: PackLabel,
+	schedule: ValidationSchedule,
+	errors: ValidationError[],
+	warnings: ValidationError[],
+): void {
+	const packErrors: ValidationError[] = [];
+	const packWarnings: ValidationError[] = [];
+	if (!pack || typeof pack !== "object") {
+		packErrors.push({
+			entityId: "",
+			field: `pack${label}`,
+			rule: "missing-field",
+			message: `Phase 0 missing pack${label}`,
+			retryUnit: { kind: "objective-pair", pairId: "" },
+		});
+	} else {
+		validateBoundPack(pack, schedule, packErrors, packWarnings);
+	}
+	errors.push(...packErrors.map((e) => labelWithPack(e, label)));
+	warnings.push(...packWarnings.map((w) => labelWithPack(w, label)));
+}
+
 export function validateBoundDualContentPack(
 	rawResponse: unknown,
 	schedule: ValidationSchedule,
@@ -719,32 +751,8 @@ export function validateBoundDualContentPack(
 		return { ok: false, errors };
 	}
 
-	const packA = phase.packA;
-	const packB = phase.packB;
-
-	if (!packA || typeof packA !== "object") {
-		errors.push({
-			entityId: "",
-			field: "packA",
-			rule: "missing-field",
-			message: "Phase 0 missing packA",
-			retryUnit: { kind: "objective-pair", pairId: "" },
-		});
-	} else {
-		validateBoundPack(packA, schedule, errors, warnings);
-	}
-
-	if (!packB || typeof packB !== "object") {
-		errors.push({
-			entityId: "",
-			field: "packB",
-			rule: "missing-field",
-			message: "Phase 0 missing packB",
-			retryUnit: { kind: "objective-pair", pairId: "" },
-		});
-	} else {
-		validateBoundPack(packB, schedule, errors, warnings);
-	}
+	validateLabelledPack(phase.packA, "A", schedule, errors, warnings);
+	validateLabelledPack(phase.packB, "B", schedule, errors, warnings);
 
 	return errors.length === 0
 		? { ok: true, value: { warnings } }
