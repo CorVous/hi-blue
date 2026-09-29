@@ -1,21 +1,13 @@
 export { getAiHandles, renderedPlayerLine } from "./handles";
 export { expectNoPageErrors } from "./page-errors";
-export {
-	pickerOkSessionFiles,
-	pickerOkSessionSeedScript,
-} from "./picker-seeds";
-export {
-	START_SCREEN_BOOT_TIMEOUT_MS,
-	waitForStartScreenReady,
-} from "./start-screen-ready";
+export { pickerOkSessionSeedScript } from "./picker-seeds";
+export { waitForStartScreenReady } from "./start-screen-ready";
 export {
 	activePackOf,
 	CARDINAL_DIRECTIONS,
 	type CardinalDirection,
 	classifyJsonRequest,
-	deobfuscateEngineBlob,
 	ENGINE_OBFUSCATION_KEY,
-	type EntityHolder,
 	type GridPosition,
 	goToGame,
 	inRoom,
@@ -33,11 +25,7 @@ export {
 	readActiveSessionEngine,
 	readActiveSessionFiles,
 	readDaemonFile,
-	type SealedContentPack,
-	type SealedConversationEntry,
-	type SealedDaemonFile,
 	type SealedEngine,
-	type SealedEntity,
 	SSE_HEADERS,
 	sectionBetween,
 	stepDelta,
