@@ -1,6 +1,7 @@
 import { blueCuriosityClauseFor } from "../../content/blue-curiosity.js";
 import {
 	pairedSpaceHoldingItem,
+	pickableEntities,
 	targetHandles,
 	withinInteractionRange,
 } from "./available-tools.js";
@@ -53,6 +54,8 @@ export interface AiContext {
 	pendingBroadcasts: string[];
 	activeDirectives: string[];
 	objectives: Objective[];
+	diskSnapshot(): string;
+	diskEntities(): Record<string, DiskEntityState>;
 	toSystemPrompt(): string;
 	toCurrentStateUserMessage(): string;
 }
@@ -106,6 +109,9 @@ export function buildAiContext(
 		Object.entries(game.personas).map(([id, p]) => [id, p.name]),
 	);
 
+	let diskSnapshot: string | undefined;
+	let diskEntities: Record<string, DiskEntityState> | undefined;
+
 	return {
 		name: persona.name,
 		aiId,
@@ -136,6 +142,14 @@ export function buildAiContext(
 		...(opts?.prevDiskEntities !== undefined
 			? { prevDiskEntities: opts.prevDiskEntities }
 			: {}),
+		diskSnapshot() {
+			diskSnapshot ??= buildDiskSnapshot(this);
+			return diskSnapshot;
+		},
+		diskEntities() {
+			diskEntities ??= buildDiskEntityState(this);
+			return diskEntities;
+		},
 		toSystemPrompt() {
 			return renderSystemPrompt(this);
 		},
@@ -218,41 +232,26 @@ export function buildDiskEntityState(
 	if (!actorSpatial) return {};
 
 	const state: Record<string, DiskEntityState> = {};
-	const viewCells = projectVista(actorSpatial.position).filter(
-		(c) => !c.isWall,
-	);
+	const cells = projectVista(actorSpatial.position)
+		.filter((c) => !c.isWall)
+		.map((c) => cellContents(ctx, c.position));
 
-	for (const cell of viewCells) {
-		const { position } = cell;
-
-		for (const [otherId, otherSpatial] of Object.entries(ctx.personaSpatial)) {
-			if (otherId === ctx.aiId) continue;
-			if (!positionsEqual(otherSpatial.position, position)) continue;
-			state[otherId] = { inVista: true, satisfied: false };
+	for (const cell of cells) {
+		for (const peerId of cell.peers) {
+			state[peerId] = { inVista: true, satisfied: false };
 		}
-
-		const items = renderableItems(ctx.worldSnapshot.entities);
-		for (const item of items) {
-			const h = item.holder;
-			if (isGridPosition(h) && positionsEqual(h, position)) {
-				state[item.id] = {
-					inVista: true,
-					satisfied: item.satisfactionState === "satisfied",
-				};
-			}
-		}
-
-		for (const obs of ctx.worldSnapshot.entities) {
-			if (obs.kind !== "obstacle") continue;
-			const h = obs.holder;
-			if (isGridPosition(h) && positionsEqual(h, position)) {
-				state[obs.id] = { inVista: true, satisfied: false };
-			}
+		for (const entity of [...cell.items, ...cell.obstacles]) {
+			state[entity.id] = {
+				inVista: true,
+				satisfied:
+					entity.kind !== "obstacle" &&
+					entity.satisfactionState === "satisfied",
+			};
 		}
 	}
 
-	for (const cell of viewCells) {
-		for (const space of objectiveSpacesAt(ctx, cell.position)) {
+	for (const cell of cells) {
+		for (const space of cell.spaces) {
 			state[space.id] = {
 				inVista: true,
 				satisfied: space.satisfactionState === "satisfied",
@@ -269,7 +268,7 @@ export function renderPerceptionDelta(
 ): string[] {
 	if (prevEntities === undefined) return [];
 
-	const currEntities = buildDiskEntityState(ctx);
+	const currEntities = ctx.diskEntities();
 	const lines: string[] = [];
 
 	const transitionEmitted = new Set<string>();
@@ -302,8 +301,7 @@ export function renderPerceptionDelta(
 
 		const isPersona = ctx.personaSpatial[entityId] !== undefined;
 		if (isPersona) {
-			const personaName = ctx.personaNames[entityId] ?? entityId;
-			lines.push(`Lost from view: ${personaName}`);
+			lines.push(`Lost from view: ${ctx.personaNames[entityId] ?? entityId}`);
 			continue;
 		}
 
@@ -325,8 +323,7 @@ export function renderPerceptionDelta(
 
 		const isPersona = ctx.personaSpatial[entityId] !== undefined;
 		if (isPersona) {
-			const personaName = ctx.personaNames[entityId] ?? entityId;
-			lines.push(`Came into view: ${personaName}`);
+			lines.push(`Came into view: ${ctx.personaNames[entityId] ?? entityId}`);
 			continue;
 		}
 
@@ -365,21 +362,31 @@ function displayName(ctx: AiContext, entity: WorldEntity): string {
 	);
 }
 
-function objectiveSpacesAt(
-	ctx: AiContext,
-	position: GridPosition,
-): WorldEntity[] {
-	return ctx.worldSnapshot.entities.filter((e) => {
-		if (e.kind !== "objective_space") return false;
-		const h = e.holder;
-		return isGridPosition(h) && positionsEqual(h, position);
-	});
+interface CellContents {
+	peers: AiId[];
+	entities: WorldEntity[];
+	items: WorldEntity[];
+	obstacles: WorldEntity[];
+	spaces: WorldEntity[];
 }
 
-function renderableItems(entities: WorldEntity[]): WorldEntity[] {
-	return entities.filter(
-		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
+function cellContents(ctx: AiContext, position: GridPosition): CellContents {
+	const peers = Object.entries(ctx.personaSpatial)
+		.filter(
+			([id, spatial]) =>
+				id !== ctx.aiId && positionsEqual(spatial.position, position),
+		)
+		.map(([id]) => id);
+	const entities = ctx.worldSnapshot.entities.filter(
+		(e) => isGridPosition(e.holder) && positionsEqual(e.holder, position),
 	);
+	return {
+		peers,
+		entities,
+		items: pickableEntities(entities),
+		obstacles: entities.filter((e) => e.kind === "obstacle"),
+		spaces: entities.filter((e) => e.kind === "objective_space"),
+	};
 }
 
 function describeGroundItems(
@@ -570,19 +577,14 @@ function visibleOutOfReachSpaceHints(
 	return hints;
 }
 
-function satisfiedLookFlavorsAt(
-	ctx: AiContext,
-	position: GridPosition,
-): string[] {
-	return ctx.worldSnapshot.entities
-		.filter((e) => {
-			if (e.kind !== "objective_space" && e.kind !== "interesting_object")
-				return false;
-			if (e.satisfactionState !== "satisfied") return false;
-			if (!e.postLookFlavor) return false;
-			const h = e.holder;
-			return isGridPosition(h) && positionsEqual(h, position);
-		})
+function satisfiedLookFlavors(cell: CellContents): string[] {
+	return cell.entities
+		.filter(
+			(e) =>
+				(e.kind === "objective_space" || e.kind === "interesting_object") &&
+				e.satisfactionState === "satisfied" &&
+				e.postLookFlavor,
+		)
 		.map((e) => e.postLookFlavor as string);
 }
 
@@ -590,23 +592,18 @@ export function buildDiskSnapshot(ctx: AiContext): string {
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
 	if (!actorSpatial) return "";
 
-	const items = renderableItems(ctx.worldSnapshot.entities);
 	const lines: string[] = [];
+	const names = (entities: WorldEntity[]) =>
+		entities.map((e) => displayName(ctx, e));
 
-	const heldItems = items
-		.filter((i) => i.holder === ctx.aiId)
-		.map((i) => displayName(ctx, i))
-		.sort();
-	const ownCellItems = items
-		.filter((item) => {
-			const h = item.holder;
-			return isGridPosition(h) && positionsEqual(h, actorSpatial.position);
-		})
-		.map((i) => displayName(ctx, i))
-		.sort();
-	const ownCellSpaces = objectiveSpacesAt(ctx, actorSpatial.position)
-		.map((s) => displayName(ctx, s))
-		.sort();
+	const heldItems = names(
+		pickableEntities(ctx.worldSnapshot.entities).filter(
+			(i) => i.holder === ctx.aiId,
+		),
+	).sort();
+	const ownCell = cellContents(ctx, actorSpatial.position);
+	const ownCellItems = names(ownCell.items).sort();
+	const ownCellSpaces = names(ownCell.spaces).sort();
 	lines.push(
 		`you: holding=[${heldItems.join(", ") || "nothing"}] cell=[${ownCellItems.join(", ") || "nothing"}] on=[${ownCellSpaces.join(", ") || "nothing"}]`,
 	);
@@ -622,38 +619,19 @@ export function buildDiskSnapshot(ctx: AiContext): string {
 			continue;
 		}
 
-		const { position } = cell;
-		const contentParts: string[] = [];
-
-		for (const [otherId, otherSpatial] of Object.entries(ctx.personaSpatial)) {
-			if (otherId === ctx.aiId) continue;
-			if (!positionsEqual(otherSpatial.position, position)) continue;
-			contentParts.push(`*${otherId}`);
-		}
-
-		const cellItems = items
-			.filter((item) => {
-				const h = item.holder;
-				return isGridPosition(h) && positionsEqual(h, position);
-			})
-			.map((i) => displayName(ctx, i));
-		contentParts.push(...cellItems);
-
-		const obstacles = ctx.worldSnapshot.entities.filter((e) => {
-			if (e.kind !== "obstacle") return false;
-			const h = e.holder;
-			return isGridPosition(h) && positionsEqual(h, position);
-		});
-		contentParts.push(...obstacles.map((o) => displayName(ctx, o)));
-		contentParts.push(
-			...objectiveSpacesAt(ctx, position).map((s) => displayName(ctx, s)),
-		);
+		const contentsHere = cellContents(ctx, cell.position);
+		const contentParts = [
+			...contentsHere.peers.map((id) => `*${id}`),
+			...names(contentsHere.items),
+			...names(contentsHere.obstacles),
+			...names(contentsHere.spaces),
+		];
 
 		const contents =
 			contentParts.length > 0 ? [...contentParts].sort().join(", ") : "nothing";
 
 		let cellLine = `at ${label}: ${contents}`;
-		for (const flavor of satisfiedLookFlavorsAt(ctx, position)) {
+		for (const flavor of satisfiedLookFlavors(contentsHere)) {
 			cellLine += ` ${flavor}`;
 		}
 		lines.push(cellLine);
@@ -731,8 +709,7 @@ function renderCurrentState(ctx: AiContext): string {
 
 	const whatsNew: string[] = [];
 	if (ctx.prevDiskSnapshot !== undefined) {
-		const current = buildDiskSnapshot(ctx);
-		const diff = renderWhatsNew(ctx.prevDiskSnapshot, current);
+		const diff = renderWhatsNew(ctx.prevDiskSnapshot, ctx.diskSnapshot());
 		if (diff !== null) whatsNew.push(diff);
 	}
 	for (const line of renderPerceptionDelta(ctx, ctx.prevDiskEntities)) {
@@ -749,7 +726,7 @@ function renderCurrentState(ctx: AiContext): string {
 	}
 
 	const actorSpatial = ctx.personaSpatial[ctx.aiId];
-	const items = renderableItems(ctx.worldSnapshot.entities);
+	const items = pickableEntities(ctx.worldSnapshot.entities);
 
 	lines.push("<where_you_are>");
 	if (actorSpatial) {
@@ -769,19 +746,16 @@ function renderCurrentState(ctx: AiContext): string {
 			lines.push("You are holding: nothing");
 		}
 
-		const cellItems = items.filter((item) => {
-			const h = item.holder;
-			return isGridPosition(h) && positionsEqual(h, actorSpatial.position);
-		});
-		if (cellItems.length > 0) {
+		const ownCell = cellContents(ctx, actorSpatial.position);
+		if (ownCell.items.length > 0) {
 			lines.push(
-				`Your cell contains: ${describeGroundItems(ctx, cellItems).join("; ")}`,
+				`Your cell contains: ${describeGroundItems(ctx, ownCell.items).join("; ")}`,
 			);
 		} else {
 			lines.push("Your cell contains: nothing");
 		}
 
-		const standingOn = objectiveSpacesAt(ctx, actorSpatial.position);
+		const standingOn = ownCell.spaces;
 		if (standingOn.length > 0) {
 			const standingParts = standingOn.map((space) =>
 				space.satisfactionState === "satisfied" && space.postLookFlavor
@@ -812,14 +786,10 @@ function renderCurrentState(ctx: AiContext): string {
 	if (actorSpatial) {
 		const viewCells = projectVista(actorSpatial.position);
 		for (const cell of viewCells) {
-			const { position } = cell;
+			const contentsHere = cellContents(ctx, cell.position);
 
 			const peers: string[] = [];
-			for (const [otherId, otherSpatial] of Object.entries(
-				ctx.personaSpatial,
-			)) {
-				if (otherId === ctx.aiId) continue;
-				if (!positionsEqual(otherSpatial.position, position)) continue;
+			for (const otherId of contentsHere.peers) {
 				const heldByOther = items
 					.filter((item) => item.holder === otherId)
 					.map((item) => displayName(ctx, item));
@@ -828,7 +798,7 @@ function renderCurrentState(ctx: AiContext): string {
 				const otherColor = ctx.personaColors[otherId] ?? "unknown";
 				const where = describeRelativePosition(
 					actorSpatial.position,
-					otherSpatial.position,
+					cell.position,
 				);
 				peers.push(
 					`the Daemon *${otherId} (${otherColor}), ${where}, holding ${holdingStr}`,
@@ -851,51 +821,27 @@ function renderCurrentState(ctx: AiContext): string {
 				continue;
 			}
 
-			const contentParts: string[] = [...peers];
-
-			const cellItems = items.filter((item) => {
-				const h = item.holder;
-				return isGridPosition(h) && positionsEqual(h, position);
-			});
-			if (cellItems.length > 0) {
-				contentParts.push(...describeGroundItems(ctx, cellItems));
-			}
-
-			const obstacleEntities = ctx.worldSnapshot.entities.filter((e) => {
-				if (e.kind !== "obstacle") return false;
-				const h = e.holder;
-				return isGridPosition(h) && positionsEqual(h, position);
-			});
-			if (obstacleEntities.length > 0) {
-				for (const obs of obstacleEntities) {
-					contentParts.push(displayName(ctx, obs));
-				}
-			}
-
-			for (const space of objectiveSpacesAt(ctx, position)) {
-				contentParts.push(`${displayName(ctx, space)} (a place, not an item)`);
-			}
+			const contentParts: string[] = [
+				...peers,
+				...describeGroundItems(ctx, contentsHere.items),
+				...contentsHere.obstacles.map((obs) => displayName(ctx, obs)),
+				...contentsHere.spaces.map(
+					(space) => `${displayName(ctx, space)} (a place, not an item)`,
+				),
+			];
 
 			const contents =
 				contentParts.length > 0 ? contentParts.join("; ") : "nothing";
 
 			let cellLine = `- ${label}: ${contents}`;
-			for (const flavor of satisfiedLookFlavorsAt(ctx, position)) {
+			for (const flavor of satisfiedLookFlavors(contentsHere)) {
 				cellLine += ` ${flavor}`;
 			}
 			lines.push(cellLine);
 
-			const cellEntities = ctx.worldSnapshot.entities.filter((e) => {
-				const h = e.holder;
-				return isGridPosition(h) && positionsEqual(h, position);
-			});
-			for (const entity of cellEntities) {
-				if (entity.holder === ctx.aiId) continue;
-
+			for (const entity of contentsHere.entities) {
 				const chosenDescription = chooseExamineDescription(entity);
-
 				if (!chosenDescription) continue;
-
 				lines.push(`    ${displayName(ctx, entity)}: ${chosenDescription}`);
 			}
 		}

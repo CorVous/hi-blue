@@ -18,12 +18,7 @@ import {
 	resolveToolDisables,
 } from "./engine";
 import { buildOpenAiMessages } from "./openai-message-builder";
-import {
-	buildAiContext,
-	buildDiskEntityState,
-	buildDiskSnapshot,
-	renderPerceptionDelta,
-} from "./prompt-builder";
+import { buildAiContext, renderPerceptionDelta } from "./prompt-builder";
 import type {
 	LifecyclePhase,
 	OpenAiMessage,
@@ -192,8 +187,8 @@ export async function runRound(
 				? { prevDiskEntities: priorEntities }
 				: {}),
 		});
-		newDiskSnapshots[aiId] = buildDiskSnapshot(ctx);
-		const promptEntities = buildDiskEntityState(ctx);
+		newDiskSnapshots[aiId] = ctx.diskSnapshot();
+		const promptEntities = ctx.diskEntities();
 		newDiskEntities[aiId] = promptEntities;
 		const priorRoundtrip = priorToolRoundtrip?.[aiId];
 		const messages = buildOpenAiMessages(ctx, priorRoundtrip, state.round);

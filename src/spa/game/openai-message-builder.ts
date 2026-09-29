@@ -16,64 +16,29 @@ export function buildOpenAiMessages(
 
 	const sortedLog = [...ctx.conversationLog].sort((a, b) => a.round - b.round);
 	for (const entry of sortedLog) {
-		if (entry.kind === "message") {
-			if (entry.from === ctx.aiId) {
-				const outgoingEntry = entry as {
-					toolCallId?: string;
-					toolArgumentsJson?: string;
-				};
-				if (outgoingEntry.toolCallId && outgoingEntry.toolArgumentsJson) {
-					messages.push({
-						role: "assistant",
-						content: null,
-						tool_calls: [
-							{
-								type: "function" as const,
-								id: outgoingEntry.toolCallId,
-								function: {
-									name: "message",
-									arguments: outgoingEntry.toolArgumentsJson,
-								},
-							},
-						],
-					});
-					messages.push({
-						role: "tool",
-						tool_call_id: outgoingEntry.toolCallId,
-						content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
-					});
-				} else {
-					messages.push({
-						role: "assistant",
-						content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
-					});
-				}
-			} else {
+		if (entry.kind === "message" && entry.from === ctx.aiId) {
+			const { toolCallId, toolArgumentsJson } = entry;
+			const rendered = renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities);
+			if (toolCallId && toolArgumentsJson) {
 				messages.push({
-					role: "user",
-					content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
+					role: "assistant",
+					content: null,
+					tool_calls: [
+						{
+							type: "function" as const,
+							id: toolCallId,
+							function: { name: "message", arguments: toolArgumentsJson },
+						},
+					],
 				});
+				messages.push({
+					role: "tool",
+					tool_call_id: toolCallId,
+					content: rendered,
+				});
+			} else {
+				messages.push({ role: "assistant", content: rendered });
 			}
-		} else if (entry.kind === "witnessed-event") {
-			messages.push({
-				role: "user",
-				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
-			});
-		} else if (entry.kind === "action-failure") {
-			messages.push({
-				role: "user",
-				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
-			});
-		} else if (entry.kind === "witnessed-obstacle-shift") {
-			messages.push({
-				role: "user",
-				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
-			});
-		} else if (entry.kind === "witnessed-convergence") {
-			messages.push({
-				role: "user",
-				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
-			});
 		} else if (entry.kind === "tool-call") {
 			messages.push({
 				role: "assistant",
@@ -97,7 +62,7 @@ export function buildOpenAiMessages(
 				tool_call_id: entry.toolCallId,
 				content: toolContent,
 			});
-		} else if (entry.kind === "broadcast") {
+		} else {
 			messages.push({
 				role: "user",
 				content: renderEntry(entry, ctx.aiId, ctx.worldSnapshot.entities),
