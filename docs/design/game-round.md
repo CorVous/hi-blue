@@ -63,7 +63,7 @@ Other sources, used here by reference rather than repeated:
 
 ## Engine (`engine.ts`)
 
-**Pack selectors are the boundary.** `startGame` builds `world.entities` from the pack selectors (`carryPairs`, `boundSpaces`, `interestingObjects`, `standaloneObjectives`, `obstacles`), and `reprojectEntitiesOnto` also finds pack-B entities through the selectors. The engine therefore depends on the selector contract, not on how a pack is stored (packs became a flat `entities` list in #462). `engine.test.ts` asserts that the world is exactly the union of the selector outputs.
+**Pack selectors are the boundary.** `startGame` builds `world.entities` from the pack selectors (`carryPairs`, `boundSpaces`, `interestingObjects`, `standaloneObjectives`, `obstacles`), and `reprojectEntitiesOnto` finds pack-B entities through the same five selectors, so every entity `startGame` placed takes pack B's presentation on a Setting Shift. The engine therefore depends on the selector contract, not on how a pack is stored (packs became a flat `entities` list in #462). `engine.test.ts` asserts that the world is exactly the union of the selector outputs.
 
 **Defaults.** The budget is $0.50 per Daemon for the whole game. With no `objectiveTypes` there are no objectives, which is a vacuous win, useful in tests. The first complication countdown is drawn from [1, 5]. Start cells come from the pack's `aiStarts`, falling back to a partial Fisher–Yates shuffle of distinct cells.
 

@@ -138,6 +138,7 @@ function reprojectEntitiesOnto(
 	}
 	for (const space of boundSpaces(bPack)) byId.set(space.id, space);
 	for (const obj of interestingObjects(bPack)) byId.set(obj.id, obj);
+	for (const obj of standaloneObjectives(bPack)) byId.set(obj.id, obj);
 	for (const obs of obstacles(bPack)) byId.set(obs.id, obs);
 
 	return entities.map((entity) => {

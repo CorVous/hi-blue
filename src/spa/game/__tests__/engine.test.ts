@@ -16,7 +16,7 @@ import {
 	obstacles,
 } from "../pack-selectors";
 import { buildAiContext } from "../prompt-builder";
-import type { ContentPack, GameState } from "../types";
+import type { ContentPack, GameState, WorldEntity } from "../types";
 import { TEST_PERSONAS } from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
 import { cardinalClause } from "./fixtures/prompt-sections";
@@ -439,5 +439,47 @@ describe("shiftToBPack", () => {
 		expect(before).toMatch(/\beast\b/);
 		expect(before).toMatch(/\bwest\b/);
 		expect(after).toBe(before);
+	});
+
+	it("reprojects every selector's entities, including standalone objectives", () => {
+		const aEntities: WorldEntity[] = [
+			{
+				id: "loose",
+				kind: "objective_object",
+				name: "Loose Token",
+				examineDescription: "A token from pack A.",
+				holder: { row: 1, col: 1 },
+			},
+			{
+				id: "trinket",
+				kind: "interesting_object",
+				name: "Trinket",
+				examineDescription: "A trinket from pack A.",
+				holder: { row: 2, col: 2 },
+			},
+		];
+		const bEntities: WorldEntity[] = aEntities.map((e) => ({
+			...e,
+			name: `${e.name} B`,
+			examineDescription: `${e.examineDescription} (B)`,
+			holder: { row: 4, col: 4 },
+		}));
+		const packA = makeTestPack(aEntities, { wallName: "wall" });
+		const packB = makeTestPack(bEntities, { wallName: "wall" });
+		const game = {
+			...startGame(TEST_PERSONAS, packA, { budgetPerAi: 5 }),
+			contentPacksA: [packA],
+			contentPacksB: [packB],
+		};
+
+		const shifted = shiftToBPack(game);
+
+		for (const id of ["loose", "trinket"]) {
+			const entity = shifted.world.entities.find((e) => e.id === id);
+			expect(entity?.name).toMatch(/ B$/);
+			expect(entity?.holder).toEqual(
+				game.world.entities.find((e) => e.id === id)?.holder,
+			);
+		}
 	});
 });
