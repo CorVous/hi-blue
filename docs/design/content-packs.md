@@ -60,8 +60,10 @@ Three interfaces isolate every LLM call so tests and evals never touch the netwo
   delta arrives, so a stream that errors before its first chunk goes straight
   from `started` to `errored`.
 - Persona synthesis (`BrowserSynthesisProvider`) retries a failed call once.
-  Every persona must come back with exactly `VOICE_EXAMPLES_PER_PERSONA` voice
-  lines, and the ids must match the input exactly (none missing, none extra).
+  Every persona must come back with a blurb that is not empty or whitespace
+  only, and with exactly `VOICE_EXAMPLES_PER_PERSONA` voice lines, and the ids
+  must match the input exactly (none missing, none extra). An empty blurb would
+  otherwise reach the Daemon's `<personality>` block as nothing.
 
 ## Type-first bindings
 

@@ -92,6 +92,11 @@ function validateResult(raw: unknown, inputIds: string[]): SynthesisResult {
 				"synthesis persona entry missing string id or blurb",
 			);
 		}
+		if (entry.blurb.trim().length === 0) {
+			throw new SynthesisError(
+				`synthesis persona entry ${entry.id} has an empty blurb`,
+			);
+		}
 		if (!inputIds.includes(entry.id)) {
 			throw new SynthesisError(
 				`synthesis response contains unexpected id: ${entry.id}`,

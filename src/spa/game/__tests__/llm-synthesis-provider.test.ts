@@ -547,6 +547,40 @@ describe("BrowserSynthesisProvider", () => {
 		).rejects.toBeInstanceOf(SynthesisError);
 	});
 
+	it.each([
+		["empty", ""],
+		["whitespace-only", "   \n\t"],
+	])("throws SynthesisError when a blurb is %s", async (_label, blurb) => {
+		const badPersonas = [
+			{ id: "a1b2", blurb, voiceExamples: ["ok", "ok", "ok"] },
+			{ id: "c3d4", blurb: "blurb2", voiceExamples: ["ok", "ok", "ok"] },
+			{ id: "e5f6", blurb: "blurb3", voiceExamples: ["ok", "ok", "ok"] },
+		];
+		const makeBody = () =>
+			JSON.stringify({
+				choices: [
+					{
+						message: {
+							content: JSON.stringify({ personas: badPersonas }),
+							reasoning: null,
+						},
+					},
+				],
+			});
+		vi.stubGlobal(
+			"fetch",
+			vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(new Response(makeBody(), { status: 200 })),
+				),
+		);
+		const provider = new BrowserSynthesisProvider();
+		await expect(
+			provider.synthesizePersonas(THREE_INPUTS),
+		).rejects.toBeInstanceOf(SynthesisError);
+	});
+
 	it("returns voiceExamples when valid 3-entry array provided", async () => {
 		const goodPersonas = [
 			{
