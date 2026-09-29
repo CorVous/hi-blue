@@ -32,13 +32,6 @@ export function findFirstMention(
 	return null;
 }
 
-export function parseFirstMention(
-	text: string,
-	personaNamesToId: ReadonlyMap<string, AiId>,
-): AiId | null {
-	return findFirstMention(text, personaNamesToId)?.aiId ?? null;
-}
-
 export function applyAddresseeChange({
 	text,
 	selectionStart,

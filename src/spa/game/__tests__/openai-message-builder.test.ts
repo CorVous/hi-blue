@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { advanceRound, appendLogEntry, appendMessage } from "../engine";
-import {
-	buildOpenAiMessages,
-	buildSilentTurn,
-} from "../openai-message-builder";
+import { buildOpenAiMessages } from "../openai-message-builder";
 import { buildAiContext } from "../prompt-builder";
 import type { ConversationEntry, ToolRoundtripMessage } from "../types";
 import { makeTestGame } from "./fixtures/make-game-state";
+
+const SILENT_TURN = "You have received no messages.";
 
 describe("buildOpenAiMessages", () => {
 	it("empty chat history + no roundtrip → [system, current-state user turn]", () => {
@@ -217,7 +216,7 @@ describe("buildOpenAiMessages", () => {
 
 		const anchor = messages[messages.length - 2];
 		expect(anchor?.role).toBe("user");
-		expect((anchor as { content: string }).content).toBe(buildSilentTurn());
+		expect((anchor as { content: string }).content).toBe(SILENT_TURN);
 
 		const last = messages[messages.length - 1];
 		expect((last as { content: string }).content).toBe(
@@ -231,7 +230,7 @@ describe("buildOpenAiMessages", () => {
 		game = appendMessage(game, "green", "red", "psst red");
 
 		const ctx = buildAiContext(game, "red");
-		const silent = buildSilentTurn();
+		const silent = SILENT_TURN;
 		const stateContent = ctx.toCurrentStateUserMessage();
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
@@ -260,7 +259,7 @@ describe("buildOpenAiMessages", () => {
 		game = appendMessage(game, "blue", "red", "Hi Ember");
 
 		const ctx = buildAiContext(game, "red");
-		const silent = buildSilentTurn();
+		const silent = SILENT_TURN;
 		const stateContent = ctx.toCurrentStateUserMessage();
 		const messages = buildOpenAiMessages(ctx, undefined, currentRound);
 
@@ -286,7 +285,7 @@ describe("buildOpenAiMessages", () => {
 	it("when `currentRound` is omitted, no anchor is appended (back-compat)", () => {
 		const game = makeTestGame();
 		const ctx = buildAiContext(game, "red");
-		const silent = buildSilentTurn();
+		const silent = SILENT_TURN;
 		const messages = buildOpenAiMessages(ctx, undefined);
 		expect(
 			messages.some(
@@ -309,7 +308,7 @@ describe("buildOpenAiMessages", () => {
 
 		const anchor = messages[messages.length - 2];
 		expect(anchor?.role).toBe("user");
-		expect((anchor as { content: string }).content).toBe(buildSilentTurn());
+		expect((anchor as { content: string }).content).toBe(SILENT_TURN);
 	});
 
 	it("buildOpenAiMessages is pure: same context → byte-identical output", () => {

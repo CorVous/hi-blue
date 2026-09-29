@@ -3,9 +3,7 @@ import type { AiContext } from "./prompt-builder.js";
 import type { OpenAiMessage } from "./round-llm-provider.js";
 import type { ToolRoundtripMessage } from "./types.js";
 
-export function buildSilentTurn(): string {
-	return "You have received no messages.";
-}
+const SILENT_TURN = "You have received no messages.";
 
 export function buildOpenAiMessages(
 	ctx: AiContext,
@@ -136,7 +134,7 @@ export function buildOpenAiMessages(
 				e.kind === "message" && e.to === ctx.aiId && e.round === currentRound,
 		);
 		if (!incomingThisRound) {
-			messages.push({ role: "user", content: buildSilentTurn() });
+			messages.push({ role: "user", content: SILENT_TURN });
 		}
 	}
 

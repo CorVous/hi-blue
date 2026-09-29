@@ -5,7 +5,6 @@ import {
 	buildPersonaColorMap,
 	buildPersonaNameMap,
 	findFirstMention,
-	parseFirstMention,
 	splitMentionSegments,
 } from "../mention-parser.js";
 import type { AiId } from "../types.js";
@@ -16,7 +15,7 @@ const nameMap = new Map<string, AiId>([
 	["frost", "cyan"],
 ]);
 
-describe("parseFirstMention", () => {
+describe("findFirstMention aiId", () => {
 	it.each<[string, AiId | null]>([
 		["*Sage", "green"],
 		["*Sage hi", "green"],
@@ -36,8 +35,8 @@ describe("parseFirstMention", () => {
 		["*", null],
 		["*Ember", "red"],
 		["*Frost", "cyan"],
-	])("parseFirstMention(%j) → %j", (text, expected) => {
-		expect(parseFirstMention(text, nameMap)).toBe(expected);
+	])("findFirstMention(%j)?.aiId → %j", (text, expected) => {
+		expect(findFirstMention(text, nameMap)?.aiId ?? null).toBe(expected);
 	});
 });
 
