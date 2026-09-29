@@ -79,7 +79,7 @@ export function serializeSession(
 	lastSavedAt: string,
 	createdAt: string,
 	epoch = 1,
-): SerializedSessionFiles {
+): SerializedSessionFiles & { engine: string } {
 	const meta: MetaFile = {
 		createdAt,
 		lastSavedAt,

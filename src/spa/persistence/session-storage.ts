@@ -172,6 +172,52 @@ function savingMarkerKey(prefix: string, sessionId: string): string {
 	return `${prefix}${sessionId}/saving`;
 }
 
+function sessionDir(prefix: string, sessionId: string): string {
+	return `${prefix}${sessionId}/`;
+}
+
+function readMetaFile(prefix: string, sessionId: string): MetaFile | null {
+	let meta: MetaFile | null = null;
+	ignoringStorageErrors(() => {
+		const metaRaw = localStorage.getItem(metaKey(prefix, sessionId));
+		if (metaRaw) meta = JSON.parse(metaRaw) as MetaFile;
+	});
+	return meta;
+}
+
+interface StoredSessionFiles {
+	meta: string | null;
+	daemonEntries: Array<{ suffix: string; value: string }>;
+	engine: string | null;
+}
+
+function readSessionFiles(
+	prefix: string,
+	sessionId: string,
+): StoredSessionFiles {
+	return {
+		meta: localStorage.getItem(metaKey(prefix, sessionId)),
+		daemonEntries: readDaemonEntries(sessionDir(prefix, sessionId)),
+		engine: localStorage.getItem(engineKey(prefix, sessionId)),
+	};
+}
+
+function writeSessionFiles(
+	prefix: string,
+	sessionId: string,
+	files: StoredSessionFiles,
+): void {
+	if (files.meta !== null) {
+		localStorage.setItem(metaKey(prefix, sessionId), files.meta);
+	}
+	for (const { suffix, value } of files.daemonEntries) {
+		localStorage.setItem(`${sessionDir(prefix, sessionId)}${suffix}`, value);
+	}
+	if (files.engine !== null) {
+		localStorage.setItem(engineKey(prefix, sessionId), files.engine);
+	}
+}
+
 export function saveActiveSession(
 	state: GameState,
 	opts?: { createdAt?: string; sessionId?: string | null },
@@ -181,19 +227,13 @@ export function saveActiveSession(
 
 	const now = new Date().toISOString();
 
-	let epoch = 1;
-	let existingCreatedAt: string | undefined;
-	ignoringStorageErrors(() => {
-		const existingMeta = localStorage.getItem(
-			metaKey(SESSIONS_PREFIX, sessionId),
-		);
-		if (existingMeta !== null) {
-			const parsed = JSON.parse(existingMeta) as MetaFile;
-			if (typeof parsed.epoch === "number") epoch = parsed.epoch;
-			if (typeof parsed.createdAt === "string")
-				existingCreatedAt = parsed.createdAt;
-		}
-	});
+	const existingMeta = readMetaFile(SESSIONS_PREFIX, sessionId);
+	const epoch =
+		typeof existingMeta?.epoch === "number" ? existingMeta.epoch : 1;
+	const existingCreatedAt =
+		typeof existingMeta?.createdAt === "string"
+			? existingMeta.createdAt
+			: undefined;
 	const createdAt = opts?.createdAt ?? existingCreatedAt ?? now;
 
 	let files: ReturnType<typeof serializeSession>;
@@ -219,8 +259,7 @@ export function saveActiveSession(
 			);
 		}
 
-		// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns a non-null engine string
-		localStorage.setItem(engineKey(SESSIONS_PREFIX, sessionId), files.engine!);
+		localStorage.setItem(engineKey(SESSIONS_PREFIX, sessionId), files.engine);
 		localStorage.removeItem(markerKey);
 
 		return { ok: true };
@@ -256,7 +295,7 @@ export function clearActiveSession(): void {
 	if (!sessionId) return;
 
 	ignoringStorageErrors(() =>
-		removeKeysUnder(`${SESSIONS_PREFIX}${sessionId}/`),
+		removeKeysUnder(sessionDir(SESSIONS_PREFIX, sessionId)),
 	);
 }
 
@@ -293,13 +332,13 @@ export function loadSession(
 		const mintedButNeverSaved = metaJson === null && engineBlob === null;
 		if (mintedButNeverSaved) return { kind: "none" };
 
-		if (engineBlob === null) return { kind: "broken", sessionId };
-
-		if (metaJson === null) return { kind: "broken", sessionId };
+		if (engineBlob === null || metaJson === null) {
+			return { kind: "broken", sessionId };
+		}
 
 		const daemonsRaw: Record<AiId, string> = {};
 		for (const { suffix, value } of readDaemonEntries(
-			`${storagePrefix}${sessionId}/`,
+			sessionDir(storagePrefix, sessionId),
 		)) {
 			daemonsRaw[suffix.slice(0, -4)] = value;
 		}
@@ -345,25 +384,9 @@ export function dupSession(srcId: string): string {
 		);
 	}
 
-	const srcPrefix = `${SESSIONS_PREFIX}${srcId}/`;
-
-	const metaVal = localStorage.getItem(`${srcPrefix}meta.json`);
-	const engineVal = localStorage.getItem(`${srcPrefix}engine.dat`);
-
-	const daemonEntries = readDaemonEntries(srcPrefix);
-
+	const files = readSessionFiles(SESSIONS_PREFIX, srcId);
 	const newId = mintSessionId();
-	const dstPrefix = `${SESSIONS_PREFIX}${newId}/`;
-
-	if (metaVal !== null) {
-		localStorage.setItem(`${dstPrefix}meta.json`, metaVal);
-	}
-	for (const { suffix, value } of daemonEntries) {
-		localStorage.setItem(`${dstPrefix}${suffix}`, value);
-	}
-	if (engineVal !== null) {
-		localStorage.setItem(`${dstPrefix}engine.dat`, engineVal);
-	}
+	writeSessionFiles(SESSIONS_PREFIX, newId, files);
 
 	return newId;
 }
@@ -392,72 +415,89 @@ function listDaemonFiles(
 	return files.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+type UnloadableSessionInfo = Extract<
+	SessionInfo,
+	{ kind: "broken" | "version-mismatch" }
+>;
+
+type InspectedSession =
+	| { loaded: Extract<LoadResult, { kind: "ok" }> }
+	| { unloadable: UnloadableSessionInfo };
+
+function inspectSession(id: string, storagePrefix: string): InspectedSession {
+	const result = loadSession(id, storagePrefix);
+	const dir = sessionDir(storagePrefix, id);
+	switch (result.kind) {
+		case "ok":
+			return { loaded: result };
+		case "broken":
+			return {
+				unloadable: { kind: "broken", daemonFiles: listDaemonFiles(dir) },
+			};
+		case "version-mismatch":
+			return {
+				unloadable: {
+					kind: "version-mismatch",
+					schemaVersion: result.schemaVersion,
+					daemonFiles: listDaemonFiles(dir),
+				},
+			};
+		case "none":
+			return { unloadable: { kind: "broken", daemonFiles: [] } };
+	}
+}
+
+function engineSize(storagePrefix: string, id: string): number {
+	return (localStorage.getItem(engineKey(storagePrefix, id)) ?? "").length;
+}
+
 export function getArchivedSessionInfo(
 	id: string,
 ): Extract<SessionInfo, { kind: "archived" | "broken" | "version-mismatch" }> {
-	const prefix = `${ARCHIVE_PREFIX}${id}/`;
+	const inspected = inspectSession(id, ARCHIVE_PREFIX);
+	if ("unloadable" in inspected) return inspected.unloadable;
+	const { loaded } = inspected;
 
-	const result = loadArchivedSession(id);
-	if (result.kind === "broken")
-		return { kind: "broken", daemonFiles: listDaemonFiles(prefix) };
-	if (result.kind === "version-mismatch")
-		return {
-			kind: "version-mismatch",
-			schemaVersion: result.schemaVersion,
-			daemonFiles: listDaemonFiles(prefix),
-		};
-	if (result.kind === "none") return { kind: "broken", daemonFiles: [] };
-
-	let lastPlayedAt = result.lastSavedAt;
-	let epoch = result.epoch;
-	ignoringStorageErrors(() => {
-		const metaRaw = localStorage.getItem(`${prefix}meta.json`);
-		if (metaRaw) {
-			const meta = JSON.parse(metaRaw) as MetaFile;
-			if (typeof meta.lastPlayedAt === "string")
-				lastPlayedAt = meta.lastPlayedAt;
-			if (typeof meta.epoch === "number") epoch = meta.epoch;
-		}
-	});
-
-	const engineVal = localStorage.getItem(`${prefix}engine.dat`) ?? "";
+	const meta = readMetaFile(ARCHIVE_PREFIX, id);
 	return {
 		kind: "archived",
-		lastSavedAt: result.lastSavedAt,
-		lastPlayedAt,
-		epoch,
-		round: result.state.round,
-		daemonFiles: listDaemonFiles(prefix),
-		engineSize: engineVal.length,
+		lastSavedAt: loaded.lastSavedAt,
+		lastPlayedAt:
+			typeof meta?.lastPlayedAt === "string"
+				? meta.lastPlayedAt
+				: loaded.lastSavedAt,
+		epoch: typeof meta?.epoch === "number" ? meta.epoch : loaded.epoch,
+		round: loaded.state.round,
+		daemonFiles: listDaemonFiles(sessionDir(ARCHIVE_PREFIX, id)),
+		engineSize: engineSize(ARCHIVE_PREFIX, id),
 	};
 }
 
 export function rmArchivedSession(id: string): void {
-	ignoringStorageErrors(() => removeKeysUnder(`${ARCHIVE_PREFIX}${id}/`));
+	ignoringStorageErrors(() => removeKeysUnder(sessionDir(ARCHIVE_PREFIX, id)));
 }
 
 export function isSessionComplete(sessionId: string): boolean {
-	const srcPrefix = `${SESSIONS_PREFIX}${sessionId}/`;
+	const files = readSessionFiles(SESSIONS_PREFIX, sessionId);
 	return (
-		localStorage.getItem(`${srcPrefix}meta.json`) !== null &&
-		localStorage.getItem(`${srcPrefix}engine.dat`) !== null &&
+		files.meta !== null &&
+		files.engine !== null &&
 		localStorage.getItem(savingMarkerKey(SESSIONS_PREFIX, sessionId)) === null
 	);
 }
 
 export async function archiveSession(sessionId: string): Promise<void> {
-	if (!isSessionComplete(sessionId)) {
+	const files = readSessionFiles(SESSIONS_PREFIX, sessionId);
+	const saveWasInterrupted =
+		localStorage.getItem(savingMarkerKey(SESSIONS_PREFIX, sessionId)) !== null;
+	if (files.meta === null || files.engine === null || saveWasInterrupted) {
 		throw new Error(
 			`archiveSession: session "${sessionId}" is incomplete or missing`,
 		);
 	}
-	const srcPrefix = `${SESSIONS_PREFIX}${sessionId}/`;
-	const metaJson = localStorage.getItem(`${srcPrefix}meta.json`) as string;
-	const engineVal = localStorage.getItem(`${srcPrefix}engine.dat`) as string;
-	const daemonEntries = readDaemonEntries(srcPrefix);
 	let meta: MetaFile;
 	try {
-		meta = JSON.parse(metaJson) as MetaFile;
+		meta = JSON.parse(files.meta) as MetaFile;
 	} catch {
 		throw new Error(
 			`archiveSession: meta.json for "${sessionId}" is not valid JSON`,
@@ -465,18 +505,16 @@ export async function archiveSession(sessionId: string): Promise<void> {
 	}
 	meta.readonly = true;
 	meta.lastPlayedAt = meta.lastSavedAt;
-	const dstPrefix = `${ARCHIVE_PREFIX}${sessionId}/`;
-	removeKeysUnder(dstPrefix);
-	localStorage.setItem(`${dstPrefix}meta.json`, JSON.stringify(meta, null, 2));
-	for (const { suffix, value } of daemonEntries) {
-		localStorage.setItem(`${dstPrefix}${suffix}`, value);
-	}
-	localStorage.setItem(`${dstPrefix}engine.dat`, engineVal);
+	removeKeysUnder(sessionDir(ARCHIVE_PREFIX, sessionId));
+	writeSessionFiles(ARCHIVE_PREFIX, sessionId, {
+		...files,
+		meta: JSON.stringify(meta, null, 2),
+	});
 }
 
 export function rmSession(id: string): void {
 	ignoringStorageErrors(() => {
-		removeKeysUnder(`${SESSIONS_PREFIX}${id}/`);
+		removeKeysUnder(sessionDir(SESSIONS_PREFIX, id));
 		if (getActiveSessionId() === id) {
 			localStorage.removeItem(ACTIVE_KEY);
 		}
@@ -512,14 +550,14 @@ export function seedFromArchive(
 	const files = serializeSession(broadcastedState, now, now, newEpoch);
 
 	const newId = mintSessionId();
-	const dstPrefix = `${SESSIONS_PREFIX}${newId}/`;
-
-	localStorage.setItem(`${dstPrefix}meta.json`, files.meta);
-	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
-		localStorage.setItem(`${dstPrefix}${aiId}.txt`, daemonJson);
-	}
-	// biome-ignore lint/style/noNonNullAssertion: serializeSession always returns a non-null engine string
-	localStorage.setItem(`${dstPrefix}engine.dat`, files.engine!);
+	writeSessionFiles(SESSIONS_PREFIX, newId, {
+		meta: files.meta,
+		daemonEntries: Object.entries(files.daemons).map(([aiId, value]) => ({
+			suffix: `${aiId}.txt`,
+			value,
+		})),
+		engine: files.engine,
+	});
 
 	return newId;
 }
@@ -527,53 +565,34 @@ export function seedFromArchive(
 export function getSessionInfo(
 	id: string,
 ): Extract<SessionInfo, { kind: "ok" | "broken" | "version-mismatch" }> {
-	const prefix = `${SESSIONS_PREFIX}${id}/`;
+	const inspected = inspectSession(id, SESSIONS_PREFIX);
 
-	const result = loadSession(id);
-
-	if (result.kind === "broken") {
-		return { kind: "broken", daemonFiles: listDaemonFiles(prefix) };
-	}
-
-	if (result.kind === "version-mismatch") {
-		let lastSavedAt: string | undefined;
-		let epoch: number | undefined;
-		ignoringStorageErrors(() => {
-			const metaRaw = localStorage.getItem(`${prefix}meta.json`);
-			if (metaRaw) {
-				const meta = JSON.parse(metaRaw) as {
-					lastSavedAt?: string;
-					epoch?: number;
-					phase?: number;
-				};
-				if (typeof meta.lastSavedAt === "string")
-					lastSavedAt = meta.lastSavedAt;
-				const epochOrPreV6Phase =
-					typeof meta.epoch === "number" ? meta.epoch : meta.phase;
-				if (typeof epochOrPreV6Phase === "number") epoch = epochOrPreV6Phase;
-			}
-		});
-		const vmResult: SessionInfo = {
-			kind: "version-mismatch",
-			schemaVersion: result.schemaVersion,
-			daemonFiles: listDaemonFiles(prefix),
+	if ("unloadable" in inspected) {
+		const info = inspected.unloadable;
+		if (info.kind !== "version-mismatch") return info;
+		const meta = readMetaFile(SESSIONS_PREFIX, id) as
+			| (MetaFile & { phase?: number })
+			| null;
+		const lastSavedAt =
+			typeof meta?.lastSavedAt === "string" ? meta.lastSavedAt : undefined;
+		const epochOrPreV6Phase =
+			typeof meta?.epoch === "number" ? meta.epoch : meta?.phase;
+		const epoch =
+			typeof epochOrPreV6Phase === "number" ? epochOrPreV6Phase : undefined;
+		return {
+			...info,
 			...(lastSavedAt !== undefined ? { lastSavedAt } : {}),
 			...(epoch !== undefined ? { epoch } : {}),
 		};
-		return vmResult;
 	}
 
-	if (result.kind === "none") {
-		return { kind: "broken", daemonFiles: [] };
-	}
-
-	const engineVal = localStorage.getItem(`${prefix}engine.dat`) ?? "";
+	const { loaded } = inspected;
 	return {
 		kind: "ok",
-		lastSavedAt: result.lastSavedAt,
-		epoch: result.epoch,
-		round: result.state.round,
-		daemonFiles: listDaemonFiles(prefix),
-		engineSize: engineVal.length,
+		lastSavedAt: loaded.lastSavedAt,
+		epoch: loaded.epoch,
+		round: loaded.state.round,
+		daemonFiles: listDaemonFiles(sessionDir(SESSIONS_PREFIX, id)),
+		engineSize: engineSize(SESSIONS_PREFIX, id),
 	};
 }
