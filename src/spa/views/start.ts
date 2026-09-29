@@ -1,3 +1,4 @@
+import type { BootstrapOpts } from "../game/bootstrap.js";
 import {
 	getPendingBootstrap,
 	type PendingBootstrap,
@@ -390,18 +391,11 @@ export function renderStart(
 
 	const personasRng = getSpikeRng("personas");
 	const contentPackRng = getSpikeRng("contentPack");
-	const spikeOpts =
-		personasRng && contentPackRng ? { personasRng, contentPackRng } : undefined;
-	const engagementOpts = engagementClauses
-		? { engagementClauses: true }
-		: undefined;
-	const actionProfileOpts = actionProfilesDisabled
-		? { actionProfiles: false }
-		: undefined;
-	const mergedOpts =
-		spikeOpts || engagementOpts || actionProfileOpts
-			? { ...spikeOpts, ...engagementOpts, ...actionProfileOpts }
-			: undefined;
+	const bootstrapOpts: BootstrapOpts = {
+		...(personasRng && contentPackRng ? { personasRng, contentPackRng } : {}),
+		...(engagementClauses ? { engagementClauses: true } : {}),
+		...(actionProfilesDisabled ? { actionProfiles: false } : {}),
+	};
 
 	const bootstrapErrorEl = doc.querySelector<HTMLElement>(
 		"#start-bootstrap-error",
@@ -448,7 +442,7 @@ export function renderStart(
 
 	const restartFailedGeneration = () => {
 		hideBootstrapError();
-		watchGeneration(startBootstrap(mergedOpts)).catch(logBootstrapFailure);
+		watchGeneration(startBootstrap(bootstrapOpts)).catch(logBootstrapFailure);
 	};
 
 	if (bootstrapRetryBtn) {
@@ -487,5 +481,5 @@ export function renderStart(
 	if (formEl) formEl.addEventListener("submit", handleSubmit, { signal });
 	beginBtn.addEventListener("click", handleSubmit, { signal });
 
-	return watchGeneration(startBootstrap(mergedOpts));
+	return watchGeneration(startBootstrap(bootstrapOpts));
 }

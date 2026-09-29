@@ -4,17 +4,11 @@ import {
 	generateNewGameAssetsSplit,
 	type SplitNewGameAssets,
 } from "./bootstrap.js";
-import type { AiId, AiPersona, ContentPack, ObjectiveType } from "./types.js";
+import type { AiId, AiPersona } from "./types.js";
 
 type PendingBootstrapStatus = "pending" | "personas-ready" | "ready" | "failed";
 
-export interface PendingBootstrap {
-	personasPromise: Promise<Record<AiId, AiPersona>>;
-	contentPacksPromise: Promise<{
-		packsA: ContentPack[];
-		packsB: ContentPack[];
-		objectiveTypes: ObjectiveType[];
-	}>;
+export interface PendingBootstrap extends SplitNewGameAssets {
 	status: PendingBootstrapStatus;
 	error?: unknown;
 	personas?: Record<AiId, AiPersona>;
@@ -72,15 +66,11 @@ export function startBootstrap(opts?: BootstrapOpts): PendingBootstrap {
 		return currentBootstrap;
 
 	const controller = new AbortController();
-	const split: SplitNewGameAssets = generateNewGameAssetsSplit({
+	const split = generateNewGameAssetsSplit({
 		...opts,
 		signal: controller.signal,
 	});
-	const entry: PendingBootstrap = {
-		personasPromise: split.personasPromise,
-		contentPacksPromise: split.contentPacksPromise,
-		status: "pending",
-	};
+	const entry: PendingBootstrap = { ...split, status: "pending" };
 
 	install(entry, controller);
 	recordPendingCall("persona-synthesis");
@@ -119,8 +109,7 @@ export function restartContentPacks(): PendingBootstrap {
 		signal: controller.signal,
 	});
 	const entry: PendingBootstrap = {
-		personasPromise: split.personasPromise,
-		contentPacksPromise: split.contentPacksPromise,
+		...split,
 		status: "pending",
 		personas: cached,
 	};

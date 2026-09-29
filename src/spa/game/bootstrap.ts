@@ -16,13 +16,15 @@ export interface NewGameAssets {
 	objectiveTypes?: ObjectiveType[];
 }
 
+export interface GeneratedContentPacks {
+	packsA: ContentPack[];
+	packsB: ContentPack[];
+	objectiveTypes: ObjectiveType[];
+}
+
 export interface SplitNewGameAssets {
 	personasPromise: Promise<Record<AiId, AiPersona>>;
-	contentPacksPromise: Promise<{
-		packsA: ContentPack[];
-		packsB: ContentPack[];
-		objectiveTypes: ObjectiveType[];
-	}>;
+	contentPacksPromise: Promise<GeneratedContentPacks>;
 }
 
 export interface BootstrapOpts {
@@ -43,12 +45,8 @@ function signalOpt(signal: AbortSignal | undefined): { signal?: AbortSignal } {
 async function generateContentPacks(
 	rng: () => number,
 	packLLM: ContentPackProvider,
-	aiIds: Promise<string[]>,
-): Promise<{
-	packsA: ContentPack[];
-	packsB: ContentPack[];
-	objectiveTypes: ObjectiveType[];
-}> {
+	aiIds: AiId[] | Promise<AiId[]>,
+): Promise<GeneratedContentPacks> {
 	const { packA, packB, objectiveTypes } = await generateDualContentPacks(
 		rng,
 		SETTING_POOL,
@@ -112,24 +110,24 @@ export async function buildSameDaemonsSession(
 	personas: Record<AiId, AiPersona>,
 	opts?: { rng?: () => number },
 ): Promise<GameSession> {
-	const rng = opts?.rng ?? Math.random;
-	const packLLM = new BrowserContentPackProvider();
-	const { packA, packB, objectiveTypes } = await generateDualContentPacks(
-		rng,
-		SETTING_POOL,
-		SINGLE_GAME_CONFIG,
-		packLLM,
+	const packs = await generateContentPacks(
+		opts?.rng ?? Math.random,
+		new BrowserContentPackProvider(),
 		Object.keys(personas),
 	);
-	return buildSessionFromAssets(
-		{
-			personas,
-			contentPacksA: [packA],
-			contentPacksB: [packB],
-			objectiveTypes,
-		},
-		opts,
-	);
+	return buildSessionFromAssets(newGameAssets(personas, packs), opts);
+}
+
+export function newGameAssets(
+	personas: Record<AiId, AiPersona>,
+	{ packsA, packsB, objectiveTypes }: GeneratedContentPacks,
+): NewGameAssets {
+	return {
+		personas,
+		contentPacksA: packsA,
+		contentPacksB: packsB,
+		objectiveTypes,
+	};
 }
 
 export function buildSessionFromAssets(

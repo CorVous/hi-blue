@@ -24,6 +24,7 @@ import {
 import {
 	buildSessionFromAssets,
 	type NewGameAssets,
+	newGameAssets,
 } from "../game/bootstrap.js";
 import { BrowserLLMProvider } from "../game/browser-llm-provider.js";
 import { isPlayerChatLockedOut } from "../game/complication-engine.js";
@@ -1309,13 +1310,8 @@ function runBootstrapChain(
 	const bootstrapPromise = pending.personasPromise
 		.then((personas) => {
 			enterGeneratingRoom(ctx, flow, personas);
-			return pending.contentPacksPromise.then(
-				({ packsA, packsB, objectiveTypes }) => ({
-					personas,
-					contentPacksA: packsA,
-					contentPacksB: packsB,
-					objectiveTypes,
-				}),
+			return pending.contentPacksPromise.then((packs) =>
+				newGameAssets(personas, packs),
 			);
 		})
 		.then((assets) => handOverBootstrappedSession(ctx, flow, assets));
