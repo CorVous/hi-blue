@@ -132,18 +132,13 @@ export function renderSessions(root: HTMLElement, opts?: RenderOpts): void {
 		});
 	}
 
-	const bannerEl = doc.querySelector<HTMLElement>("#sessions-banner");
-	if (bannerEl) {
-		const shown = renderReasonBanner(
-			doc,
-			bannerEl,
-			opts?.reason ?? null,
-			opts?.schemaVersion,
-			SESSIONS_BANNER_MESSAGES,
-		);
-		if (!shown) bannerEl.textContent = "";
-		bannerEl.hidden = !shown;
-	}
+	renderReasonBanner(
+		doc,
+		doc.querySelector<HTMLElement>("#sessions-banner"),
+		opts?.reason ?? null,
+		opts?.schemaVersion,
+		SESSIONS_BANNER_MESSAGES,
+	);
 
 	const listEl = doc.querySelector<HTMLElement>("#sessions-list");
 	if (!listEl) return;

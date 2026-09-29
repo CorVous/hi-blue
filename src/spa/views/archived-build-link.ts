@@ -35,17 +35,19 @@ function renderVersionMismatchBanner(
 
 export function renderReasonBanner(
 	doc: Document,
-	bannerEl: HTMLElement,
+	bannerEl: HTMLElement | null,
 	reason: string | null,
 	schemaVersion: number | undefined,
 	messages: Record<string, string>,
-): boolean {
+): void {
+	if (!bannerEl) return;
 	const message = reason === null ? undefined : messages[reason];
-	if (!message) return false;
-	if (reason === "version-mismatch") {
+	bannerEl.hidden = !message;
+	if (!message) {
+		bannerEl.textContent = "";
+	} else if (reason === "version-mismatch") {
 		renderVersionMismatchBanner(doc, bannerEl, schemaVersion);
 	} else {
 		bannerEl.textContent = message;
 	}
-	return true;
 }

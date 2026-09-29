@@ -31,8 +31,8 @@ it hides the other routes' screens and shows or hides the global chrome
   empty.
 - `renderReasonBanner` (in `archived-build-link.ts`) paints the reason
   banner for both `start.ts` and `sessions.ts`. Each view passes its own
-  message table and decides how to show or hide the element. A reason with
-  no copy in the table paints nothing. For `version-mismatch`, when the
+  message table. The helper also shows or hides the element: a reason with
+  no copy in the table empties and hides it. For `version-mismatch`, when the
   save's schema number maps to an archived release (`lookupArchiveVersion`),
   the banner links to `./v/<version>/` so the player can continue in the last
   build that could read that schema. Otherwise it shows

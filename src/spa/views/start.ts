@@ -11,7 +11,7 @@ import {
 	renderReasonBanner,
 	VERSION_MISMATCH_MESSAGE,
 } from "./archived-build-link.js";
-import { tryFocus, trySetCaret } from "./dom.js";
+import { setHidden, tryFocus, trySetCaret } from "./dom.js";
 
 const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
 	broken:
@@ -263,38 +263,28 @@ export function renderStart(
 	const doc = root.ownerDocument;
 
 	const startScreenEl = doc.querySelector<HTMLElement>("#start-screen");
-	const panelsEl = doc.querySelector<HTMLElement>("#panels");
-	const composerEl = doc.querySelector<HTMLElement>("#composer");
-	const sessionsScreenEl = doc.querySelector<HTMLElement>("#sessions-screen");
-	const endgameEl = doc.querySelector<HTMLElement>("#endgame");
-
-	if (panelsEl) panelsEl.hidden = true;
-	if (composerEl) composerEl.hidden = true;
-	if (sessionsScreenEl) sessionsScreenEl.hidden = true;
-	if (endgameEl) endgameEl.hidden = true;
+	setHidden(
+		doc,
+		[
+			"#panels",
+			"#composer",
+			"#sessions-screen",
+			"#endgame",
+			"#stage > header",
+			"#topinfo",
+			"#banner",
+		],
+		true,
+	);
 	if (startScreenEl) startScreenEl.hidden = false;
 
-	const headerEl = doc.querySelector<HTMLElement>("#stage > header");
-	const topinfoEl = doc.querySelector<HTMLElement>("#topinfo");
-	const bannerEl = doc.querySelector<HTMLElement>("#banner");
-	if (headerEl) headerEl.hidden = true;
-	if (topinfoEl) topinfoEl.hidden = true;
-	if (bannerEl) bannerEl.hidden = true;
-
-	const persistenceWarningEl = doc.querySelector<HTMLElement>(
-		"#persistence-warning",
+	renderReasonBanner(
+		doc,
+		doc.querySelector<HTMLElement>("#persistence-warning"),
+		opts?.reason ?? null,
+		opts?.schemaVersion,
+		PERSISTENCE_WARNING_MESSAGES,
 	);
-	if (persistenceWarningEl) {
-		const shown = renderReasonBanner(
-			doc,
-			persistenceWarningEl,
-			opts?.reason ?? null,
-			opts?.schemaVersion,
-			PERSISTENCE_WARNING_MESSAGES,
-		);
-		if (!shown) persistenceWarningEl.textContent = "";
-		persistenceWarningEl.hidden = !shown;
-	}
 
 	const beginBtn = doc.querySelector<HTMLButtonElement>("#begin");
 	if (!beginBtn) return Promise.resolve();
