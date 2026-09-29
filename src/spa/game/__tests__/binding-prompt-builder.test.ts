@@ -231,3 +231,22 @@ describe("buildDualBindingPrompt", () => {
 		}
 	});
 });
+
+describe("buildDualBindingPrompt — carry prose tell", () => {
+	it("asks for the paired space's name, not its id", () => {
+		const { userMessage } = promptForSettingA(
+			["carry"],
+			"lab",
+			"mundane",
+			"foggy",
+			"dawn",
+			0,
+		);
+		const objectExamineLine = userMessage
+			.split("\n")
+			.find((line) => line.includes('"examineDescription"'));
+		expect(objectExamineLine).toContain("space.name");
+		expect(objectExamineLine).toContain("never by its id");
+		expect(objectExamineLine).not.toContain("carry-0-space");
+	});
+});

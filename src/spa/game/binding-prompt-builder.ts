@@ -61,7 +61,7 @@ function describeSkeletonInUserMessage(sk: BindingSkeleton, i: number): string {
 				`  "object": {`,
 				`    "id": "${sk.objectId}",`,
 				`    "name": "<2-4 words>",`,
-				`    "examineDescription": "<1-2 sentences; MUST reference the paired space '${sk.spaceId}' by name>",`,
+				`    "examineDescription": "<1-2 sentences; MUST mention the paired space by the name you write in this binding's space.name, never by its id>",`,
 				`    "useOutcome": "<1 stateless sentence>",`,
 				`    "placementFlavor": "<1 sentence; MUST contain literal {actor}>",`,
 				`    "proximityFlavor": "<1 sentence; daemon POV; no {actor}>"`,

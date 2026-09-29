@@ -126,7 +126,10 @@ therefore needs a clue in its `examineDescription`:
 
 - **Carry.** The object's `examineDescription` must name its paired space
   (#253). The prompt demands this at MUST strength, but no validator enforces
-  it. The unused matcher `examineMentionsPairedSpace` (the full space name, or
+  it. The per-binding shape in the user message points at the `name` the model
+  writes for the binding's space, and says not to use the id: an earlier
+  wording quoted the space id ("reference the paired space 'carry-0-space' by
+  name"), which invited the model to write the id into player-visible prose. The unused matcher `examineMentionsPairedSpace` (the full space name, or
   failing that any non-stopword space-name token of four or more characters,
   #382) has been deleted. If enforcement is added later (#346), it can be
   recovered from the repository history.
