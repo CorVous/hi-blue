@@ -219,7 +219,7 @@ export function buildDiskEntityState(
 
 	const state: Record<string, DiskEntityState> = {};
 	const viewCells = projectVista(actorSpatial.position).filter(
-		(c) => !c.isOwnCell && !c.isWall,
+		(c) => !c.isWall,
 	);
 
 	for (const cell of viewCells) {
@@ -251,10 +251,7 @@ export function buildDiskEntityState(
 		}
 	}
 
-	const spaceCells = projectVista(actorSpatial.position).filter(
-		(c) => !c.isWall,
-	);
-	for (const cell of spaceCells) {
+	for (const cell of viewCells) {
 		for (const space of objectiveSpacesAt(ctx, cell.position)) {
 			state[space.id] = {
 				inVista: true,
@@ -324,6 +321,7 @@ export function renderPerceptionDelta(
 		if (!currState.inVista) continue;
 
 		if (transitionEmitted.has(entityId)) continue;
+		if (isInOwnCell(ctx, entityId)) continue;
 
 		const isPersona = ctx.personaSpatial[entityId] !== undefined;
 		if (isPersona) {
@@ -350,6 +348,15 @@ export function renderPerceptionDelta(
 	}
 
 	return lines;
+}
+
+function isInOwnCell(ctx: AiContext, entityId: string): boolean {
+	const own = ctx.personaSpatial[ctx.aiId]?.position;
+	if (!own) return false;
+	const position =
+		ctx.personaSpatial[entityId]?.position ??
+		ctx.worldSnapshot.entities.find((e) => e.id === entityId)?.holder;
+	return isGridPosition(position) && positionsEqual(position, own);
 }
 
 function displayName(ctx: AiContext, entity: WorldEntity): string {

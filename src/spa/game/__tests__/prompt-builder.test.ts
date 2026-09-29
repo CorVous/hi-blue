@@ -3171,12 +3171,15 @@ describe("objective spaces in the Daemon's own and nearby cells (issue #573)", (
 		}
 	});
 
-	it("still leaves items in the own cell out of the disk entity state", () => {
+	it("tracks items in the own cell without announcing them as come into view", () => {
 		const twine = makeEntity("twine", "objective_object", hollowAt, {
 			name: "Waxed Twine Bundle",
 		});
 		const ctx = buildAiContext(makeHollowGame(hollowAt, {}, [twine]), "red");
-		expect(buildDiskEntityState(ctx).twine).toBeUndefined();
+		expect(buildDiskEntityState(ctx).twine).toEqual({
+			inVista: true,
+			satisfied: false,
+		});
 		for (const line of renderPerceptionDelta(ctx, {})) {
 			expect(line).not.toContain("Waxed Twine Bundle");
 		}
@@ -3237,5 +3240,96 @@ describe("blue curiosity in <personality>", () => {
 		expect(buildAiContext(game, "green").toSystemPrompt()).not.toContain(
 			"curious about blue",
 		);
+	});
+});
+
+describe("perception delta — the own cell is part of the Vista", () => {
+	const origin = { row: 2, col: 2 };
+	const north = { row: 1, col: 2 };
+
+	function gameWith(
+		redAt: { row: number; col: number },
+		greenAt: { row: number; col: number },
+		entities: WorldEntity[],
+	) {
+		const pack = makeTestPack(entities, {
+			wallName: "wall",
+			aiStarts: {
+				red: { position: redAt },
+				green: { position: greenAt },
+				cyan: { position: { row: 4, col: 4 } },
+			},
+		});
+		return startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+	}
+
+	function stepDelta(
+		before: ReturnType<typeof gameWith>,
+		after: ReturnType<typeof gameWith>,
+	): string[] {
+		const prev = buildDiskEntityState(buildAiContext(before, "red"));
+		return renderPerceptionDelta(buildAiContext(after, "red"), prev);
+	}
+
+	it("says nothing when the Daemon steps onto an item's cell", () => {
+		const lamp = makeEntity("lamp", "interesting_object", north, {
+			name: "Brass Lamp",
+		});
+		const delta = stepDelta(
+			gameWith(origin, { row: 4, col: 0 }, [lamp]),
+			gameWith(north, { row: 4, col: 0 }, [lamp]),
+		);
+		expect(delta.filter((l) => l.includes("Brass Lamp"))).toEqual([]);
+	});
+
+	it("says nothing when the Daemon steps off an item's cell", () => {
+		const lamp = makeEntity("lamp", "interesting_object", origin, {
+			name: "Brass Lamp",
+		});
+		const delta = stepDelta(
+			gameWith(origin, { row: 4, col: 0 }, [lamp]),
+			gameWith(north, { row: 4, col: 0 }, [lamp]),
+		);
+		expect(delta.filter((l) => l.includes("Brass Lamp"))).toEqual([]);
+	});
+
+	it("says nothing when a peer steps into the Daemon's cell", () => {
+		const delta = stepDelta(
+			gameWith(origin, north, []),
+			gameWith(origin, origin, []),
+		);
+		expect(delta.filter((l) => l.includes("Sage"))).toEqual([]);
+	});
+
+	it("says nothing when the Daemon steps onto a peer's cell", () => {
+		const delta = stepDelta(
+			gameWith(origin, north, []),
+			gameWith(north, north, []),
+		);
+		expect(delta.filter((l) => l.includes("Sage"))).toEqual([]);
+	});
+
+	it("does not announce an item the Daemon has just put down", () => {
+		const lamp = makeEntity("lamp", "interesting_object", "red", {
+			name: "Brass Lamp",
+		});
+		const dropped = { ...lamp, holder: origin };
+		const delta = stepDelta(
+			gameWith(origin, { row: 4, col: 0 }, [lamp]),
+			gameWith(origin, { row: 4, col: 0 }, [dropped]),
+		);
+		expect(delta.filter((l) => l.includes("Brass Lamp"))).toEqual([]);
+	});
+
+	it("reports an item in the Daemon's cell that a peer carries off", () => {
+		const lamp = makeEntity("lamp", "interesting_object", origin, {
+			name: "Brass Lamp",
+		});
+		const carried = { ...lamp, holder: "green" };
+		const delta = stepDelta(
+			gameWith(origin, { row: 4, col: 0 }, [lamp]),
+			gameWith(origin, { row: 4, col: 0 }, [carried]),
+		);
+		expect(delta).toContain("Lost from view: Brass Lamp");
 	});
 });
