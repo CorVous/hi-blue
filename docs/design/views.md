@@ -220,6 +220,10 @@ it hides the other routes' screens and shows or hides the global chrome
   into the new session, cleared the newer pending bootstrap and pulled the
   player off the start screen. Regenerate keeps the session id, so it still
   hands over.
+- **Epoch.** A new game starts at epoch 1. The loading flow and the handover
+  reset `hydratedEpoch`, which otherwise still held the epoch of the last
+  session restored on this page, so topinfo showed that session's epoch for
+  the new game.
 - **Recovery.** A timeout shows "stuck" copy and any other failure shows
   "broken" copy. Regenerate calls `restartContentPacks()`, which keeps the
   cached personas. If the recovery DOM is missing, the flow clears the

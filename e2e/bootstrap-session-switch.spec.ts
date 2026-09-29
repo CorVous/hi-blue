@@ -3,9 +3,11 @@ import {
 	classifyJsonRequest,
 	expectNoPageErrors,
 	parseRequestBody,
+	pickerOkSessionFiles,
 	stubNewGameLLM,
 } from "./helpers";
 
+const SEEDED_SESSION = "0xAAAA";
 const HANDOVER_SETTLE_MS = 1_000;
 const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
 
@@ -34,6 +36,13 @@ async function connect(page: Page): Promise<void> {
 	await expect(page.locator('main[data-view="game"]')).toBeAttached({
 		timeout: 15_000,
 	});
+}
+
+async function startNewSessionFromPicker(page: Page): Promise<void> {
+	await page.locator("#sessions-icon").click();
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+	await page.locator("#sessions-new").click();
+	await expect(page.locator('main[data-view="start"]')).toBeAttached();
 }
 
 function listSessionIds(page: Page): Promise<string[]> {
@@ -83,6 +92,41 @@ test("a timed-out loading flow that succeeds after the player abandoned it does 
 	await expect(page.locator("#composer")).toBeVisible({ timeout: 15_000 });
 	await expect(page.locator("#prompt")).toBeEnabled();
 	expect(await listSessionIds(page)).toHaveLength(1);
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("a new game shows epoch 01 after a session with a later epoch was open", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await stubNewGameLLM(page, { sse: ["stub reply"] });
+	const files = pickerOkSessionFiles("2025-03-01T10:00:00.000Z");
+	const meta = JSON.parse(files["meta.json"] ?? "{}") as Record<
+		string,
+		unknown
+	>;
+	files["meta.json"] = JSON.stringify({ ...meta, epoch: 3 });
+	await page.addInitScript(
+		({ id, seededFiles }) => {
+			if (localStorage.getItem("hi-blue:active-session") !== null) return;
+			localStorage.setItem("hi-blue:active-session", id);
+			for (const [name, content] of Object.entries(seededFiles)) {
+				localStorage.setItem(`hi-blue:sessions/${id}/${name}`, content);
+			}
+		},
+		{ id: SEEDED_SESSION, seededFiles: files },
+	);
+
+	await page.goto("/?skipDialup=1");
+	await expect(page.locator("#topinfo-left")).toContainText("EPOCH 03");
+
+	await startNewSessionFromPicker(page);
+	await connect(page);
+	await expect(page.locator("#composer")).toBeVisible({ timeout: 15_000 });
+	await expect(page.locator("#topinfo-left")).toContainText("EPOCH 01");
 
 	await expectNoPageErrors(page, pageErrors);
 });

@@ -1690,6 +1690,7 @@ function renderBootstrapLoadingFlow(
 	pending: PendingBootstrap,
 ): Promise<void> {
 	const { doc } = ctx;
+	hydratedEpoch = 1;
 	revealGameRouteChrome(doc);
 	paintBannerOnce(doc);
 	resetPanelsToEmptyShells(doc.querySelectorAll<HTMLElement>(".ai-panel"));
@@ -1882,6 +1883,7 @@ function handOverBootstrappedSession(
 
 	session = built;
 	hydratedSessionId = flow.sessionId;
+	hydratedEpoch = 1;
 	const rendered = renderGame(ctx.root, ctx.opts);
 	if (!saveResult.ok) {
 		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);

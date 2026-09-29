@@ -2666,6 +2666,27 @@ describe("renderBootstrapLoadingFlow — re-entry and a moved active pointer", (
 		expect(pendingBootstrap.getPendingBootstrap()).toBeDefined();
 		expect(getEl<HTMLElement>("main").dataset.view).toBeUndefined();
 	});
+
+	it("a new game starts at epoch 01 after a session with a later epoch was open", async () => {
+		const stub = makeLocalStorageStub();
+		await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
+		vi.stubGlobal("localStorage", stub);
+		const storage = await import("../persistence/session-storage.js");
+		const seededId = storage.getActiveSessionId() ?? "";
+		const metaKey = `hi-blue:sessions/${seededId}/meta.json`;
+		const meta = JSON.parse(localStorage.getItem(metaKey) ?? "{}");
+		localStorage.setItem(metaKey, JSON.stringify({ ...meta, epoch: 3 }));
+
+		const game = await import("../views/game.js");
+		await game.renderGame(getEl<HTMLElement>("main"));
+		expect(getEl("#topinfo-left").textContent).toContain("EPOCH 03");
+
+		const { flowPromise } = await startLoadingFlow();
+		expect(getEl("#topinfo-left").textContent).toContain("EPOCH 01");
+		releaseContentPacks();
+		await flowPromise;
+		expect(getEl("#topinfo-left").textContent).toContain("EPOCH 01");
+	});
 });
 
 describe("renderBootstrapLoadingFlow — promise propagation", () => {
