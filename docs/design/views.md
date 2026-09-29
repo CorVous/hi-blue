@@ -124,8 +124,9 @@ it hides the other routes' screens and shows or hides the global chrome
   the composer, releases the cached session and calls `showEndgame` with the
   ended state, the ended session's id, and `releaseSession` as the
   `releaseEndedGame` callback, which clears `session`, `hydratedSessionId`
-  and `hydratedLastSavedAt` when a choice leaves the endgame. The endgame never reads `game.ts`'s module
-  state directly, so the two files do not import each other in a cycle.
+  and `hydratedLastSavedAt` when a choice leaves the endgame. The endgame
+  never reads `game.ts`'s module state directly, so the two files do not
+  import each other in a cycle.
   `transcript-lines.ts` builds the `.msg-line` elements (player and daemon
   lines with mention highlighting) that both the panels and the endgame's
   final lines use.
@@ -133,9 +134,9 @@ it hides the other routes' screens and shows or hides the global chrome
   calls `enterBootstrapLoading` with its context (typed there as the
   narrower `BootstrapFlowView`) and one `AdoptBootstrappedSession` callback.
   The flow builds and saves the new game, then hands the session to that
-  callback, which assigns `session`, `hydratedSessionId` and `hydratedEpoch`
-  and re-enters `renderGame`. The flow never imports `game.ts`, so there is
-  no cycle. The DOM helpers both files need (route chrome, panel painting,
+  callback, which assigns `session`, `hydratedSessionId`, `hydratedEpoch`
+  and `hydratedLastSavedAt` and re-enters `renderGame`. The flow never
+  imports `game.ts`, so there is no cycle. The DOM helpers both files need (route chrome, panel painting,
   spinners, topinfo, the stage load state and the save warning) live in
   `game-chrome.ts`, which imports neither.
 - `renderGame` is a short entry point. It works on one `GameViewContext`
@@ -193,7 +194,8 @@ it hides the other routes' screens and shows or hides the global chrome
 
 ### Session cache and the active pointer
 
-- Module state: `session`, `hydratedSessionId`, `hydratedEpoch`, `hydratedLastSavedAt`.
+- Module state: `session`, `hydratedSessionId`, `hydratedEpoch`,
+  `hydratedLastSavedAt`, plus `viewCtx` and `crossTabListenerWired`.
   `hydratedSessionId` is the id that `session` was loaded from. Clicking
   Load in the picker writes a new active id and re-enters this route without
   a page refresh. When the pointer has moved (`activePointerMoved`), the
@@ -272,7 +274,8 @@ it hides the other routes' screens and shows or hides the global chrome
   on top of the working game, and its regenerate or abandon buttons could
   destroy the running session.
 - **Handover.** After saving, the flow calls its `AdoptBootstrappedSession`
-  callback, which sets the module-level `session` in `game.ts` and calls
+  callback, which sets the module-level `session`, `hydratedSessionId`,
+  `hydratedEpoch` and `hydratedLastSavedAt` in `game.ts` and calls
   `renderGame` again. That second entry skips both the loading branch
   and the localStorage restore, and runs the normal set-up path, where
   `refreshComposerState` decides whether Send is enabled. A failed save's
@@ -299,9 +302,10 @@ it hides the other routes' screens and shows or hides the global chrome
   player off the start screen. Regenerate keeps the session id, so it still
   hands over.
 - **Epoch.** A new game starts at epoch 1. The loading topinfo always paints
-  `NEW_GAME_EPOCH`, and the handover resets `hydratedEpoch`, which otherwise
-  still held the epoch of the last session restored on this page, so topinfo
-  showed that session's epoch for the new game.
+  `NEW_GAME_EPOCH` (exported from `game-bootstrap-flow.ts`), and the
+  handover resets `hydratedEpoch` to the same constant. Without that reset
+  `hydratedEpoch` still held the epoch of the last session restored on this
+  page, so topinfo showed that session's epoch for the new game.
 - **Recovery.** A timeout shows "stuck" copy and any other failure shows
   "broken" copy (`paintRecoveryCopy`). When the error carries an upstream
   message (`HttpStatusError`, `UpstreamErrorBodyError`) the copy names it,
@@ -391,8 +395,9 @@ it hides the other routes' screens and shows or hides the global chrome
 - **`game_ended`.** The event only marks the round as the last one. After the
   events loop the final state is saved, topinfo is repainted so the turn
   counter shows the final round, and then `enterEndgame` runs with that state.
-  It captures the state for the endgame buttons and sets `session` to null, so
-  any later submit does nothing. It also disables the prompt, and
+  It captures the state for the endgame buttons and releases the cached
+  session (`session`, `hydratedSessionId` and `hydratedLastSavedAt` go back
+  to null), so any later submit does nothing. It also disables the prompt, and
   `mountSessionView` enables it again on every entry, so the prompt works in
   the game an endgame choice leads to.
 - **The endgame screen (#576).** The subtitle comes from `outcome`: a win says
@@ -478,8 +483,8 @@ it hides the other routes' screens and shows or hides the global chrome
 - **The player can leave the round's session while it runs.** A round takes
   as long as the daemons do, and meanwhile the picker can `[ load ]` another
   session, `[ + new session ]` can mint one, or `[ rm ]` can delete this one.
-  `submitRound` records the round's owner (the `GameSession` and its id) at
-  submit. After `submitMessage` returns, `playerLeftRoundSession` checks that
+  `submitRound` records the round's owner (the `GameSession`, a token for
+  its id and the `hydratedLastSavedAt` it expects) at submit. After `submitMessage` returns, `playerLeftRoundSession` checks that
   `session` and the active pointer still name that owner. If not, the view
   paints nothing and enters no endgame, because the panels and the endgame
   now belong to another session. `saveRoundLeftBehind` still saves the

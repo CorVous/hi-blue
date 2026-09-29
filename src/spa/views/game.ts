@@ -65,7 +65,10 @@ import {
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
 import { trySetCaret } from "./dom.js";
-import { enterBootstrapLoading } from "./game-bootstrap-flow.js";
+import {
+	enterBootstrapLoading,
+	NEW_GAME_EPOCH,
+} from "./game-bootstrap-flow.js";
 import {
 	animateSpinners,
 	appendPanelSpinners,
@@ -169,7 +172,7 @@ let session: GameSession | null = null;
 
 let hydratedSessionId: string | null = null;
 
-let hydratedEpoch: number = 1;
+let hydratedEpoch: number = NEW_GAME_EPOCH;
 
 let hydratedLastSavedAt: string | null = null;
 
@@ -404,7 +407,7 @@ function adoptBootstrappedSession(
 ): Promise<void> {
 	session = built;
 	hydratedSessionId = sessionId;
-	hydratedEpoch = 1;
+	hydratedEpoch = NEW_GAME_EPOCH;
 	hydratedLastSavedAt =
 		sessionId === null ? null : readSessionLastSavedAt(sessionId);
 	return renderGame(ctx.root, ctx.opts);

@@ -44,7 +44,7 @@ const LOADING_PLACEHOLDER = "loading…";
 const PANEL_SPINNER_SELECTOR = ".panel-name .panel-spinner";
 const BRIGHTNESS_WIPE_TAU_MS = 60_000;
 const BRIGHTNESS_WIPE_MAX_PCT = 99;
-const NEW_GAME_EPOCH = 1;
+export const NEW_GAME_EPOCH = 1;
 
 interface LoadingTimers {
 	spinnerInterval: ReturnType<typeof setInterval> | undefined;
