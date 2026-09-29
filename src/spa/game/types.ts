@@ -195,7 +195,7 @@ export type ConversationEntry =
 	| {
 			kind: "action-failure";
 			round: number;
-			tool: ActionFailureTool;
+			tool: ToolName;
 			reason: string;
 	  }
 	| {
@@ -259,8 +259,6 @@ export interface GameState {
 }
 
 export type ToolName = "pick_up" | "put_down" | "use" | "go" | "message";
-
-export type ActionFailureTool = ToolName;
 
 export interface ToolCall {
 	name: ToolName;

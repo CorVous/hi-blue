@@ -37,8 +37,6 @@ export interface BootstrapOpts {
 	actionProfiles?: boolean;
 }
 
-export type { ContentPackProvider, LlmSynthesisProvider as SynthesisProvider };
-
 function suppressUnhandledRejection(promise: Promise<unknown>): void {
 	promise.catch(() => {});
 }

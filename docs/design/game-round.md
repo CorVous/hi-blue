@@ -133,7 +133,7 @@ The module is pure and takes an injected rng. `tickComplication` returns `null` 
 - `diskDelta` was renamed from `coneDelta` in #539. The rename breaks the saved format, so the same change raised the session schema to v12 and the USB save to v5: old saves show a version mismatch instead of loading without the field.
 - `witnessed-convergence.audience` is optional for saves from before #336; treat a missing value as `"witness"`.
 - `AiPersona.actionProfile` is optional for saves from before the field existed.
-- `ActionFailureTool` is exactly `ToolName`. The only source of a retired name is a raw model call, and `parseToolCallArguments` rejects it before any `ToolCall` exists.
+- An `action-failure` entry's `tool` is a `ToolName`. The only source of a retired name is a raw model call, and `parseToolCallArguments` rejects it before any `ToolCall` exists.
 - Every `objective_space` in a pack is either a carry-paired space (named by some object's `pairsWithSpaceId`) or a bound space (Use-Space or Convergence target), never both. `carryPairs` and `boundSpaces` share that test.
 - `shiftFlavor`, the convergence flavors and `activationFlavor` contain no `{actor}`; `useOutcome` and `placementFlavor` do. `activationFlavor` is the actor's line at the moment of satisfaction (#335 for spaces, #334 for items).
 - `PhysicalActionRecord` is computed during dispatch to choose witnesses and is not stored.
