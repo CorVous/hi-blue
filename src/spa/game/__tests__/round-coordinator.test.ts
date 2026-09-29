@@ -12,6 +12,7 @@ import { buildAiContext } from "../prompt-builder";
 import { runRound } from "../round-coordinator";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
+import { encodeRoundResult } from "../round-result-encoder";
 import type {
 	AiId,
 	ContentPack,
@@ -1126,6 +1127,62 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 		);
 		expect(r4Result.chatLockoutsResolved).toBeDefined();
 		expect(r4Result.chatLockoutsResolved).toContain("red");
+	});
+
+	it("a lockout re-fired on a Daemon in the round its old lockout expires leaves it locked in both the state and the events", async () => {
+		const base = makeTestGame({
+			pack: { aiStarts: ROW_AI_STARTS, setting: "s" },
+		});
+		const game = {
+			...base,
+			complicationSchedule: { ...base.complicationSchedule, countdown: 1 },
+			activeComplications: [
+				{ kind: "chat_lockout" as const, target: "green", resolveAtRound: 1 },
+			],
+		};
+
+		const { nextState, result } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+			{ rng: () => 0.62 },
+		);
+
+		expect(result.chatLockoutTriggered?.aiId).toBe("green");
+		expect(isPlayerChatLockedOut(nextState, "green")).toBe(true);
+		expect(result.chatLockoutsResolved ?? []).not.toContain("green");
+		const lockoutEvents = encodeRoundResult(
+			result,
+			nextState,
+			nextState.personas,
+		).filter(
+			(e) => e.type === "chat_lockout" || e.type === "chat_lockout_resolved",
+		);
+		expect(lockoutEvents).toEqual([
+			expect.objectContaining({ type: "chat_lockout", aiId: "green" }),
+		]);
+	});
+
+	it("an overlapping lockout keeps its Daemon locked when the older one expires", async () => {
+		const base = makeGame();
+		const game = {
+			...base,
+			activeComplications: [
+				{ kind: "chat_lockout" as const, target: "green", resolveAtRound: 1 },
+				{ kind: "chat_lockout" as const, target: "green", resolveAtRound: 3 },
+			],
+		};
+
+		const { nextState, result } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
+
+		expect(isPlayerChatLockedOut(nextState, "green")).toBe(true);
+		expect(result.chatLockoutsResolved).toBeUndefined();
 	});
 });
 

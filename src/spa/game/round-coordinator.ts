@@ -3,6 +3,7 @@ import { availableTools } from "./available-tools";
 import {
 	applyComplicationResult,
 	decrementComplicationCountdown,
+	isPlayerChatLockedOut,
 	resolveExpiredChatLockouts,
 	resolveExpiredDirectives,
 	tickComplication,
@@ -396,6 +397,12 @@ export async function runRound(
 	let chatLockoutTriggered: RoundResult["chatLockoutTriggered"] | undefined;
 	let chatLockoutsResolved: AiId[] | undefined;
 
+	state = restoreExpiredToolDisables(state);
+	const { nextState: stateAfterChatLockouts, resolvedAiIds } =
+		resolveExpiredChatLockouts(state);
+	state = stateAfterChatLockouts;
+	state = expireSysadminDirectives(state);
+
 	const complicationResult = tickComplication(state, rng);
 	if (complicationResult !== null) {
 		const { fired } = complicationResult;
@@ -429,16 +436,14 @@ export async function runRound(
 		state = decrementComplicationCountdown(state);
 	}
 
-	state = restoreExpiredToolDisables(state);
-
-	const { nextState: stateAfterChatLockouts, resolvedAiIds } =
-		resolveExpiredChatLockouts(state);
-	state = stateAfterChatLockouts;
-	if (resolvedAiIds.length > 0) {
-		chatLockoutsResolved = resolvedAiIds;
+	const stateAfterComplication = state;
+	const unlockedAiIds = [...new Set(resolvedAiIds)].filter(
+		(aiId) => !isPlayerChatLockedOut(stateAfterComplication, aiId),
+	);
+	if (unlockedAiIds.length > 0) {
+		chatLockoutsResolved = unlockedAiIds;
 	}
 
-	state = expireSysadminDirectives(state);
 	state = evaluateConvergenceObjectives(
 		state,
 		game.round === 0 ? {} : game.personaSpatial,
