@@ -162,19 +162,14 @@ interface RoundOutcome {
 	gameEnded: boolean;
 }
 
-interface RoundOwner {
+interface CachedSession {
 	session: GameSession;
-	sessionToken: ActiveSessionToken;
+	token: ActiveSessionToken;
+	epoch: number;
 	lastSavedAt: string | null;
 }
 
-let session: GameSession | null = null;
-
-let hydratedSessionId: string | null = null;
-
-let hydratedEpoch: number = NEW_GAME_EPOCH;
-
-let hydratedLastSavedAt: string | null = null;
+let cached: CachedSession | null = null;
 
 let crossTabListenerWired = false;
 
@@ -188,7 +183,7 @@ export function renderGame(
 	if (!ctx) return Promise.resolve();
 	hidePersistenceWarning(ctx.persistenceWarningEl);
 	dropSessionIfActivePointerMoved();
-	if (!session) {
+	if (!cached) {
 		const detour = enterWithoutCachedSession(ctx);
 		if (detour) return detour;
 	}
@@ -276,20 +271,17 @@ function createGameViewContext(
 }
 
 function dropSessionIfActivePointerMoved(): void {
-	const activePointerMoved =
-		session !== null && hydratedSessionId !== getActiveSessionId();
+	const activePointerMoved = cached !== null && !cached.token.stillActive();
 	if (!activePointerMoved) return;
 	releaseSession();
 }
 
 function releaseSession(): void {
-	session = null;
-	hydratedSessionId = null;
-	hydratedLastSavedAt = null;
+	cached = null;
 }
 
 function currentPersonas(): Record<AiId, AiPersona> {
-	return session?.getState().personas ?? {};
+	return cached?.session.getState().personas ?? {};
 }
 
 const NOOP_DEV_HOOKS: DevHooks = {
@@ -405,11 +397,12 @@ function adoptBootstrappedSession(
 	built: GameSession,
 	sessionId: string | null,
 ): Promise<void> {
-	session = built;
-	hydratedSessionId = sessionId;
-	hydratedEpoch = NEW_GAME_EPOCH;
-	hydratedLastSavedAt =
-		sessionId === null ? null : readSessionLastSavedAt(sessionId);
+	cached = {
+		session: built,
+		token: captureActiveSession(sessionId),
+		epoch: NEW_GAME_EPOCH,
+		lastSavedAt: sessionId === null ? null : readSessionLastSavedAt(sessionId),
+	};
 	return renderGame(ctx.root, ctx.opts);
 }
 
@@ -419,10 +412,12 @@ function restoreActiveSession(ctx: GameViewContext): Promise<void> | null {
 		redirectUnloadableSession(ctx.root, loadResult);
 		return Promise.resolve();
 	}
-	session = GameSession.restore(loadResult.state);
-	hydratedSessionId = loadResult.sessionId;
-	hydratedEpoch = loadResult.epoch;
-	hydratedLastSavedAt = loadResult.lastSavedAt;
+	cached = {
+		session: GameSession.restore(loadResult.state),
+		token: captureActiveSession(loadResult.sessionId),
+		epoch: loadResult.epoch,
+		lastSavedAt: loadResult.lastSavedAt,
+	};
 	repaintRestoredTranscripts(ctx.doc, loadResult.state);
 	return null;
 }
@@ -482,13 +477,13 @@ function repaintRestoredTranscripts(
 
 function mountSessionView(ctx: GameViewContext): void {
 	const { doc } = ctx;
-	if (session !== null) session = adoptSession(ctx, session);
+	if (cached !== null) cached.session = adoptSession(ctx, cached.session);
 
 	revealGameRouteChrome(doc);
 	ctx.promptInput.disabled = false;
 
-	if (session !== null) {
-		const state = session.getState();
+	if (cached !== null) {
+		const state = cached.session.getState();
 		paintSessionPanels(doc, state);
 		paintHandlesPlaceholder(ctx.promptInput, state.personas);
 	}
@@ -497,11 +492,12 @@ function mountSessionView(ctx: GameViewContext): void {
 	paintBannerOnce(doc);
 	refreshTopInfo(ctx);
 
-	if (session !== null) ctx.dev.showSession(ctx.root, session);
+	if (cached === null) return;
+	ctx.dev.showSession(ctx.root, cached.session);
 
-	const restoredState = session?.getState();
-	if (restoredState?.isComplete) {
-		enterEndgame(ctx, restoredState, hydratedSessionId);
+	const restoredState = cached.session.getState();
+	if (restoredState.isComplete) {
+		enterEndgame(ctx, restoredState, cached.token.id);
 	}
 }
 
@@ -551,7 +547,7 @@ function paintHandlesPlaceholder(
 }
 
 function refreshTopInfo(ctx: GameViewContext): void {
-	if (!session) return;
+	if (!cached) return;
 	const { doc } = ctx;
 	const hasDesktopTopInfo =
 		doc.querySelector("#topinfo-left") && doc.querySelector("#topinfo-right");
@@ -560,8 +556,8 @@ function refreshTopInfo(ctx: GameViewContext): void {
 		doc,
 		{
 			sessionId: ctx.sessionLabel,
-			epoch: hydratedEpoch,
-			turn: session.getState().round,
+			epoch: cached.epoch,
+			turn: cached.session.getState().round,
 		},
 		topInfoStatus(ctx.connectionUnstable ? "unstable" : "stable"),
 	);
@@ -585,7 +581,7 @@ function wireCrossTabReload(win: Window | null): void {
 	win.addEventListener("storage", (event) => {
 		const ctx = viewCtx;
 		if (!ctx || ctx.roundInFlight) return;
-		const cachedSessionId = hydratedSessionId;
+		const cachedSessionId = cached?.token.id ?? null;
 		if (cachedSessionId === null) return;
 		const touchesCachedSession =
 			event.key === null || isSessionStorageKey(event.key, cachedSessionId);
@@ -596,11 +592,13 @@ function wireCrossTabReload(win: Window | null): void {
 }
 
 function cachedSessionChangedElsewhere(ctx: GameViewContext): boolean {
-	if (session === null || hydratedSessionId === null) return false;
-	if (hydratedLastSavedAt === null) return false;
+	if (cached === null) return false;
+	const { id } = cached.token;
+	const { lastSavedAt } = cached;
+	if (id === null || lastSavedAt === null) return false;
 	if (ctx.root.dataset.view !== "game") return false;
-	if (isSessionSaveInProgress(hydratedSessionId)) return false;
-	return readSessionLastSavedAt(hydratedSessionId) !== hydratedLastSavedAt;
+	if (isSessionSaveInProgress(id)) return false;
+	return readSessionLastSavedAt(id) !== lastSavedAt;
 }
 
 function reloadChangedSession(
@@ -799,20 +797,15 @@ function setChatLockout(
 async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 	evt.preventDefault();
 	if (ctx.roundInFlight) return;
-	const activeSession = session;
-	if (!activeSession || !ctx.personaLookups) return;
+	const owner = cached === null ? null : { ...cached };
+	if (!owner || !ctx.personaLookups) return;
 
 	const draft = readSendableDraft(ctx, ctx.personaLookups);
 	if (!draft) return;
 
-	const owner: RoundOwner = {
-		session: activeSession,
-		sessionToken: captureActiveSession(hydratedSessionId),
-		lastSavedAt: hydratedLastSavedAt,
-	};
-	const submitted = beginRound(ctx, activeSession, draft);
+	const submitted = beginRound(ctx, owner.session, draft);
 
-	const aiIds = Object.keys(activeSession.getState().personas);
+	const aiIds = Object.keys(owner.session.getState().personas);
 	const spinners = startRoundSpinners(ctx.doc, aiIds);
 	const initiativeOrder = fisherYatesShuffledCopy(aiIds);
 	const outcome: RoundOutcome = { gameEnded: false };
@@ -956,13 +949,13 @@ function startRoundSpinners(
 	};
 }
 
-function playerLeftRoundSession(owner: RoundOwner): boolean {
-	return session !== owner.session || !owner.sessionToken.stillActive();
+function playerLeftRoundSession(owner: CachedSession): boolean {
+	return cached?.session !== owner.session || !owner.token.stillActive();
 }
 
 async function playRound(
 	ctx: GameViewContext,
-	owner: RoundOwner,
+	owner: CachedSession,
 	draft: RoundDraft,
 	initiativeOrder: AiId[],
 	{ spinners, outcome }: { spinners: RoundSpinners; outcome: RoundOutcome },
@@ -987,14 +980,14 @@ async function playRound(
 	}
 
 	const saveResult = saveActiveSession(nextState, {
-		sessionId: owner.sessionToken.id,
+		sessionId: owner.token.id,
 		...saveExpectation(owner.lastSavedAt),
 	});
 	if (!saveResult.ok && saveResult.reason === "stale") {
 		reloadChangedSession(ctx, { warn: true });
 		return;
 	}
-	if (saveResult.ok) hydratedLastSavedAt = saveResult.lastSavedAt;
+	if (saveResult.ok && cached) cached.lastSavedAt = saveResult.lastSavedAt;
 
 	for (const event of encodeRoundResult(
 		result,
@@ -1004,10 +997,10 @@ async function playRound(
 		applyRoundEvent(ctx, event, nextState, outcome);
 	}
 
-	if (session) {
+	if (cached) {
 		ctx.dev.refreshAfterRound(
 			ctx.doc,
-			session,
+			cached.session,
 			Object.keys(nextState.personas),
 		);
 	}
@@ -1016,7 +1009,7 @@ async function playRound(
 
 	if (outcome.gameEnded) {
 		refreshTopInfo(ctx);
-		enterEndgame(ctx, nextState, owner.sessionToken.id);
+		enterEndgame(ctx, nextState, owner.token.id);
 	}
 }
 
@@ -1028,10 +1021,10 @@ function warnIfSaveFailed(ctx: GameViewContext, saveResult: SaveResult): void {
 
 function saveRoundLeftBehind(
 	ctx: GameViewContext,
-	owner: RoundOwner,
+	owner: CachedSession,
 	nextState: GameState,
 ): void {
-	const roundSessionId = owner.sessionToken.id;
+	const roundSessionId = owner.token.id;
 	const roundSessionStillExists =
 		roundSessionId !== null && listSessions().includes(roundSessionId);
 	if (roundSessionStillExists) {
@@ -1040,7 +1033,7 @@ function saveRoundLeftBehind(
 			...saveExpectation(owner.lastSavedAt),
 		});
 	}
-	const cachedSessionIsRoundSession = hydratedSessionId === roundSessionId;
+	const cachedSessionIsRoundSession = cached?.token.id === roundSessionId;
 	if (!cachedSessionIsRoundSession) return;
 	releaseSession();
 	const roundSessionIsOnScreen =
