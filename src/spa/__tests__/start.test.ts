@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { awaitIgnoringRejection } from "./fixtures/await-ignoring-rejection";
 import { installLocalStorageStub } from "./fixtures/local-storage";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
@@ -76,14 +77,6 @@ function getMain(): HTMLElement {
 
 function setSearch(query: string): void {
 	window.history.replaceState({}, "", `/?${query}`);
-}
-
-async function awaitIgnoringRejection(
-	promise: Promise<unknown>,
-): Promise<void> {
-	try {
-		await promise;
-	} catch {}
 }
 
 describe("renderStart — screen visibility", () => {

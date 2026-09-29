@@ -12,7 +12,7 @@ The `browser` project in `vitest.config.ts`. Unit-level coverage for SPA and con
 
 The same `browser` project also runs `scripts/__tests__/**` and `evals/__tests__/**` (unit tests for the eval scoring modules, next to the evals they cover). `src/spa/__tests__/build.test.ts` is the exception: it runs in its own node-environment `build` project.
 
-Shared fixtures: `src/spa/__tests__/fixtures/` (`local-storage.ts` with `makeLocalStorageStub` / `seedSessionInStub`, plus the static personas and content packs) and `src/spa/game/__tests__/fixtures/` (`make-test-pack.ts`, `make-game-state.ts`, and `prompt-sections.ts` for pulling the cardinal clause out of a prompt). Reuse them before writing a local builder.
+Shared fixtures: `src/spa/__tests__/fixtures/` (`local-storage.ts` with `makeLocalStorageStub` / `seedSessionInStub`, `await-ignoring-rejection.ts`, plus the static personas and content packs) and `src/spa/game/__tests__/fixtures/` (`make-test-pack.ts`, `make-game-state.ts`, and `prompt-sections.ts` for pulling the cardinal clause out of a prompt). Reuse them before writing a local builder.
 
 ## Playwright e2e (`e2e/**/*.spec.ts`)
 

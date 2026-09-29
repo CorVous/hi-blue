@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AiId, AiPersona, ContentPack } from "../game/types.js";
+import { awaitIgnoringRejection } from "./fixtures/await-ignoring-rejection.js";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs.js";
 import { STATIC_PERSONAS } from "./fixtures/static-personas.js";
 
@@ -15,14 +16,6 @@ const STATIC_CONTENT: {
 	packsA: [STATIC_CONTENT_PACK],
 	packsB: [STATIC_CONTENT_PACK],
 };
-
-async function awaitIgnoringRejection(
-	promise: Promise<unknown>,
-): Promise<void> {
-	try {
-		await promise;
-	} catch {}
-}
 
 describe("pending-bootstrap.ts", () => {
 	afterEach(async () => {
