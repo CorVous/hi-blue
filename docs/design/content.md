@@ -45,7 +45,9 @@ On the 5×5 grid, in draw order:
   AI starts. They may share a cell with objective objects or spaces.
 - **Reachability:** every non-obstacle cell must be reachable (4-neighbour BFS)
   from every AI start. A wall of obstacles can otherwise strand a Daemon or an
-  objective.
+  objective. The BFS is `everyOpenCellReachable` in `src/spa/game/direction.ts`;
+  the complication engine uses it too, so an Obstacle Shift keeps the same
+  guarantee.
 
 A draw that breaks a rule is thrown away and redrawn. After
 `MAX_PLACEMENT_ATTEMPTS` (200) the generator throws, which almost always means

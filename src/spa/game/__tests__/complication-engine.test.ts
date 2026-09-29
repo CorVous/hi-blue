@@ -58,7 +58,7 @@ function makeObstacle(id: string, pos: GridPosition): WorldEntity {
 	return makeEntity(id, "obstacle", pos);
 }
 
-describe("tickComplication — countdown > 0: returns null", () => {
+describe("tickComplication — countdown > 1: returns null", () => {
 	it("returns null when countdown is 3", () => {
 		const game = makePhase({
 			complicationSchedule: { countdown: 3, settingShiftFired: false },
@@ -75,15 +75,7 @@ describe("tickComplication — countdown > 0: returns null", () => {
 		expect(result).toBeNull();
 	});
 
-	it("returns null when countdown is 1", () => {
-		const game = makePhase({
-			complicationSchedule: { countdown: 1, settingShiftFired: false },
-		});
-		const result = tickComplication(game, seededRng([]));
-		expect(result).toBeNull();
-	});
-
-	it("does not call rng when countdown is > 0 (seededRng with empty array would throw)", () => {
+	it("does not call rng when countdown is > 1 (seededRng with empty array would throw)", () => {
 		const game = makePhase({
 			complicationSchedule: { countdown: 5, settingShiftFired: false },
 		});
@@ -396,6 +388,117 @@ describe("Obstacle Shift exclusion", () => {
 			expect(toCell.col).toBeGreaterThanOrEqual(0);
 			expect(toCell.col).toBeLessThan(5);
 		}
+	});
+});
+
+describe("Obstacle Shift keeps every open cell reachable", () => {
+	const cornerGuard = makeObstacle("corner_guard", { row: 0, col: 1 });
+	const shiftable = makeObstacle("shiftable", { row: 2, col: 0 });
+	const cornerPersonas: Record<AiId, PersonaSpatialState> = {
+		red: { position: { row: 0, col: 0 } },
+		green: { position: { row: 1, col: 1 } },
+		cyan: { position: { row: 0, col: 2 } },
+	};
+
+	it("never moves an obstacle into the cell that would wall off a corner", () => {
+		const toCells: string[] = [];
+		for (let i = 0; i < 20; i++) {
+			const result = tickComplication(
+				makePhase({
+					complicationSchedule: { countdown: 0, settingShiftFired: false },
+					world: { entities: [cornerGuard, shiftable] },
+					personaSpatial: cornerPersonas,
+				}),
+				seededRng([POOL_PICK.obstacleShiftInSixKindPool, i / 20, 0.5]),
+			);
+			expect(result?.fired.kind).toBe("obstacle_shift");
+			if (result?.fired.kind === "obstacle_shift") {
+				toCells.push(`${result.fired.toCell.row},${result.fired.toCell.col}`);
+			}
+		}
+		expect(new Set(toCells)).toEqual(new Set(["3,0", "2,1"]));
+	});
+
+	it("drops obstacle_shift from the pool when every free move would wall off a cell", () => {
+		const blockers = [
+			makeEntity("blocker_south", "interesting_object", { row: 3, col: 0 }),
+			makeEntity("blocker_east", "interesting_object", { row: 2, col: 1 }),
+		];
+		const kinds: string[] = [];
+		for (let i = 0; i < 10; i++) {
+			const result = tickComplication(
+				makePhase({
+					complicationSchedule: { countdown: 0, settingShiftFired: false },
+					world: { entities: [cornerGuard, shiftable, ...blockers] },
+					personaSpatial: cornerPersonas,
+				}),
+				seededRng([i / 10], () => 0),
+			);
+			if (result) kinds.push(result.fired.kind);
+		}
+		expect(kinds).not.toContain("obstacle_shift");
+	});
+});
+
+describe("Targeted complications skip exhausted Daemons", () => {
+	const TARGETED_PICKS = [
+		POOL_PICK.sysadminDirective,
+		POOL_PICK.toolDisable,
+		POOL_PICK.chatLockout,
+	];
+
+	it("targets only the Daemon that still has budget", () => {
+		for (const pick of TARGETED_PICKS) {
+			for (let i = 0; i < 6; i++) {
+				const result = tickComplication(
+					makePhase({
+						complicationSchedule: { countdown: 0, settingShiftFired: false },
+						exhausted: new Set<AiId>(["red", "green"]),
+					}),
+					seededRng([pick, i / 6], () => 0.5),
+				);
+				const fired = result?.fired;
+				expect(
+					fired?.kind === "sysadmin_directive" ||
+						fired?.kind === "tool_disable" ||
+						fired?.kind === "chat_lockout",
+				).toBe(true);
+				if (
+					fired?.kind === "sysadmin_directive" ||
+					fired?.kind === "tool_disable" ||
+					fired?.kind === "chat_lockout"
+				) {
+					expect(fired.target).toBe("cyan");
+				}
+			}
+		}
+	});
+
+	it("drops the targeted kinds from the pool when every Daemon is exhausted", () => {
+		const kinds = new Set<string>();
+		for (let i = 0; i < 20; i++) {
+			const result = tickComplication(
+				makePhase({
+					complicationSchedule: { countdown: 0, settingShiftFired: false },
+					exhausted: new Set<AiId>(AI_IDS),
+				}),
+				seededRng([i / 20], () => 0.5),
+			);
+			if (result) kinds.add(result.fired.kind);
+		}
+		expect(kinds.has("sysadmin_directive")).toBe(false);
+		expect(kinds.has("tool_disable")).toBe(false);
+		expect(kinds.has("chat_lockout")).toBe(false);
+		expect(kinds.has("weather_change")).toBe(true);
+	});
+});
+
+describe("tickComplication — countdown of 1 fires this round", () => {
+	it("fires when countdown is 1", () => {
+		const game = makePhase({
+			complicationSchedule: { countdown: 1, settingShiftFired: false },
+		});
+		expect(tickComplication(game, seededRng([0.0, 0.5]))).not.toBeNull();
 	});
 });
 

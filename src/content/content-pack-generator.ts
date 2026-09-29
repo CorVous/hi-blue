@@ -10,6 +10,11 @@ import type {
 	ContentPackProvider,
 	DualBindingContentPackInput,
 } from "../spa/game/content-pack-provider.js";
+import {
+	cellAtIndex,
+	everyOpenCellReachable,
+	TOTAL_CELLS,
+} from "../spa/game/direction.js";
 import { rollObjectiveTypes } from "../spa/game/objective-type-roll.js";
 import {
 	boundSpaces,
@@ -32,22 +37,11 @@ export interface SingleGameConfig {
 
 import { THEME_POOL, TIME_OF_DAY_POOL, WEATHER_POOL } from "./pools.js";
 
-const GRID_ROWS = 5;
-const GRID_COLS = 5;
-const TOTAL_CELLS = GRID_ROWS * GRID_COLS;
 const MAX_PLACEMENT_ATTEMPTS = 200;
 const OBJECTIVES_PER_GAME = 3;
 
 function rollInt(rng: () => number, lo: number, hi: number): number {
 	return lo + Math.floor(rng() * (hi - lo + 1));
-}
-
-function posKey(pos: GridPosition): number {
-	return pos.row * GRID_COLS + pos.col;
-}
-
-function keyToPos(key: number): GridPosition {
-	return { row: Math.floor(key / GRID_COLS), col: key % GRID_COLS };
 }
 
 function drawDistinct<T>(
@@ -68,52 +62,6 @@ function drawDistinct<T>(
 
 function pickOne(rng: () => number, pool: readonly string[]): string {
 	return pool[Math.floor(rng() * pool.length)] as string;
-}
-
-function reachableCellsFrom(
-	start: GridPosition,
-	obstacleSet: Set<number>,
-): Set<number> {
-	const startKey = posKey(start);
-	const visited = new Set<number>([startKey]);
-	const queue: number[] = [startKey];
-
-	while (queue.length > 0) {
-		const current = queue.shift() as number;
-		const pos = keyToPos(current);
-		const neighbors: GridPosition[] = [
-			{ row: pos.row - 1, col: pos.col },
-			{ row: pos.row + 1, col: pos.col },
-			{ row: pos.row, col: pos.col - 1 },
-			{ row: pos.row, col: pos.col + 1 },
-		];
-		for (const nb of neighbors) {
-			if (
-				nb.row < 0 ||
-				nb.row >= GRID_ROWS ||
-				nb.col < 0 ||
-				nb.col >= GRID_COLS
-			)
-				continue;
-			const nbKey = posKey(nb);
-			if (obstacleSet.has(nbKey)) continue;
-			if (visited.has(nbKey)) continue;
-			visited.add(nbKey);
-			queue.push(nbKey);
-		}
-	}
-	return visited;
-}
-
-function everyOpenCellReachable(
-	startPositions: GridPosition[],
-	obstacleSet: Set<number>,
-	openCells: number[],
-): boolean {
-	return startPositions.every((start) => {
-		const reachable = reachableCellsFrom(start, obstacleSet);
-		return openCells.every((cellKey) => reachable.has(cellKey));
-	});
 }
 
 function tryPlacePhase(
@@ -150,7 +98,7 @@ function tryPlacePhase(
 	const aiStarts: Record<AiId, PersonaSpatialState> = {};
 	for (let i = 0; i < aiIds.length; i++) {
 		const key = aiStartKeys[i] as number;
-		const pos = keyToPos(key);
+		const pos = cellAtIndex(key);
 		aiStarts[aiIds[i] as AiId] = { position: pos };
 	}
 
@@ -177,26 +125,24 @@ function tryPlacePhase(
 		interestingCount,
 	);
 
-	const aiStartPositions = aiStartKeys.map(keyToPos);
-	if (
-		!everyOpenCellReachable(aiStartPositions, obstacleSet, nonObstacleCells)
-	) {
+	const aiStartPositions = aiStartKeys.map(cellAtIndex);
+	if (!everyOpenCellReachable(aiStartPositions, obstacleSet)) {
 		return null;
 	}
 
 	const holderById = new Map<string, GridPosition>();
 	packCarryPairs.forEach((pair, i) => {
-		holderById.set(pair.object.id, keyToPos(objectKeys[i] as number));
-		holderById.set(pair.space.id, keyToPos(carrySpaceKeys[i] as number));
+		holderById.set(pair.object.id, cellAtIndex(objectKeys[i] as number));
+		holderById.set(pair.space.id, cellAtIndex(carrySpaceKeys[i] as number));
 	});
 	packBoundSpaces.forEach((space, i) => {
-		holderById.set(space.id, keyToPos(standaloneSpaceKeys[i] as number));
+		holderById.set(space.id, cellAtIndex(standaloneSpaceKeys[i] as number));
 	});
 	packInteresting.forEach((obj, i) => {
-		holderById.set(obj.id, keyToPos(interestingKeys[i] as number));
+		holderById.set(obj.id, cellAtIndex(interestingKeys[i] as number));
 	});
 	packObstacles.forEach((obs, i) => {
-		holderById.set(obs.id, keyToPos(obstacleKeys[i] as number));
+		holderById.set(obs.id, cellAtIndex(obstacleKeys[i] as number));
 	});
 
 	const updatedEntities = pack.entities.map((entity) => {

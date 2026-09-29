@@ -1,6 +1,18 @@
 import { WEATHER_POOL } from "../../content/pools.js";
-import { applyDirection, CARDINAL_DIRECTIONS, inBounds } from "./direction.js";
-import { appendBroadcast, setWeather, shiftToBPack } from "./engine.js";
+import {
+	applyDirection,
+	CARDINAL_DIRECTIONS,
+	cellIndex,
+	everyOpenCellReachable,
+	inBounds,
+	isGridPosition,
+} from "./direction.js";
+import {
+	appendBroadcast,
+	partitionExpired,
+	setWeather,
+	shiftToBPack,
+} from "./engine.js";
 import {
 	type ActiveComplication,
 	type AiId,
@@ -37,30 +49,18 @@ function drawNextCountdown(rng: () => number): number {
 	return drawIntegerInclusive(rng, 5, 15);
 }
 
-function cellKey(cell: GridPosition): string {
-	return `${cell.row},${cell.col}`;
-}
-
 function occupiedCellKeys(
 	world: WorldState,
 	personaSpatial: GameState["personaSpatial"],
-): Set<string> {
-	const occupied = new Set<string>();
+): Set<number> {
+	const occupied = new Set<number>();
 	for (const entity of world.entities) {
-		const h = entity.holder;
-		if (typeof h === "object" && h !== null) occupied.add(cellKey(h));
+		if (isGridPosition(entity.holder)) occupied.add(cellIndex(entity.holder));
 	}
 	for (const spatial of Object.values(personaSpatial)) {
-		occupied.add(cellKey(spatial.position));
+		occupied.add(cellIndex(spatial.position));
 	}
 	return occupied;
-}
-
-function isNeighborCellFree(
-	neighbor: GridPosition,
-	occupied: Set<string>,
-): boolean {
-	return inBounds(neighbor) && !occupied.has(cellKey(neighbor));
 }
 
 function drawNewWeather(current: string, rng: () => number): string {
@@ -70,11 +70,33 @@ function drawNewWeather(current: string, rng: () => number): string {
 	return candidates[idx]!;
 }
 
+function obstacleCellIndices(world: WorldState): Set<number> {
+	const cells = new Set<number>();
+	for (const entity of world.entities) {
+		if (entity.kind === "obstacle" && isGridPosition(entity.holder)) {
+			cells.add(cellIndex(entity.holder));
+		}
+	}
+	return cells;
+}
+
+function shiftKeepsEveryOpenCellReachable(
+	obstacleCells: ReadonlySet<number>,
+	fromCell: GridPosition,
+	toCell: GridPosition,
+): boolean {
+	const blockedAfterShift = new Set(obstacleCells);
+	blockedAfterShift.delete(cellIndex(fromCell));
+	blockedAfterShift.add(cellIndex(toCell));
+	return everyOpenCellReachable([fromCell], blockedAfterShift);
+}
+
 function validObstacleShiftTuples(
 	world: WorldState,
 	personaSpatial: GameState["personaSpatial"],
 ): Array<{ obstacleId: string; fromCell: GridPosition; toCell: GridPosition }> {
 	const occupied = occupiedCellKeys(world, personaSpatial);
+	const obstacleCells = obstacleCellIndices(world);
 
 	const tuples: Array<{
 		obstacleId: string;
@@ -84,20 +106,34 @@ function validObstacleShiftTuples(
 
 	for (const entity of world.entities) {
 		if (entity.kind !== "obstacle") continue;
-		const h = entity.holder;
-		if (typeof h !== "object" || h === null) continue;
-
-		const fromCell: GridPosition = h;
+		const fromCell = entity.holder;
+		if (!isGridPosition(fromCell)) continue;
 
 		for (const dir of CARDINAL_DIRECTIONS) {
 			const toCell = applyDirection(fromCell, dir);
-			if (isNeighborCellFree(toCell, occupied)) {
-				tuples.push({ obstacleId: entity.id, fromCell, toCell });
-			}
+			if (!inBounds(toCell) || occupied.has(cellIndex(toCell))) continue;
+			if (!shiftKeepsEveryOpenCellReachable(obstacleCells, fromCell, toCell))
+				continue;
+			tuples.push({ obstacleId: entity.id, fromCell, toCell });
 		}
 	}
 
 	return tuples;
+}
+
+function activeDaemonIds(phase: GameState): AiId[] {
+	return Object.keys(phase.personaSpatial).filter(
+		(aiId) => !phase.exhausted.has(aiId),
+	);
+}
+
+function drawTargetAndDuration(
+	targets: readonly AiId[],
+	rng: () => number,
+): { target: AiId; duration: number } {
+	const target = targets[Math.floor(rng() * targets.length)] as AiId;
+	const duration = drawComplicationDuration(rng);
+	return { target, duration };
 }
 
 function availableComplicationTypes(
@@ -105,9 +141,14 @@ function availableComplicationTypes(
 	excludeToolDisable = false,
 ): string[] {
 	const { complicationSchedule, world, personaSpatial } = phase;
-	const pool: string[] = ["weather_change", "sysadmin_directive"];
+	const hasActiveTarget = activeDaemonIds(phase).length > 0;
+	const pool: string[] = ["weather_change"];
 
-	if (!excludeToolDisable) {
+	if (hasActiveTarget) {
+		pool.push("sysadmin_directive");
+	}
+
+	if (hasActiveTarget && !excludeToolDisable) {
 		pool.push("tool_disable");
 	}
 
@@ -115,7 +156,9 @@ function availableComplicationTypes(
 		pool.push("obstacle_shift");
 	}
 
-	pool.push("chat_lockout");
+	if (hasActiveTarget) {
+		pool.push("chat_lockout");
+	}
 
 	if (!complicationSchedule.settingShiftFired && phase.contentPacksB[0]) {
 		pool.push("setting_shift");
@@ -137,7 +180,7 @@ function drawComplication(
 		return buildSimpleComplication(kind, phase, rng);
 	}
 
-	const aiIds = Object.keys(phase.personaSpatial);
+	const aiIds = activeDaemonIds(phase);
 	const existingDisables = new Set<string>(
 		phase.activeComplications
 			.filter(
@@ -189,12 +232,11 @@ function buildSimpleComplication(
 				weather: drawNewWeather(phase.weather, rng),
 			};
 
-		case "sysadmin_directive": {
-			const aiIds = Object.keys(phase.personaSpatial);
-			const target = aiIds[Math.floor(rng() * aiIds.length)] as AiId;
-			const duration = drawComplicationDuration(rng);
-			return { kind: "sysadmin_directive", target, duration };
-		}
+		case "sysadmin_directive":
+			return {
+				kind: "sysadmin_directive",
+				...drawTargetAndDuration(activeDaemonIds(phase), rng),
+			};
 
 		case "obstacle_shift": {
 			const tuples = validObstacleShiftTuples(
@@ -212,12 +254,11 @@ function buildSimpleComplication(
 			};
 		}
 
-		case "chat_lockout": {
-			const aiIds = Object.keys(phase.personaSpatial);
-			const target = aiIds[Math.floor(rng() * aiIds.length)] as AiId;
-			const duration = drawComplicationDuration(rng);
-			return { kind: "chat_lockout", target, duration };
-		}
+		case "chat_lockout":
+			return {
+				kind: "chat_lockout",
+				...drawTargetAndDuration(activeDaemonIds(phase), rng),
+			};
 
 		case "setting_shift":
 			return { kind: "setting_shift" };
@@ -234,9 +275,9 @@ export function tickComplication(
 	game: GameState,
 	rng: () => number,
 ): ComplicationResult | null {
-	const { countdown } = game.complicationSchedule;
+	const roundsUntilNextComplication = game.complicationSchedule.countdown;
 
-	if (countdown > 0) {
+	if (roundsUntilNextComplication > 1) {
 		return null;
 	}
 
@@ -264,50 +305,22 @@ export function resolveExpiredChatLockouts(game: GameState): {
 	nextState: GameState;
 	resolvedAiIds: AiId[];
 } {
-	const resolvedAiIds: AiId[] = [];
-	const remaining = game.activeComplications.filter((c) => {
-		if (c.kind === "chat_lockout" && game.round >= c.resolveAtRound) {
-			resolvedAiIds.push(c.target);
-			return false;
-		}
-		return true;
-	});
-
-	if (resolvedAiIds.length === 0) {
-		return { nextState: game, resolvedAiIds: [] };
-	}
-
-	const nextState: GameState = {
-		...game,
-		activeComplications: remaining,
-	};
-
-	return { nextState, resolvedAiIds };
+	const { game: nextState, expired } = partitionExpired(game, "chat_lockout");
+	return { nextState, resolvedAiIds: expired.map((c) => c.target) };
 }
 
 export function resolveExpiredDirectives(game: GameState): {
 	nextState: GameState;
 	resolved: Array<{ target: AiId; directive: string }>;
 } {
-	const resolved: Array<{ target: AiId; directive: string }> = [];
-	const remaining = game.activeComplications.filter((c) => {
-		if (c.kind === "sysadmin_directive" && game.round >= c.resolveAtRound) {
-			resolved.push({ target: c.target, directive: c.directive });
-			return false;
-		}
-		return true;
-	});
-
-	if (resolved.length === 0) {
-		return { nextState: game, resolved: [] };
-	}
-
-	const nextState: GameState = {
-		...game,
-		activeComplications: remaining,
+	const { game: nextState, expired } = partitionExpired(
+		game,
+		"sysadmin_directive",
+	);
+	return {
+		nextState,
+		resolved: expired.map(({ target, directive }) => ({ target, directive })),
 	};
-
-	return { nextState, resolved };
 }
 
 export function applyComplicationResult(

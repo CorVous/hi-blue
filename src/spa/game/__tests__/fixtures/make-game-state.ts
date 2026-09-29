@@ -105,6 +105,8 @@ export interface TestGameOptions {
 	rng?: () => number;
 }
 
+const QUIET_OPENING_COUNTDOWN = 5;
+
 export function makeTestGame(options: TestGameOptions = {}): GameState {
 	const pack = makeTestPack(options.entities ?? [], {
 		wallName: "wall",
@@ -114,7 +116,15 @@ export function makeTestGame(options: TestGameOptions = {}): GameState {
 		budgetPerAi: options.budgetPerAi ?? 5,
 		...(options.rng ? { rng: options.rng } : {}),
 	});
-	return { ...game, contentPacksA: [pack], contentPacksB: [pack] };
+	const complicationSchedule = options.rng
+		? game.complicationSchedule
+		: { ...game.complicationSchedule, countdown: QUIET_OPENING_COUNTDOWN };
+	return {
+		...game,
+		complicationSchedule,
+		contentPacksA: [pack],
+		contentPacksB: [pack],
+	};
 }
 
 export function withPackOrderedWorld(game: GameState): GameState {
