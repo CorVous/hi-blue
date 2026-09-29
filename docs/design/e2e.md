@@ -126,10 +126,8 @@ a given id.
 
 ### `engine-blob.ts` and `vista-geometry.ts`: deliberate mirrors
 
-Specs do not import SPA modules that carry logic, so these two files are
-copies of production code. A plain constant is imported directly when that
-keeps a spec in step with production: `bootstrap-session-switch.spec.ts`
-imports `BOOTSTRAP_LOADING_TIMEOUT_MS` from `game-bootstrap-flow.ts`. They are leaf modules with no Playwright import, so unit tests can load
+Specs may not import SPA modules, so these two files are copies of production
+code. They are leaf modules with no Playwright import, so unit tests can load
 them.
 
 - `engine-blob.ts` mirrors `obfuscate` / `deobfuscate` in
