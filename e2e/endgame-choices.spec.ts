@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
 	activeSessionId,
 	collectPageErrors,
@@ -121,8 +121,7 @@ test("Continue leaves the endgame screen and re-enables the prompt", async ({
 test("the first request after Continue ends with the new-room broadcast and the new player message", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await page.addInitScript(() => {
 		localStorage.setItem("openrouter_key", "sk-or-test-key");

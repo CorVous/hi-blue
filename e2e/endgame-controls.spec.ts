@@ -74,8 +74,7 @@ test("a triple-clicked diagnostics submit sends one request", async ({
 test("re-entering the same ended game keeps download and diagnostics used", async ({
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	await reachEndgame(page);
 	const posts: string[] = [];

@@ -141,11 +141,10 @@ test("a save that fails part-way does not make the next save in the same tab sta
 	context,
 	page,
 }) => {
-	const pageErrors: Error[] = [];
-	page.on("pageerror", (err) => pageErrors.push(err));
+	const pageErrors = collectPageErrors(page);
 
 	const { ids, names } = await goToGame(page);
-	const sessionId = await activeSessionId(page);
+	const sessionId = await requireActiveSessionId(page);
 	const warning = page.locator("#persistence-warning");
 	await sendRound(page, `*${names[0]} first from tab a`);
 	await waitForRound(page, sessionId, 1);
