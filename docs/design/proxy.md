@@ -127,7 +127,11 @@ does not; see "Streaming settlement" below.
   shape (`cache_read_input_tokens`) and logged as `[cache] ...`. They are
   never priced directly.
 - **Missing or unparseable usage on a completed response means a full
-  refund**, not keeping the estimate.
+  refund**, not keeping the estimate. A body or SSE `data:` line that parses
+  to JSON but not to an object (`null`, a number, a string) counts as having
+  no usage; reading `.usage` off it would throw, turning the whole-response
+  path into a 500 with no CORS headers and no refund, and erroring the
+  stream.
 - **Streaming settlement uses `ctx.waitUntil`.** The response is teed through
   a `TransformStream` that scans SSE `data:` lines for the usage chunk, with
   one streaming `TextDecoder` so a multi-byte character split across chunks

@@ -791,6 +791,85 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		expect(Number(gVal)).toBe(800);
 	});
 
+	it.each([
+		["null", "16.0.0.1"],
+		["42", "16.0.0.2"],
+		['"text"', "16.0.0.3"],
+	])("non-streaming JSON body %s is relayed with a full refund", async (body, ip) => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(body, {
+						status: 200,
+						headers: { "Content-Type": "application/json" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: false,
+			}),
+		});
+
+		expect(resp.status).toBe(200);
+		expect(await resp.text()).toBe(body);
+
+		const now = Date.now();
+		const [ipVal, gVal] = await Promise.all([
+			kv().get(perIpKey(ip, now)),
+			kv().get(globalKey(now)),
+		]);
+		expect(Number(ipVal)).toBe(0);
+		expect(Number(gVal)).toBe(0);
+	});
+
+	it("streaming data: null line does not break usage reconciliation", async () => {
+		const ip = "16.0.0.4";
+		const ssePayload =
+			'data: null\n\ndata: {"usage":{"prompt_tokens":200,"completion_tokens":300}}\n\ndata: [DONE]\n\n';
+
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockImplementation(() =>
+				Promise.resolve(
+					new Response(ssePayload, {
+						status: 200,
+						headers: { "Content-Type": "text/event-stream" },
+					}),
+				),
+			),
+		);
+
+		const resp = await SELF.fetch(ENDPOINT, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"CF-Connecting-IP": ip,
+			},
+			body: JSON.stringify({
+				messages: [{ role: "user", content: "hi" }],
+				stream: true,
+			}),
+		});
+
+		expect(await resp.text()).toBe(ssePayload);
+
+		const now = Date.now();
+		await Promise.all([
+			waitForCounter(kv(), perIpKey(ip, now), "500"),
+			waitForCounter(kv(), globalKey(now), "500"),
+		]);
+	});
+
 	it("streaming with no usage chunk results in full refund (counters at 0)", async () => {
 		const ip = "13.0.0.1";
 		const ssePayload = "data: {}\n\ndata: [DONE]\n\n";

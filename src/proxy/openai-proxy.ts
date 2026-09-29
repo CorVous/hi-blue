@@ -306,6 +306,7 @@ function parseUsageJson(text: string): ParsedUsage | null {
 	} catch {
 		return null;
 	}
+	if (typeof parsed !== "object" || parsed === null) return null;
 	const promptTokens = parsed.usage?.prompt_tokens;
 	const completionTokens = parsed.usage?.completion_tokens;
 	if (
