@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
 	activeSessionId,
+	COMPLICATION_COUNTDOWN_BEYOND_ANY_SPEC,
 	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
@@ -13,11 +14,8 @@ import {
 	readActiveSessionFiles,
 	readDaemonFile,
 	renderedPlayerLine,
-	stubChatCompletions,
-	writeActiveSessionEngine,
+	setComplicationCountdown,
 } from "./helpers";
-
-const ROUND_BEYOND_THIS_TEST = 100;
 
 type FinalRound = "quiet" | "weather-change";
 
@@ -29,18 +27,12 @@ async function reachEndgameAfterFinalRound(
 		url: "/?winImmediately=1",
 		sse: ["hello"],
 	});
-	const { sessionId, sealed } = await readActiveSessionEngine(page);
-	await writeActiveSessionEngine(page, sessionId, {
-		...sealed,
-		complicationSchedule: {
-			countdown: finalRound === "weather-change" ? 1 : ROUND_BEYOND_THIS_TEST,
-			settingShiftFired:
-				sealed.complicationSchedule?.settingShiftFired ?? false,
-		},
-	});
-	await page.reload();
-	await stubChatCompletions(page, ["hello"]);
-	await expect(page.locator("#composer")).toBeVisible();
+	await setComplicationCountdown(
+		page,
+		finalRound === "weather-change"
+			? 1
+			: COMPLICATION_COUNTDOWN_BEYOND_ANY_SPEC,
+	);
 
 	if (finalRound === "weather-change") {
 		await page.evaluate(() => {

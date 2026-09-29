@@ -1,5 +1,6 @@
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import {
+	COMPLICATION_COUNTDOWN_BEYOND_ANY_SPEC,
 	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
@@ -8,6 +9,7 @@ import {
 	renderedPlayerLine,
 	requireActiveSessionId,
 	sessionDir,
+	setComplicationCountdown,
 	stubNewGameLLM,
 	waitForRound,
 } from "./helpers";
@@ -34,6 +36,14 @@ async function openSecondTab(context: BrowserContext): Promise<Page> {
 	return second;
 }
 
+async function goToGameWithoutComplications(
+	page: Page,
+): Promise<Awaited<ReturnType<typeof goToGame>>> {
+	const handles = await goToGame(page);
+	await setComplicationCountdown(page, COMPLICATION_COUNTDOWN_BEYOND_ANY_SPEC);
+	return handles;
+}
+
 async function sendRound(page: Page, text: string): Promise<void> {
 	await page.fill("#prompt", text);
 	await expect(page.locator("#send")).toBeEnabled();
@@ -46,7 +56,7 @@ test("an idle tab reloads the session when another tab saves a round into it", a
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	const { ids, names } = await goToGame(page);
+	const { ids, names } = await goToGameWithoutComplications(page);
 	const sessionId = await requireActiveSessionId(page);
 	await sendRound(page, `*${names[0]} first from tab a`);
 	await waitForRound(page, sessionId, 1);
@@ -81,7 +91,7 @@ test("a round that finishes after another tab saved is refused, warned about, an
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	const { ids, names } = await goToGame(page);
+	const { ids, names } = await goToGameWithoutComplications(page);
 	const sessionId = await requireActiveSessionId(page);
 	const held = await holdChatCompletions(page, isGameplayRequest);
 	await sendRound(page, `*${names[0]} lost from tab a`);
@@ -143,7 +153,7 @@ test("a save that fails part-way does not make the next save in the same tab sta
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	const { ids, names } = await goToGame(page);
+	const { ids, names } = await goToGameWithoutComplications(page);
 	const sessionId = await requireActiveSessionId(page);
 	const warning = page.locator("#persistence-warning");
 	await sendRound(page, `*${names[0]} first from tab a`);

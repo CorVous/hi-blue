@@ -611,6 +611,26 @@ export async function writeActiveSessionEngine(
 	);
 }
 
+export const COMPLICATION_COUNTDOWN_BEYOND_ANY_SPEC = 100;
+
+export async function setComplicationCountdown(
+	page: Page,
+	countdown: number,
+): Promise<void> {
+	const { sessionId, sealed } = await readActiveSessionEngine(page);
+	await writeActiveSessionEngine(page, sessionId, {
+		...sealed,
+		complicationSchedule: {
+			countdown,
+			settingShiftFired:
+				sealed.complicationSchedule?.settingShiftFired ?? false,
+		},
+	});
+	await page.reload();
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
+	await expect(page.locator("#composer")).toBeVisible();
+}
+
 export async function readDaemonFile(
 	page: Page,
 	sessionId: string,
