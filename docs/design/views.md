@@ -258,9 +258,12 @@ it hides the other routes' screens and shows or hides the global chrome
   only while that endgame is still on screen (`endgameStillShows`). When the
   storage listener has already reloaded the tab into the other tab's
   continued room, `cached` holds that live room, and releasing it cleared the
-  session mid-round. A refusal that finds the endgame gone changes nothing
-  and only shows the warning, and only when the player has not left the
-  ended session.
+  session mid-round. A refusal that finds the endgame gone only shows the
+  warning, and only when the player has not left the ended session. The one
+  exception is a sessions picker covering the game route: the storage
+  listener ignores events while the view is not `game`, so `cached` still
+  holds the stale ended game. The refusal releases it without re-rendering,
+  and closing the picker then loads the continued room.
 
 ### Bootstrap loading flow (`game-bootstrap-flow.ts`)
 

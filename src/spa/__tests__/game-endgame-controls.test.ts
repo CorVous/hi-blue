@@ -210,6 +210,48 @@ describe("showEndgame — a choice that outlives the endgame screen", () => {
 		expect(root().dataset.view).toBe("game");
 	});
 
+	it("releases the stale ended game when a refused Continue lands while the sessions picker covers it", async () => {
+		const sessionId = "0xCCCD";
+		const game = endedGame();
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+		setActiveSessionId(sessionId);
+		const firstSave = saveActiveSession(game, { sessionId });
+		if (!firstSave.ok) throw new Error("test: could not save the ended game");
+		let releasePacks: () => void = () => undefined;
+		generateDualContentPacks.mockReturnValue(
+			new Promise((resolve) => {
+				releasePacks = () =>
+					resolve({
+						packA: STATIC_CONTENT_PACKS[0],
+						packB: STATIC_CONTENT_PACKS[0],
+						objectiveTypes: STATIC_OBJECTIVE_TYPES,
+					});
+			}),
+		);
+		const releaseEndedGame = vi.fn();
+		showEndgame(
+			root(),
+			game,
+			{ sessionId, lastSavedAt: firstSave.lastSavedAt },
+			releaseEndedGame,
+		);
+
+		button("#endgame-continue-btn").click();
+		await vi.waitFor(() => expect(generateDualContentPacks).toHaveBeenCalled());
+		root().dataset.view = "sessions";
+		vi.setSystemTime(new Date("2026-01-01T00:01:00.000Z"));
+		const otherTabSave = saveActiveSession(
+			{ ...game, isComplete: false },
+			{ sessionId, createdAt: "2026-01-01T00:00:00.000Z" },
+		);
+		if (!otherTabSave.ok) throw new Error("test: other tab could not save");
+		releasePacks();
+
+		await vi.waitFor(() => expect(releaseEndedGame).toHaveBeenCalledTimes(1));
+		expect(root().dataset.view).toBe("sessions");
+	});
+
 	it("gives up on a same-daemons build that never finishes and offers the choices again", async () => {
 		vi.useFakeTimers();
 		generateDualContentPacks.mockReturnValue(new Promise(() => undefined));

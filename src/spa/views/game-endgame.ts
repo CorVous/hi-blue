@@ -337,7 +337,9 @@ function showStaleChoiceWarning(root: HTMLElement): void {
 
 function refuseChangedEndedSession(choice: EndgameChoice): void {
 	if (!endgameStillShows(choice)) {
-		if (!playerLeftEndedSession(choice)) showStaleChoiceWarning(choice.root);
+		if (playerLeftEndedSession(choice)) return;
+		if (choice.root.dataset.view !== "game") choice.releaseEndedGame();
+		showStaleChoiceWarning(choice.root);
 		return;
 	}
 	choiceInFlight = null;
