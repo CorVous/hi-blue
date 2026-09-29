@@ -477,7 +477,6 @@ export interface SealedContentPack {
 	setting: string;
 	wallName: string;
 	entities?: SealedEntity[];
-	obstacles?: Array<{ holder: GridPosition | null }>;
 }
 
 export interface SealedEngine {
@@ -519,13 +518,9 @@ export function activePackOf(
 }
 
 export function obstacleCellsOf(pack: SealedContentPack): GridPosition[] {
-	const fromEntities = (pack.entities ?? [])
+	return (pack.entities ?? [])
 		.filter((entity) => entity.kind === "obstacle")
 		.map((entity) => entity.holder)
-		.filter(isGridPosition);
-	if (fromEntities.length > 0) return fromEntities;
-	return (pack.obstacles ?? [])
-		.map((obstacle) => obstacle.holder)
 		.filter(isGridPosition);
 }
 

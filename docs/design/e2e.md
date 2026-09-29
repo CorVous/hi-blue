@@ -98,9 +98,10 @@ itself fires, never `page.request.*`.
   the object becomes the page function's argument and no timeout applies.
   `getAiHandles`, `waitForFirstRoundSaved` and `start-screen.spec.ts`'s
   `waitForActiveSession` follow this form.
-- `SealedContentPack.entities` is the flat entity list of session v11 and later.
-  `obstacles` is the bucketed list of older blobs, and `obstacleCellsOf` uses it
-  only as a fallback.
+- `SealedContentPack.entities` is the flat entity list of session v11 and later,
+  and `obstacleCellsOf` reads obstacles from it alone. The bucketed `obstacles`
+  list of older blobs is gone from the type: every spec seals a fresh session,
+  so the fallback that read it could never run.
 - `stubs.ts` re-exports `engine-blob.ts` and `vista-geometry.ts`, so specs
   import from one place.
 
