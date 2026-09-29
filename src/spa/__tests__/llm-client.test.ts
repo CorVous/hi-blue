@@ -3,6 +3,8 @@ import { TOOL_DEFINITIONS } from "../game/tool-registry.js";
 import {
 	CapHitError,
 	chatCompletionJson,
+	HttpStatusError,
+	isRetryPointless,
 	parseCapHitFromResponse,
 	resolveLLMTarget,
 	streamCompletion,
@@ -206,7 +208,7 @@ describe("parseCapHitFromResponse", () => {
 });
 
 describe("chatCompletionJson — non-cap 429", () => {
-	it("throws a plain retryable Error rather than CapHitError", async () => {
+	it("throws a retryable HttpStatusError carrying the upstream message rather than CapHitError", async () => {
 		vi.stubGlobal(
 			"fetch",
 			vi.fn().mockResolvedValue(
@@ -225,9 +227,137 @@ describe("chatCompletionJson — non-cap 429", () => {
 			messages: [{ role: "user", content: "hi" }],
 		}).catch((err: unknown) => err);
 
-		expect(error).toBeInstanceOf(Error);
+		expect(error).toBeInstanceOf(HttpStatusError);
 		expect(error).not.toBeInstanceOf(CapHitError);
-		expect((error as Error).message).toBe("HTTP 429: Too Many Requests");
+		expect(isRetryPointless(error)).toBe(false);
+		expect((error as HttpStatusError).status).toBe(429);
+		expect((error as HttpStatusError).upstreamMessage).toBe(
+			"Provider rate limited",
+		);
+		expect((error as Error).message).toBe(
+			"HTTP 429: Too Many Requests — Provider rate limited",
+		);
+	});
+});
+
+describe("chatCompletionJson — HTTP errors", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	function stubErrorResponse(
+		status: number,
+		body: unknown,
+		headers: Record<string, string> = {},
+	): void {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response(JSON.stringify(body), {
+					status,
+					headers: { "Content-Type": "application/json", ...headers },
+				}),
+			),
+		);
+	}
+
+	it.each([
+		400, 401, 402, 403,
+	])("a %i keeps OpenRouter's error message and is marked not worth retrying", async (status) => {
+		stubErrorResponse(status, {
+			error: { message: "No auth credentials found", code: status },
+		});
+
+		const error = await chatCompletionJson({
+			messages: [{ role: "user", content: "hi" }],
+		}).catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(HttpStatusError);
+		expect((error as HttpStatusError).status).toBe(status);
+		expect((error as HttpStatusError).upstreamMessage).toBe(
+			"No auth credentials found",
+		);
+		expect((error as Error).message).toContain("No auth credentials found");
+		expect(isRetryPointless(error)).toBe(true);
+	});
+
+	it("a 5xx without a JSON body keeps the bare status line and stays retryable", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response("<html>bad gateway</html>", {
+					status: 502,
+					statusText: "Bad Gateway",
+				}),
+			),
+		);
+
+		const error = await chatCompletionJson({
+			messages: [{ role: "user", content: "hi" }],
+		}).catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(HttpStatusError);
+		expect((error as HttpStatusError).upstreamMessage).toBeNull();
+		expect((error as Error).message).toBe("HTTP 502: Bad Gateway");
+		expect(isRetryPointless(error)).toBe(false);
+	});
+
+	it("reads Retry-After seconds into retryAfterSec", async () => {
+		stubErrorResponse(
+			429,
+			{ error: { message: "Provider rate limited" } },
+			{ "Retry-After": "7" },
+		);
+
+		const error = await chatCompletionJson({
+			messages: [{ role: "user", content: "hi" }],
+		}).catch((err: unknown) => err);
+
+		expect((error as HttpStatusError).retryAfterSec).toBe(7);
+	});
+});
+
+describe("abort signals", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it("chatCompletionJson hands its signal to fetch", async () => {
+		const mockFetch = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({ choices: [{ message: { content: "{}" } }] }),
+				{
+					status: 200,
+				},
+			),
+		);
+		vi.stubGlobal("fetch", mockFetch);
+		const controller = new AbortController();
+
+		await chatCompletionJson({
+			messages: [{ role: "user", content: "hi" }],
+			signal: controller.signal,
+		});
+
+		expect(mockFetch.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+	});
+
+	it("streamCompletion hands its signal to fetch", async () => {
+		const mockFetch = vi
+			.fn()
+			.mockResolvedValue(
+				makeFetchResponse(makeSSEStream(["data: [DONE]\n\n"])),
+			);
+		vi.stubGlobal("fetch", mockFetch);
+		const controller = new AbortController();
+
+		await streamCompletion({
+			messages: [{ role: "user", content: "hi" }],
+			signal: controller.signal,
+			onDelta: () => {},
+		});
+
+		expect(mockFetch.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
 	});
 });
 

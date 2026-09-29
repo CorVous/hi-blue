@@ -1,10 +1,15 @@
-import { CapHitError, chatCompletionJson } from "../llm-client.js";
+import { chatCompletionJson, isRetryPointless } from "../llm-client.js";
 import type { RawBoundPack } from "./binding-aware-validator.js";
 import { validateBoundDualContentPack } from "./binding-aware-validator.js";
 import type { BindingSkeleton } from "./binding-prompt-builder.js";
 import { buildDualBindingPrompt } from "./binding-prompt-builder.js";
 import { recordContentPackAttempt } from "./content-pack-attempts.js";
 import type { ValidationError } from "./content-pack-validation.js";
+import {
+	parseJsonCompletion,
+	retryDelayMs,
+	sleepUnlessAborted,
+} from "./json-completion.js";
 
 export type { ValidationError } from "./content-pack-validation.js";
 
@@ -91,10 +96,6 @@ Return ONLY valid JSON (no markdown, no preamble):
 const OUTER_ATTEMPT_BUDGET = 3;
 const BACKOFF_MS_BEFORE_RETRY = [1_000, 2_000, 4_000];
 
-function sleep(ms: number): Promise<void> {
-	return new Promise((r) => setTimeout(r, ms));
-}
-
 export type OuterChatMessage =
 	| { role: "system"; content: string }
 	| { role: "user"; content: string }
@@ -180,41 +181,34 @@ export function buildCorrectiveFeedback(errors: ValidationError[]): string {
 export class BrowserContentPackProvider implements ContentPackProvider {
 	private readonly disableReasoning: boolean;
 	private readonly chatFn: typeof chatCompletionJson;
+	private readonly signal: AbortSignal | undefined;
 
 	constructor(
 		opts: {
 			disableReasoning?: boolean;
 			chatFn?: typeof chatCompletionJson;
+			signal?: AbortSignal;
 		} = {},
 	) {
 		this.disableReasoning = opts.disableReasoning ?? false;
 		this.chatFn = opts.chatFn ?? chatCompletionJson;
+		this.signal = opts.signal;
 	}
 
 	private async callAndParse(
 		messages: OuterChatMessage[],
 		label: string,
 	): Promise<{ parsed: unknown; raw: string }> {
-		const { content, reasoning } = await this.chatFn({
+		const result = await this.chatFn({
 			messages,
 			disableReasoning: this.disableReasoning,
+			...(this.signal !== undefined ? { signal: this.signal } : {}),
 		});
-
-		const raw = content !== null && content !== "" ? content : reasoning;
-		if (raw === null || raw === "") {
-			throw new ContentPackError(
-				`${label} response has neither content nor reasoning`,
-			);
-		}
-
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(raw);
-		} catch {
-			throw new ContentPackError(`${label} JSON parse failed: ${raw}`);
-		}
-
-		return { parsed, raw };
+		return parseJsonCompletion(
+			result,
+			label,
+			(message) => new ContentPackError(message),
+		);
 	}
 
 	async generateDualContentPacks(
@@ -298,7 +292,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				correctiveFeedback = buildCorrectiveFeedback(validationResult.errors);
 				prevAssistantRaw = raw;
 			} catch (err) {
-				if (err instanceof CapHitError) throw err;
+				if (isRetryPointless(err) || this.signal?.aborted) throw err;
 				recordContentPackAttempt({
 					op: "dual",
 					attempt,
@@ -308,7 +302,7 @@ export class BrowserContentPackProvider implements ContentPackProvider {
 				if (attempt === OUTER_ATTEMPT_BUDGET - 1) throw err;
 				const backoffMs = BACKOFF_MS_BEFORE_RETRY[attempt];
 				if (backoffMs !== undefined) {
-					await sleep(backoffMs);
+					await sleepUnlessAborted(retryDelayMs(err, backoffMs), this.signal);
 				}
 				correctiveFeedback = null;
 				prevAssistantRaw = null;

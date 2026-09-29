@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CapHitError } from "../../llm-client.js";
+import { CapHitError, HttpStatusError } from "../../llm-client.js";
 import { validateBoundDualContentPack } from "../binding-aware-validator.js";
 import {
 	BrowserContentPackProvider,
@@ -255,6 +255,77 @@ describe("BrowserContentPackProvider — dual outer-retry layer", () => {
 			CapHitError,
 		);
 		expect(mockChatFn).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		400, 401, 402, 403,
+	])("an HTTP %i rethrows at once without retrying", async (status) => {
+		const mockChatFn = vi.fn().mockRejectedValue(
+			new HttpStatusError({
+				status,
+				statusText: "",
+				upstreamMessage: "No auth credentials found",
+				retryAfterSec: null,
+			}),
+		);
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+
+		await expect(
+			provider.generateDualContentPacks(dualInput),
+		).rejects.toMatchObject({
+			status,
+			upstreamMessage: "No auth credentials found",
+		});
+		expect(mockChatFn).toHaveBeenCalledTimes(1);
+	});
+
+	it("passes its abort signal to every call and stops retrying once aborted", async () => {
+		const controller = new AbortController();
+		const mockChatFn = vi.fn().mockImplementation(async () => {
+			controller.abort();
+			throw new DOMException("aborted", "AbortError");
+		});
+
+		const provider = new BrowserContentPackProvider({
+			chatFn: mockChatFn,
+			signal: controller.signal,
+		});
+
+		await expect(provider.generateDualContentPacks(dualInput)).rejects.toThrow(
+			"aborted",
+		);
+		expect(mockChatFn).toHaveBeenCalledTimes(1);
+		expect(mockChatFn.mock.calls[0]?.[0]?.signal).toBe(controller.signal);
+	});
+
+	it("waits for a longer Retry-After before retrying a retryable HTTP error", async () => {
+		vi.useFakeTimers();
+		const mockChatFn = vi.fn();
+		mockChatFn.mockRejectedValueOnce(
+			new HttpStatusError({
+				status: 429,
+				statusText: "Too Many Requests",
+				upstreamMessage: "Provider rate limited",
+				retryAfterSec: 3,
+			}),
+		);
+		mockChatFn.mockResolvedValueOnce({
+			content: JSON.stringify(buildDualResponse()),
+			reasoning: null,
+		});
+
+		const provider = new BrowserContentPackProvider({ chatFn: mockChatFn });
+		const promise = provider.generateDualContentPacks(dualInput);
+
+		await vi.waitFor(() => expect(mockChatFn).toHaveBeenCalledTimes(1));
+		await vi.advanceTimersByTimeAsync(FIRST_RETRY_BACKOFF_MS);
+		expect(mockChatFn).toHaveBeenCalledTimes(1);
+		await vi.advanceTimersByTimeAsync(2_000);
+		await promise;
+		vi.useRealTimers();
+
+		expect(mockChatFn).toHaveBeenCalledTimes(2);
 	});
 
 	it("Test 4 — budget exhaustion bubbles the last ContentPackError", async () => {

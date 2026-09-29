@@ -1,3 +1,5 @@
+import { UpstreamErrorBodyError } from "./llm-errors.js";
+
 export interface ToolCallResult {
 	id: string;
 	name: string;
@@ -13,6 +15,35 @@ export interface UsageInfo {
 }
 
 const SSE_EVENT_DELIMITER = "\n\n";
+const ERROR_FINISH_REASON = "error";
+
+// biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
+function parseChunkOrUndefined(data: string): any {
+	try {
+		return JSON.parse(data);
+	} catch {
+		return undefined;
+	}
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
+function throwIfUpstreamErrorChunk(chunk: any): void {
+	const error = chunk?.error;
+	const hasErrorObject = error != null && typeof error === "object";
+	const finishedWithError =
+		chunk?.choices?.[0]?.finish_reason === ERROR_FINISH_REASON;
+	if (!hasErrorObject && !finishedWithError) return;
+	const upstreamMessage =
+		hasErrorObject && typeof error.message === "string"
+			? error.message
+			: "stream finished with an error";
+	const code = hasErrorObject ? error.code : undefined;
+	throw new UpstreamErrorBodyError(
+		typeof code === "string" || typeof code === "number"
+			? { upstreamMessage, upstreamCode: String(code) }
+			: { upstreamMessage },
+	);
+}
 const LINE_BREAK_PATTERN = /\r\n?/g;
 
 // biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
@@ -88,9 +119,10 @@ export async function parseSSEStream(
 				flushToolCalls();
 				return true;
 			}
+			const parsed = parseChunkOrUndefined(data);
+			if (parsed === undefined) continue;
+			throwIfUpstreamErrorChunk(parsed);
 			try {
-				// biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
-				const parsed: any = JSON.parse(data);
 				const content = parsed?.choices?.[0]?.delta?.content;
 				if (typeof content === "string" && content.length > 0) {
 					onDelta(content);

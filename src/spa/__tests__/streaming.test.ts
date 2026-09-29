@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { UpstreamErrorBodyError } from "../llm-errors.js";
 import type { ToolCallResult, UsageInfo } from "../streaming.js";
 import { parseSSEStream } from "../streaming.js";
 
@@ -478,5 +479,51 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 		);
 
 		expect(deltas).toEqual(["cr"]);
+	});
+});
+
+describe("parseSSEStream — mid-stream upstream errors", () => {
+	it("throws UpstreamErrorBodyError for a chunk that carries an error object after a 200", async () => {
+		const sseData = [
+			`data: ${JSON.stringify({ choices: [{ delta: { content: "Hel" } }] })}\n\n`,
+			`data: ${JSON.stringify({
+				error: { code: 502, message: "Provider disconnected" },
+				choices: [{ delta: { content: "" }, finish_reason: "error" }],
+			})}\n\n`,
+			`data: [DONE]\n\n`,
+		].join("");
+
+		const deltas: string[] = [];
+		const error = await parseSSEStream(makeSSEStream([sseData]), (text) =>
+			deltas.push(text),
+		).catch((err: unknown) => err);
+
+		expect(error).toBeInstanceOf(UpstreamErrorBodyError);
+		expect((error as UpstreamErrorBodyError).upstreamMessage).toBe(
+			"Provider disconnected",
+		);
+		expect((error as UpstreamErrorBodyError).upstreamCode).toBe("502");
+		expect(deltas).toEqual(["Hel"]);
+	});
+
+	it("throws for finish_reason error even without an error object", async () => {
+		const sseData = `data: ${JSON.stringify({
+			choices: [{ delta: {}, finish_reason: "error" }],
+		})}\n\ndata: [DONE]\n\n`;
+
+		await expect(
+			parseSSEStream(makeSSEStream([sseData]), () => {}),
+		).rejects.toBeInstanceOf(UpstreamErrorBodyError);
+	});
+
+	it("still drops malformed JSON chunks without throwing", async () => {
+		const sseData = `data: {not json\n\ndata: ${JSON.stringify({
+			choices: [{ delta: { content: "ok" } }],
+		})}\n\ndata: [DONE]\n\n`;
+
+		const deltas: string[] = [];
+		await parseSSEStream(makeSSEStream([sseData]), (text) => deltas.push(text));
+
+		expect(deltas).toEqual(["ok"]);
 	});
 });
