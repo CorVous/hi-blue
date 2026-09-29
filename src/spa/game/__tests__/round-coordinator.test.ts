@@ -2777,6 +2777,8 @@ describe("diskDelta persistence via diskEntities", () => {
 		cyan: { position: { row: 0, col: 2 } },
 	};
 
+	const COUNTDOWN_BEYOND_THESE_ROUNDS = 100;
+
 	async function roundTwoWith(
 		entities: WorldEntity[],
 		placements: Record<string, { row: number; col: number }>,
@@ -2786,7 +2788,14 @@ describe("diskDelta persistence via diskEntities", () => {
 			wallName: "wall",
 			aiStarts: ROW_STARTS,
 		});
-		const game1 = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const started = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+		const game1 = {
+			...started,
+			complicationSchedule: {
+				...started.complicationSchedule,
+				countdown: COUNTDOWN_BEYOND_THESE_ROUNDS,
+			},
+		};
 		const round1Result = await runRound(
 			game1,
 			"red",
