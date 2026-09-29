@@ -483,9 +483,9 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 });
 
 describe("parseSSEStream — mid-stream upstream errors", () => {
-	it("throws UpstreamErrorBodyError for a chunk that carries an error object after a 200", async () => {
+	it("throws UpstreamErrorBodyError when an error object arrives before any content or tool call", async () => {
 		const sseData = [
-			`data: ${JSON.stringify({ choices: [{ delta: { content: "Hel" } }] })}\n\n`,
+			`data: ${JSON.stringify({ choices: [{ delta: { reasoning: "hmm" } }] })}\n\n`,
 			`data: ${JSON.stringify({
 				error: { code: 502, message: "Provider disconnected" },
 				choices: [{ delta: { content: "" }, finish_reason: "error" }],
@@ -493,9 +493,9 @@ describe("parseSSEStream — mid-stream upstream errors", () => {
 			`data: [DONE]\n\n`,
 		].join("");
 
-		const deltas: string[] = [];
-		const error = await parseSSEStream(makeSSEStream([sseData]), (text) =>
-			deltas.push(text),
+		const error = await parseSSEStream(
+			makeSSEStream([sseData]),
+			() => {},
 		).catch((err: unknown) => err);
 
 		expect(error).toBeInstanceOf(UpstreamErrorBodyError);
@@ -503,17 +503,108 @@ describe("parseSSEStream — mid-stream upstream errors", () => {
 			"Provider disconnected",
 		);
 		expect((error as UpstreamErrorBodyError).upstreamCode).toBe("502");
-		expect(deltas).toEqual(["Hel"]);
 	});
 
-	it("throws for finish_reason error even without an error object", async () => {
+	it("reports the usage carried by an error chunk before throwing", async () => {
+		const sseData = `data: ${JSON.stringify({
+			error: { code: 502, message: "Provider disconnected" },
+			choices: [{ delta: {}, finish_reason: "error" }],
+			usage: { cost: 0.0042, prompt_tokens: 900, completion_tokens: 0 },
+		})}\n\n`;
+
+		const usages: UsageInfo[] = [];
+		await expect(
+			parseSSEStream(
+				makeSSEStream([sseData]),
+				() => {},
+				undefined,
+				undefined,
+				(usage) => usages.push(usage),
+			),
+		).rejects.toBeInstanceOf(UpstreamErrorBodyError);
+
+		expect(usages).toHaveLength(1);
+		expect(usages[0]?.cost).toBe(0.0042);
+	});
+
+	it("ends the turn with the content received when an error object arrives after it", async () => {
+		const sseData = [
+			`data: ${JSON.stringify({ choices: [{ delta: { content: "Hel" } }] })}\n\n`,
+			`data: ${JSON.stringify({
+				error: { code: 502, message: "Provider disconnected" },
+				choices: [{ delta: { content: "" }, finish_reason: "error" }],
+				usage: { cost: 0.001 },
+			})}\n\n`,
+			`data: ${JSON.stringify({ choices: [{ delta: { content: "ignored" } }] })}\n\n`,
+			`data: [DONE]\n\n`,
+		].join("");
+
+		const deltas: string[] = [];
+		const usages: UsageInfo[] = [];
+		await parseSSEStream(
+			makeSSEStream([sseData]),
+			(text) => deltas.push(text),
+			undefined,
+			undefined,
+			(usage) => usages.push(usage),
+		);
+
+		expect(deltas).toEqual(["Hel"]);
+		expect(usages.map((usage) => usage.cost)).toEqual([0.001]);
+	});
+
+	it("flushes the tool calls received when an error object arrives after them", async () => {
+		const sseData = [
+			`data: ${JSON.stringify({
+				choices: [
+					{
+						delta: {
+							tool_calls: [
+								{
+									index: 0,
+									id: "call_1",
+									function: {
+										name: "message",
+										arguments: '{"to":"blue","content":"hi"}',
+									},
+								},
+							],
+						},
+					},
+				],
+			})}\n\n`,
+			`data: ${JSON.stringify({
+				error: { code: 502, message: "Provider disconnected" },
+				choices: [{ delta: {}, finish_reason: "error" }],
+			})}\n\n`,
+		].join("");
+
+		const calls: ToolCallResult[] = [];
+		await parseSSEStream(
+			makeSSEStream([sseData]),
+			() => {},
+			undefined,
+			(call) => calls.push(call),
+		);
+
+		expect(calls).toEqual([
+			{
+				id: "call_1",
+				name: "message",
+				argumentsJson: '{"to":"blue","content":"hi"}',
+			},
+		]);
+	});
+
+	it("does not throw for finish_reason error without an error object", async () => {
 		const sseData = `data: ${JSON.stringify({
 			choices: [{ delta: {}, finish_reason: "error" }],
 		})}\n\ndata: [DONE]\n\n`;
 
-		await expect(
-			parseSSEStream(makeSSEStream([sseData]), () => {}),
-		).rejects.toBeInstanceOf(UpstreamErrorBodyError);
+		const deltas: string[] = [];
+		await parseSSEStream(makeSSEStream([sseData]), (text) => deltas.push(text));
+
+		expect(deltas).toEqual([]);
 	});
 
 	it("still drops malformed JSON chunks without throwing", async () => {

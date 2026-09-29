@@ -15,7 +15,6 @@ export interface UsageInfo {
 }
 
 const SSE_EVENT_DELIMITER = "\n\n";
-const ERROR_FINISH_REASON = "error";
 
 // biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
 function parseChunkOrUndefined(data: string): any {
@@ -27,18 +26,15 @@ function parseChunkOrUndefined(data: string): any {
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
-function throwIfUpstreamErrorChunk(chunk: any): void {
+function upstreamErrorFromChunk(chunk: any): UpstreamErrorBodyError | null {
 	const error = chunk?.error;
-	const hasErrorObject = error != null && typeof error === "object";
-	const finishedWithError =
-		chunk?.choices?.[0]?.finish_reason === ERROR_FINISH_REASON;
-	if (!hasErrorObject && !finishedWithError) return;
+	if (error == null || typeof error !== "object") return null;
 	const upstreamMessage =
-		hasErrorObject && typeof error.message === "string"
+		typeof error.message === "string"
 			? error.message
 			: "stream finished with an error";
-	const code = hasErrorObject ? error.code : undefined;
-	throw new UpstreamErrorBodyError(
+	const code = error.code;
+	return new UpstreamErrorBodyError(
 		typeof code === "string" || typeof code === "number"
 			? { upstreamMessage, upstreamCode: String(code) }
 			: { upstreamMessage },
@@ -102,6 +98,7 @@ export async function parseSSEStream(
 		{ id: string; name: string; argumentsJson: string }
 	> = new Map();
 	let finishReasonSeen = false;
+	let receivedUsableOutput = false;
 
 	function flushToolCalls(): void {
 		if (!onToolCall) return;
@@ -121,10 +118,14 @@ export async function parseSSEStream(
 			}
 			const parsed = parseChunkOrUndefined(data);
 			if (parsed === undefined) continue;
-			throwIfUpstreamErrorChunk(parsed);
+			try {
+				const usage = usageFromChunk(parsed);
+				if (usage) onUsage?.(usage);
+			} catch {}
 			try {
 				const content = parsed?.choices?.[0]?.delta?.content;
 				if (typeof content === "string" && content.length > 0) {
+					receivedUsableOutput = true;
 					onDelta(content);
 				}
 				const reasoning = parsed?.choices?.[0]?.delta?.reasoning;
@@ -136,6 +137,7 @@ export async function parseSSEStream(
 				if (Array.isArray(toolCallDeltas)) {
 					for (const delta of toolCallDeltas) {
 						if (typeof delta?.index !== "number") continue;
+						receivedUsableOutput = true;
 						const idx: number = delta.index;
 						const accumulated = toolCallAccumulator.get(idx);
 						if (!accumulated) {
@@ -174,10 +176,13 @@ export async function parseSSEStream(
 				if (finishReason === "tool_calls") {
 					flushToolCalls();
 				}
-
-				const usage = usageFromChunk(parsed);
-				if (usage) onUsage?.(usage);
 			} catch {}
+			const upstreamError = upstreamErrorFromChunk(parsed);
+			if (upstreamError) {
+				if (!receivedUsableOutput) throw upstreamError;
+				flushToolCalls();
+				return true;
+			}
 		}
 		return false;
 	}

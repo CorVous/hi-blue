@@ -185,11 +185,34 @@ re-render is a call to `renderApp` from a view.
 - **Errors inside a 200 stream.** OpenRouter reports a failure that happens
   after the stream has started (the provider disconnects, a moderation stop)
   as a chunk with an `error` object and `finish_reason: "error"`, because the
-  status line has already gone out. Such a chunk throws
-  `UpstreamErrorBodyError`, so the round fails and shows `#round-error`
-  instead of committing whatever half-reply arrived. The check runs outside
-  the `try` that swallows malformed chunks; inside it, the throw was dropped
-  like a parse error.
+  status line has already gone out. What happens depends on what the turn
+  already received:
+  - The chunk's usage is reported through `onUsage` first, whatever follows.
+    The call is billed even when it fails, and the spend must be counted.
+  - If no content and no tool call arrived before the error (reasoning does
+    not count), `UpstreamErrorBodyError` is thrown, so the round fails and
+    shows `#round-error`. There is nothing to commit for that Daemon.
+  - If content or a tool call already arrived, the turn ends with what was
+    received: accumulated tool calls are flushed and parsing stops, without
+    a throw. Throwing here used to discard the whole round, including the
+    turns other Daemons had already taken and been billed for. A tool call
+    cut off mid-arguments fails argument parsing in the coordinator and is
+    recorded as a tool failure, like any other malformed call.
+  - `finish_reason: "error"` without an `error` object does not throw by
+    itself. It counts as a finish reason, so the turn keeps what it received;
+    a turn that received nothing becomes a pass.
+
+  The error check runs outside the `try` that swallows malformed chunks;
+  inside it, the throw was dropped like a parse error.
+- **Why a failed turn still fails the round.** An upstream failure with
+  nothing received is not turned into an "is unresponsive…" turn by the
+  round coordinator. That line belongs to a Daemon whose budget is spent:
+  it makes no LLM call and is charged nothing, and the game treats it as a
+  lasting state. A provider hiccup is transient, and the SPA already models
+  it as a failed round: `#round-error` with the upstream message and the
+  `connection unstable` pip (views.md, "Round errors"), after which the
+  player can send again. Folding it into a pass would silently spend the
+  player's round and hide the failure.
 - Malformed JSON chunks are dropped. A separate `try` block wraps the
   callbacks, so an exception thrown by `onDelta` or another callback while it
   handles a chunk is dropped too.

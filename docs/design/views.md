@@ -435,8 +435,9 @@ it hides the other routes' screens and shows or hides the global chrome
   used to stop the round with no sign in the UI. They now show `#round-error`
   and set the topinfo pip to `connection unstable`. Both clear when the next
   round starts. When the error carries an upstream message, `#round-error`
-  includes it. An error chunk inside a 200 stream counts (see `streaming.ts`
-  in spa-shell.md).
+  includes it. An error chunk inside a 200 stream counts when it arrives
+  before the turn received any content or tool call (see `streaming.ts` in
+  spa-shell.md).
 
 ## `sessions.ts`: the session picker
 
