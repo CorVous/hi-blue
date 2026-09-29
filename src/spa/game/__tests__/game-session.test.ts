@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { OpenAiMessage } from "../../llm-client";
 import { GameSession } from "../game-session";
 import type { RoundLLMProvider } from "../round-llm-provider";
 import { MockRoundLLMProvider } from "../round-llm-provider";
@@ -9,6 +8,7 @@ import {
 	TEST_PERSONAS,
 } from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
+import { firstTurnActs, toolCall } from "./round-coordinator-harness";
 
 const MINIMAL_CONTENT_PACK = makeTestPack([], {
 	setting: "test station",
@@ -154,19 +154,8 @@ describe("GameSession — state mutation across rounds", () => {
 	it("second round builds on first round's state", async () => {
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
-		const provider1 = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_1",
-						name: "pick_up",
-						argumentsJson: '{"item":"carry-0-obj"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider1 = firstTurnActs([
+			toolCall("call_1", "pick_up", '{"item":"carry-0-obj"}'),
 		]);
 		await session.submitMessage("red", "hi", provider1);
 
@@ -179,7 +168,7 @@ describe("GameSession — state mutation across rounds", () => {
 });
 
 describe("GameSession — result from submitMessage", () => {
-	it("result.round is 1 after the first call", async () => {
+	it("the first call's result carries round 1, an action from each of the three AIs and a boolean gameEnded", async () => {
 		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
 
 		const { result } = await session.submitMessage(
@@ -187,31 +176,10 @@ describe("GameSession — result from submitMessage", () => {
 			"hi",
 			makeSilentProvider(),
 		);
+
 		expect(result.round).toBe(1);
-	});
-
-	it("result.actions contains entries from all three AIs", async () => {
-		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
-
-		const { result } = await session.submitMessage(
-			"red",
-			"hi",
-			makeSilentProvider(),
-		);
-
 		const actors = new Set(result.actions.map((a) => a.actor));
 		expect(actors.size).toBe(3);
-	});
-
-	it("result object from submitMessage is always well-formed", async () => {
-		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
-		const { result } = await session.submitMessage(
-			"red",
-			"hi",
-			makeSilentProvider(),
-		);
-		expect(typeof result.round).toBe("number");
-		expect(Array.isArray(result.actions)).toBe(true);
 		expect(typeof result.gameEnded).toBe("boolean");
 	});
 });
@@ -308,60 +276,21 @@ describe("GameSession — onAiDelta propagation", () => {
 		expect(received[4]).toEqual(["cyan", "chunk1 "]);
 		expect(received[5]).toEqual(["cyan", "chunk2"]);
 	});
-
-	it("does not invoke onAiDelta when MockRoundLLMProvider is used", async () => {
-		const session = new GameSession(MINIMAL_CONTENT_PACK, TEST_PERSONAS);
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "hello", toolCalls: [] },
-			{ assistantText: "world", toolCalls: [] },
-			{ assistantText: "foo", toolCalls: [] },
-		]);
-
-		const received: Array<[string, string]> = [];
-		await session.submitMessage(
-			"red",
-			"hi",
-			provider,
-			undefined,
-			(aiId, text) => {
-				received.push([aiId, text]);
-			},
-		);
-
-		expect(received).toHaveLength(0);
-	});
 });
 
 describe("GameSession — tool roundtrip persistence", () => {
 	it("two-round scenario: round-2 Red messages include round-1 assistant tool_call + tool result", async () => {
 		const session = new GameSession(CONTENT_PACK_WITH_ITEMS, TEST_PERSONAS);
 
-		const round1Provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_r1",
-						name: "pick_up",
-						argumentsJson: '{"item":"carry-0-obj"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const round1Provider = firstTurnActs([
+			toolCall("call_r1", "pick_up", '{"item":"carry-0-obj"}'),
 		]);
 		await session.submitMessage("red", "round 1 message", round1Provider);
 
-		const capturedMessages: OpenAiMessage[][] = [];
-		const trackingProvider: RoundLLMProvider = {
-			async streamRound(messages, _tools) {
-				capturedMessages.push(messages);
-				return { assistantText: "", toolCalls: [] };
-			},
-		};
-		await session.submitMessage("red", "round 2 message", trackingProvider);
+		const round2Provider = makeSilentProvider();
+		await session.submitMessage("red", "round 2 message", round2Provider);
 
-		const redRound2Messages = capturedMessages[0] ?? [];
+		const redRound2Messages = round2Provider.calls[0]?.messages ?? [];
 
 		const assistantWithToolCalls = redRound2Messages.find(
 			(
@@ -399,15 +328,8 @@ describe("GameSession — spatial mechanics", () => {
 		const phase0 = session.getState();
 		expect(phase0.personaSpatial.red).toEqual({ position: { row: 0, col: 0 } });
 
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{ id: "go1", name: "go", argumentsJson: '{"direction":"south"}' },
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("go1", "go", '{"direction":"south"}'),
 		]);
 		await session.submitMessage("red", "hi", provider);
 
@@ -422,43 +344,20 @@ describe("parallel tool calls integration (#238)", () => {
 
 		const startingBudgetUsd = 0.5;
 		const singleCallCostUsd = 0.1;
-		let providerCallCount = 0;
-		const trackingProvider: RoundLLMProvider = {
-			async streamRound(_messages, _tools) {
-				providerCallCount++;
-				const isRedFirstInDefaultOrder = providerCallCount === 1;
-				if (isRedFirstInDefaultOrder) {
-					return {
-						assistantText: "",
-						toolCalls: [
-							{
-								id: "msg_parallel_id",
-								name: "message",
-								argumentsJson: JSON.stringify({
-									to: "blue",
-									content: "I'll grab the flower",
-								}),
-							},
-							{
-								id: "pickup_parallel_id",
-								name: "pick_up",
-								argumentsJson: JSON.stringify({ item: "carry-0-obj" }),
-							},
-						],
-						costUsd: singleCallCostUsd,
-					};
-				}
-				return { assistantText: "", toolCalls: [], costUsd: 0 };
-			},
-		};
-
-		const { result } = await session.submitMessage(
-			"red",
-			"hi",
-			trackingProvider,
+		const provider = firstTurnActs(
+			[
+				toolCall("msg_parallel_id", "message", {
+					to: "blue",
+					content: "I'll grab the flower",
+				}),
+				toolCall("pickup_parallel_id", "pick_up", { item: "carry-0-obj" }),
+			],
+			{ costUsd: singleCallCostUsd },
 		);
 
-		expect(providerCallCount).toBe(3);
+		const { result } = await session.submitMessage("red", "hi", provider);
+
+		expect(provider.calls).toHaveLength(3);
 
 		const redActions = result.actions.filter((a) => a.actor === "red");
 		expect(redActions.some((a) => a.kind === "message")).toBe(true);

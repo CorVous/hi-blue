@@ -121,64 +121,22 @@ describe("referencedCardinals", () => {
 });
 
 describe("parseStatedCardinal", () => {
-	it("parses 'I'll go north'", () => {
-		expect(parseStatedCardinal("I'll go north.")).toBe("north");
-	});
-
-	it("parses 'I go south toward the door'", () => {
-		expect(parseStatedCardinal("I go south toward the door.")).toBe("south");
-	});
-
-	it("parses 'I move east'", () => {
-		expect(parseStatedCardinal("I move east to the far wall.")).toBe("east");
-	});
-
-	it("parses 'I step west'", () => {
-		expect(parseStatedCardinal("I step west and wait.")).toBe("west");
-	});
-
-	it("parses 'I'm going north'", () => {
-		expect(parseStatedCardinal("I'm going north now.")).toBe("north");
-	});
-
-	it("parses 'Moving south to investigate'", () => {
-		expect(parseStatedCardinal("Moving south to investigate.")).toBe("south");
-	});
-
-	it("parses 'I am heading west along the wall'", () => {
-		expect(parseStatedCardinal("I am heading west along the wall.")).toBe(
-			"west",
-		);
-	});
-
-	it("parses 'Walking east into the corridor'", () => {
-		expect(parseStatedCardinal("Walking east into the corridor.")).toBe("east");
-	});
-
-	it("parses 'to the north' movement phrasing", () => {
-		expect(parseStatedCardinal("I walk to the north edge.")).toBe("north");
-	});
-
-	it("parses a positional statement: 'the transformer is two steps east'", () => {
-		expect(
-			parseStatedCardinal("The transformer is two steps east of me."),
-		).toBe("east");
-	});
-
-	it("parses a positional statement with a bare step count", () => {
-		expect(
-			parseStatedCardinal("Another daemon is one step north of you."),
-		).toBe("north");
-	});
-
-	it("parses a positional statement using 'blocks'", () => {
-		expect(parseStatedCardinal("The sealed door is three blocks west.")).toBe(
-			"west",
-		);
-	});
-
-	it("parses a bare bearing: 'north of me'", () => {
-		expect(parseStatedCardinal("The altar lies north of me.")).toBe("north");
+	it.each([
+		["I'll go north.", "north"],
+		["I go south toward the door.", "south"],
+		["I move east to the far wall.", "east"],
+		["I step west and wait.", "west"],
+		["I'm going north now.", "north"],
+		["Moving south to investigate.", "south"],
+		["I am heading west along the wall.", "west"],
+		["Walking east into the corridor.", "east"],
+		["I walk to the north edge.", "north"],
+		["The transformer is two steps east of me.", "east"],
+		["Another daemon is one step north of you.", "north"],
+		["The sealed door is three blocks west.", "west"],
+		["The altar lies north of me.", "north"],
+	])("parses %j as %s", (text, cardinal) => {
+		expect(parseStatedCardinal(text)).toBe(cardinal);
 	});
 
 	it("returns null for prose with no directional statement", () => {
@@ -328,32 +286,16 @@ describe("parseDirectionalStatement", () => {
 });
 
 describe("structuralCoherence", () => {
-	it("returns 'match' when stated cardinal and go cardinal agree", () => {
-		expect(structuralCoherence("north", "north")).toBe("match");
-	});
-
-	it("returns 'match' for east/east", () => {
-		expect(structuralCoherence("east", "east")).toBe("match");
-	});
-
-	it("returns 'mismatch' when stated cardinal differs from the go cardinal", () => {
-		expect(structuralCoherence("north", "south")).toBe("mismatch");
-	});
-
-	it("returns 'mismatch' for west vs east", () => {
-		expect(structuralCoherence("west", "east")).toBe("mismatch");
-	});
-
-	it("returns 'no-statement' when daemon prose has no directional statement", () => {
-		expect(structuralCoherence(null, "north")).toBe("no-statement");
-	});
-
-	it("returns 'no-statement' when both are null (no statement, no tool call)", () => {
-		expect(structuralCoherence(null, null)).toBe("no-statement");
-	});
-
-	it("returns 'no-toolcall' when daemon stated a cardinal but made no go call", () => {
-		expect(structuralCoherence("south", null)).toBe("no-toolcall");
+	it.each([
+		["north", "north", "match"],
+		["east", "east", "match"],
+		["north", "south", "mismatch"],
+		["west", "east", "mismatch"],
+		[null, "north", "no-statement"],
+		[null, null, "no-statement"],
+		["south", null, "no-toolcall"],
+	] as const)("stated %s vs go %s is %s", (stated, go, expected) => {
+		expect(structuralCoherence(stated, go)).toBe(expected);
 	});
 });
 

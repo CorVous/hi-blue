@@ -32,13 +32,15 @@ describe("dev inspector gating", () => {
 		__resetInspectorForTests();
 	});
 
-	it("renderInspector paints nothing when __DEV__ is false (session branch)", () => {
+	it("renderInspector paints nothing when __DEV__ is false (session branch): no map, footer, strip or focus control", () => {
 		vi.stubGlobal("__DEV__", false);
 
 		renderInspector(document.body, { session: buildSession() });
 
 		expect(document.querySelector(".dev-map-grid")).toBeNull();
 		expect(document.querySelectorAll(".dev-map-cell").length).toBe(0);
+		expect(document.querySelector('[data-field="focus-vista"]')).toBeNull();
+		expect(document.querySelectorAll("[data-vista-focus]").length).toBe(0);
 		expect(
 			document.getElementById("dev-world-map")?.hasAttribute("hidden"),
 		).toBe(true);
@@ -76,14 +78,5 @@ describe("dev inspector gating", () => {
 		expect(
 			document.getElementById("dev-world-map")?.hasAttribute("hidden"),
 		).toBe(false);
-	});
-
-	it("no focus control renders when __DEV__ is false", () => {
-		vi.stubGlobal("__DEV__", false);
-
-		renderInspector(document.body, { session: buildSession() });
-
-		expect(document.querySelector('[data-field="focus-vista"]')).toBeNull();
-		expect(document.querySelectorAll("[data-vista-focus]").length).toBe(0);
 	});
 });

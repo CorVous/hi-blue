@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import {
 	mkdirSync,
 	mkdtempSync,
@@ -9,7 +9,10 @@ import {
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
+
+const execFileAsync = promisify(execFile);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../..");
@@ -72,39 +75,66 @@ function writeSide(
 	writeFileSync(target, content);
 }
 
-function runScriptWith(
-	changes: FileChange[],
-	{ withOriginMain = true }: { withOriginMain?: boolean } = {},
-): {
-	status: number;
-	stderr: string;
-} {
-	const repo = mkdtempSync(path.join(tmpdir(), "schema-map-test-"));
+const FIXTURE_COMMIT_IDENTITY = {
+	GIT_AUTHOR_NAME: "T",
+	GIT_AUTHOR_EMAIL: "t@example.com",
+	GIT_COMMITTER_NAME: "T",
+	GIT_COMMITTER_EMAIL: "t@example.com",
+};
+
+async function exitStatusOf(
+	command: string,
+	args: string[],
+	cwd: string,
+	extraEnv: Record<string, string> = {},
+): Promise<{ status: number; stderr: string }> {
 	try {
-		git(["init", "-q", "-b", "main"], repo);
-		git(["config", "user.email", "t@example.com"], repo);
-		git(["config", "user.name", "T"], repo);
-		git(["config", "commit.gpgsign", "false"], repo);
-
-		for (const change of changes) writeSide(repo, change, "baseline");
-		git(["add", "-A"], repo);
-		git(["commit", "-q", "--no-gpg-sign", "-m", "baseline"], repo);
-
-		if (withOriginMain) {
-			git(["update-ref", "refs/remotes/origin/main", "HEAD"], repo);
-		}
-
-		git(["checkout", "-q", "-b", "feature"], repo);
-		for (const change of changes) writeSide(repo, change, "head");
-		git(["add", "-A"], repo);
-		git(["commit", "-q", "--no-gpg-sign", "-m", "change"], repo);
-
-		const result = spawnSync("node", [script], {
-			cwd: repo,
-			env: envWithoutAmbientGitPointers({ GITHUB_BASE_REF: "main" }),
+		const { stderr } = await execFileAsync(command, args, {
+			cwd,
+			env: envWithoutAmbientGitPointers({
+				...FIXTURE_COMMIT_IDENTITY,
+				...extraEnv,
+			}),
 			encoding: "utf-8",
 		});
-		return { status: result.status ?? 1, stderr: result.stderr ?? "" };
+		return { status: 0, stderr };
+	} catch (error) {
+		const failure = error as { code?: unknown; stderr?: string };
+		return {
+			status: typeof failure.code === "number" ? failure.code : 1,
+			stderr: failure.stderr ?? "",
+		};
+	}
+}
+
+async function runScriptWith(
+	changes: FileChange[],
+	{ withOriginMain = true }: { withOriginMain?: boolean } = {},
+): Promise<{
+	status: number;
+	stderr: string;
+}> {
+	const repo = mkdtempSync(path.join(tmpdir(), "schema-map-test-"));
+	const inRepo = (args: string[]) => exitStatusOf("git", args, repo);
+	try {
+		await inRepo(["init", "-q", "-b", "main"]);
+
+		for (const change of changes) writeSide(repo, change, "baseline");
+		await inRepo(["add", "-A"]);
+		await inRepo(["commit", "-q", "--no-gpg-sign", "-m", "baseline"]);
+
+		if (withOriginMain) {
+			await inRepo(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+		}
+
+		await inRepo(["checkout", "-q", "-b", "feature"]);
+		for (const change of changes) writeSide(repo, change, "head");
+		await inRepo(["add", "-A"]);
+		await inRepo(["commit", "-q", "--no-gpg-sign", "-m", "change"]);
+
+		return await exitStatusOf("node", [script], repo, {
+			GITHUB_BASE_REF: "main",
+		});
 	} finally {
 		rmSync(repo, { recursive: true, force: true });
 	}
@@ -140,9 +170,9 @@ function archiveMapFile({
 
 const GAME_SAVE_MAP_PREDATING_BUMP = { 3: "0.0.2-beta.1" };
 
-describe("check-schema-map.mjs", () => {
-	it("fails when SESSION_SCHEMA_VERSION bumps without a map entry or migration", () => {
-		const result = runScriptWith([
+describe.concurrent("check-schema-map.mjs", () => {
+	it("fails when SESSION_SCHEMA_VERSION bumps without a map entry or migration", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CODEC,
 				baseline: sessionConstant(9),
@@ -153,8 +183,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.stderr).toContain("SESSION_SCHEMA_VERSION changed");
 	});
 
-	it("passes when SESSION_SCHEMA_VERSION bumps alongside a SCHEMA_ARCHIVE_MAP change", () => {
-		const result = runScriptWith([
+	it("passes when SESSION_SCHEMA_VERSION bumps alongside a SCHEMA_ARCHIVE_MAP change", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CODEC,
 				baseline: `${sessionConstant(9)}export const SCHEMA_ARCHIVE_MAP = {};\n`,
@@ -164,8 +194,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("passes when SESSION_SCHEMA_VERSION bumps alongside a new migrateV<n>To function", () => {
-		const result = runScriptWith([
+	it("passes when SESSION_SCHEMA_VERSION bumps alongside a new migrateV<n>To function", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CODEC,
 				baseline: sessionConstant(9),
@@ -175,8 +205,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("passes when SESSION_SCHEMA_VERSION is untouched", () => {
-		const result = runScriptWith([
+	it("passes when SESSION_SCHEMA_VERSION is untouched", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CODEC,
 				baseline: `${sessionConstant(9)}const other = 1;\n`,
@@ -186,8 +216,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("fails when the only map edit accompanying a bump is a comment naming the map", () => {
-		const result = runScriptWith([
+	it("fails when the only map edit accompanying a bump is a comment naming the map", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -213,8 +243,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.stderr).toContain("SCHEMA_ARCHIVE_MAP has no entry for 9");
 	});
 
-	it("passes when the map gains a real entry for the superseded version", () => {
-		const result = runScriptWith([
+	it("passes when the map gains a real entry for the superseded version", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -235,8 +265,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("fails when the map only has an entry for some other schema version", () => {
-		const result = runScriptWith([
+	it("fails when the map only has an entry for some other schema version", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -258,8 +288,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.stderr).toContain("SCHEMA_ARCHIVE_MAP has no entry for 9");
 	});
 
-	it("fails when the map lists the superseded version without naming a build", () => {
-		const result = runScriptWith([
+	it("fails when the map lists the superseded version without naming a build", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -281,8 +311,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.stderr).toContain("does not name an archived build");
 	});
 
-	it("fails when the new migration starts from a version other than the superseded one", () => {
-		const result = runScriptWith([
+	it("fails when the new migration starts from a version other than the superseded one", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -298,8 +328,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.stderr).toContain("superseded schema version 9");
 	});
 
-	it("passes when the superseded version is covered by a migration in another file", () => {
-		const result = runScriptWith([
+	it("passes when the superseded version is covered by a migration in another file", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -314,8 +344,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("passes when the migration is declared as a const arrow function", () => {
-		const result = runScriptWith([
+	it("passes when the migration is declared as a const arrow function", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -330,8 +360,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("fails when the migration name is only called, never declared", () => {
-		const result = runScriptWith([
+	it("fails when the migration name is only called, never declared", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -351,8 +381,8 @@ describe("check-schema-map.mjs", () => {
 		"src/spa/persistence/__tests__/session-codec.test.ts",
 		"src/spa/persistence/migrations.test.ts",
 		"e2e/migrations.spec.ts",
-	])("ignores a migration declared only in the test file %s", (testFile) => {
-		const result = runScriptWith([
+	])("ignores a migration declared only in the test file %s", async (testFile) => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -368,8 +398,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.stderr).toContain("superseded schema version 9");
 	});
 
-	it("fails when GAME_SAVE_VERSION bumps with a map comment as the only map edit", () => {
-		const result = runScriptWith([
+	it("fails when GAME_SAVE_VERSION bumps with a map comment as the only map edit", async () => {
+		const result = await runScriptWith([
 			{
 				path: GAME_SAVE_CONSTANT,
 				baseline: gameSaveConstant(4),
@@ -394,8 +424,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.stderr).toContain("GAME_SAVE_ARCHIVE_MAP has no entry for 4");
 	});
 
-	it("passes when GAME_SAVE_ARCHIVE_MAP gains a real entry for the superseded version", () => {
-		const result = runScriptWith([
+	it("passes when GAME_SAVE_ARCHIVE_MAP gains a real entry for the superseded version", async () => {
+		const result = await runScriptWith([
 			{
 				path: GAME_SAVE_CONSTANT,
 				baseline: gameSaveConstant(4),
@@ -416,8 +446,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("fails when a GAME_SAVE_VERSION bump adds only a migrate function (no fallback on that axis)", () => {
-		const result = runScriptWith([
+	it("fails when a GAME_SAVE_VERSION bump adds only a migrate function (no fallback on that axis)", async () => {
+		const result = await runScriptWith([
 			{
 				path: GAME_SAVE_CONSTANT,
 				baseline: gameSaveConstant(4),
@@ -433,8 +463,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.stderr).toContain("has no migrateV* fallback");
 	});
 
-	it("passes when both axes bump and both maps gain entries for the superseded versions", () => {
-		const result = runScriptWith([
+	it("passes when both axes bump and both maps gain entries for the superseded versions", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -457,8 +487,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("passes when neither version constant changes", () => {
-		const result = runScriptWith([
+	it("passes when neither version constant changes", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline: sessionConstant(9),
@@ -479,8 +509,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("passes when a comment claims a bump but the constant keeps its number", () => {
-		const result = runScriptWith([
+	it("passes when a comment claims a bump but the constant keeps its number", async () => {
+		const result = await runScriptWith([
 			{
 				path: SESSION_CONSTANT,
 				baseline:
@@ -491,8 +521,8 @@ describe("check-schema-map.mjs", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("fails loudly instead of passing when the base revision cannot be resolved", () => {
-		const result = runScriptWith(
+	it("fails loudly instead of passing when the base revision cannot be resolved", async () => {
+		const result = await runScriptWith(
 			[
 				{
 					path: SESSION_CONSTANT,

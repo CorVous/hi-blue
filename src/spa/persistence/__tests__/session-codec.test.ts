@@ -1,97 +1,80 @@
 import { describe, expect, it } from "vitest";
-import { makeTestPack } from "../../game/__tests__/fixtures/make-test-pack.js";
-import { startGame } from "../../game/engine.js";
 import type {
+	ActiveComplication,
 	AiId,
-	AiPersona,
 	ContentPack,
 	ConversationEntry,
 	GameState,
+	Objective,
 	WorldEntity,
 } from "../../game/types.js";
 import { lookupArchiveVersion, SCHEMA_ARCHIVE_MAP } from "../archive-map.js";
 import { deobfuscate, obfuscate } from "../sealed-blob-codec.js";
 import {
 	type DaemonFile,
+	type DeserializeResult,
 	deserializeSession,
 	LAST_SCHEMA_BEFORE_ARCHIVE_ONLY_BUMPS,
 	SESSION_SCHEMA_VERSION,
+	type SerializedSessionFiles,
 	serializeSession,
 } from "../session-codec.js";
 import type { VersionBoundary } from "../version-boundary.js";
+import { makeFreshGame } from "./make-fresh-game.js";
 
 const PRE_BOUNDARY: VersionBoundary = { session: 11, gs: 4 };
-
-const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
-
-const TEST_PERSONAS: Record<string, AiPersona> = {
-	red: {
-		id: "red",
-		name: "Ember",
-		color: "#e07a5f",
-		temperaments: ["hot-headed", "zealous"],
-		personaGoal: "Hold the flower at phase end.",
-		blurb: "Ember is hot-headed and zealous. Hold the flower at phase end.",
-		typingQuirks: ["fragments", "ALL CAPS"],
-		voiceExamples: ["Now.", "BURN IT.", "Soon, soon."],
-	},
-	green: {
-		id: "green",
-		name: "Sage",
-		color: "#81b29a",
-		temperaments: ["meticulous", "meticulous"],
-		personaGoal: "Ensure items are evenly distributed.",
-		blurb: "Sage is intensely meticulous. Ensure items are evenly distributed.",
-		typingQuirks: ["ellipses", "no contractions"],
-		voiceExamples: [
-			"I will count again...",
-			"That is not balanced.",
-			"One more sweep through the list.",
-		],
-	},
-	cyan: {
-		id: "cyan",
-		name: "Frost",
-		color: "#5fa8d3",
-		temperaments: ["laconic", "diffident"],
-		personaGoal: "Hold the key at phase end.",
-		blurb: "Frost is laconic and diffident. Hold the key at phase end.",
-		typingQuirks: ["lowercase only", "fragments"],
-		voiceExamples: ["sure.", "if you say so.", "fine."],
-	},
-};
-
-function makeFreshGame(): GameState {
-	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-		budgetPerAi: 5,
-		rng: () => 0,
-	});
-}
 
 const NOW = new Date().toISOString();
 const CREATED_AT = "2024-01-01T00:00:00.000Z";
 
+function serializeFresh(): SerializedSessionFiles {
+	return serializeSession(makeFreshGame(), NOW, CREATED_AT);
+}
+
+function roundTrip(
+	state: GameState,
+	epoch?: number,
+): Extract<DeserializeResult, { kind: "ok" }> {
+	const result = deserializeSession(
+		serializeSession(state, NOW, CREATED_AT, epoch),
+	);
+	if (result.kind !== "ok") throw new Error(`expected ok, got ${result.kind}`);
+	return result;
+}
+
+function redDaemon(files: SerializedSessionFiles) {
+	const daemonJson = files.daemons.red;
+	if (!daemonJson) throw new Error("daemons.red should exist");
+	return JSON.parse(daemonJson);
+}
+
+function unsealEngine(files: SerializedSessionFiles) {
+	if (!files.engine) throw new Error("engine should not be null");
+	return JSON.parse(deobfuscate(files.engine));
+}
+
+function withSealedSchemaVersion(
+	files: SerializedSessionFiles,
+	schemaVersion: unknown,
+): SerializedSessionFiles {
+	const sealed = unsealEngine(files);
+	sealed.schemaVersion = schemaVersion;
+	return { ...files, engine: obfuscate(JSON.stringify(sealed)) };
+}
+
 describe("serializeSession / deserializeSession", () => {
-	it("round-trips a fresh game (ok)", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.isComplete).toBe(false);
-			expect(result.state.round).toBe(0);
-			expect(result.createdAt).toBe(CREATED_AT);
-			expect(result.lastSavedAt).toBe(NOW);
-		}
+	it("round-trips a fresh game (ok) without reviving physicalLog or whispers", () => {
+		const result = roundTrip(makeFreshGame());
+		expect(result.state.isComplete).toBe(false);
+		expect(result.state.round).toBe(0);
+		expect(result.createdAt).toBe(CREATED_AT);
+		expect(result.lastSavedAt).toBe(NOW);
+		expect("physicalLog" in result.state).toBe(false);
+		expect("whispers" in result.state).toBe(false);
 	});
 
 	it("daemon shape: top-level aiId/persona/conversationLog", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const daemonJson = files.daemons.red;
-		expect(daemonJson).toBeDefined();
-		// biome-ignore lint/style/noNonNullAssertion: toBeDefined() guards this
-		const daemon = JSON.parse(daemonJson!);
+		const daemon = redDaemon(serializeFresh());
 		expect(daemon).toHaveProperty("aiId", "red");
 		expect(daemon).toHaveProperty("persona");
 		expect(daemon).toHaveProperty("conversationLog");
@@ -99,13 +82,9 @@ describe("serializeSession / deserializeSession", () => {
 		expect(daemon).not.toHaveProperty("phases");
 	});
 
-	it("persona block keys are exactly the editable AiPersona surface (no budgetPerPhase)", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
-		const daemon = JSON.parse(files.daemons.red!);
-		const personaKeys = Object.keys(daemon.persona).sort();
-		expect(personaKeys).toEqual(
+	it("persona block keys are exactly the editable AiPersona surface (no budgetPerPhase, no unset actionProfile)", () => {
+		const daemon = redDaemon(serializeFresh());
+		expect(Object.keys(daemon.persona).sort()).toEqual(
 			[
 				"id",
 				"name",
@@ -119,23 +98,15 @@ describe("serializeSession / deserializeSession", () => {
 		);
 	});
 
-	it("omits actionProfile from the persona block when unset", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
-		const daemon = JSON.parse(files.daemons.red!);
-		expect(daemon.persona).not.toHaveProperty("actionProfile");
-	});
-
 	it("round-trips actionProfile when a persona has one", () => {
 		const game = makeFreshGame();
 		const red = game.personas.red;
 		expect(red).toBeDefined();
 		if (red) red.actionProfile = "*red leans toward `go`, `use`.";
 		const files = serializeSession(game, NOW, CREATED_AT);
-		// biome-ignore lint/style/noNonNullAssertion: daemons.red always exists for this fixture
-		const daemon = JSON.parse(files.daemons.red!);
-		expect(daemon.persona.actionProfile).toBe("*red leans toward `go`, `use`.");
+		expect(redDaemon(files).persona.actionProfile).toBe(
+			"*red leans toward `go`, `use`.",
+		);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
@@ -146,35 +117,18 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("pretty-printed with 2-space indent", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const metaLines = files.meta.split("\n");
+		const metaLines = serializeFresh().meta.split("\n");
 		expect(metaLines[1]).toMatch(/^ {2}/);
 	});
 
 	it("meta has createdAt/lastSavedAt/epoch/round/personaOrder", () => {
 		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const meta = JSON.parse(files.meta);
+		const meta = JSON.parse(serializeSession(game, NOW, CREATED_AT).meta);
 		expect(meta).toHaveProperty("createdAt", CREATED_AT);
 		expect(meta).toHaveProperty("lastSavedAt", NOW);
 		expect(meta).toHaveProperty("epoch", 1);
 		expect(meta).toHaveProperty("round", 0);
-		expect(meta).toHaveProperty("personaOrder");
-		expect(Array.isArray(meta.personaOrder)).toBe(true);
 		expect(meta.personaOrder).toEqual(Object.keys(game.personas));
-	});
-
-	it("deserializeSession honours personaOrder from meta (panel ordering preserved)", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(Object.keys(result.state.personas)).toEqual(
-				Object.keys(game.personas),
-			);
-		}
 	});
 
 	it("deserializeSession honours meta.personaOrder when daemon-file key order differs", () => {
@@ -189,11 +143,7 @@ describe("serializeSession / deserializeSession", () => {
 			reversedDaemons[aiId] = files.daemons[aiId] as string;
 		}
 
-		const result = deserializeSession({
-			meta: files.meta,
-			daemons: reversedDaemons,
-			engine: files.engine,
-		});
+		const result = deserializeSession({ ...files, daemons: reversedDaemons });
 		if (result.kind !== "ok") {
 			throw new Error(`expected ok, got ${result.kind}`);
 		}
@@ -209,12 +159,10 @@ describe("serializeSession / deserializeSession", () => {
 
 		const metaParsed = JSON.parse(files.meta) as Record<string, unknown>;
 		delete metaParsed.personaOrder;
-		const metaWithoutOrder = JSON.stringify(metaParsed, null, 2);
 
 		const result = deserializeSession({
-			meta: metaWithoutOrder,
-			daemons: files.daemons,
-			engine: files.engine,
+			...files,
+			meta: JSON.stringify(metaParsed, null, 2),
 		});
 		if (result.kind !== "ok") {
 			throw new Error(`expected ok, got ${result.kind}`);
@@ -224,53 +172,40 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("no whispers.txt file in serialized output (whispers live in daemon conversationLog)", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		expect("whispers" in files).toBe(false);
+		expect("whispers" in serializeFresh()).toBe(false);
 	});
 
 	it("engine field is base64-printable", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		expect(files.engine).toMatch(/^[A-Za-z0-9+/=]*$/);
+		expect(serializeFresh().engine).toMatch(/^[A-Za-z0-9+/=]*$/);
 	});
 
 	it("round-trips the exhausted Set", () => {
-		const game = makeFreshGame();
-		const modified: GameState = {
-			...game,
+		const result = roundTrip({
+			...makeFreshGame(),
 			exhausted: new Set<AiId>(["red"]),
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.exhausted).toBeInstanceOf(Set);
-			expect(result.state.exhausted.has("red")).toBe(true);
-		}
+		});
+		expect(result.state.exhausted).toBeInstanceOf(Set);
+		expect(result.state.exhausted.has("red")).toBe(true);
 	});
 
 	it("keeps the on-disk key for exhausted Daemons as lockedOut", () => {
-		const game = makeFreshGame();
-		const modified: GameState = {
-			...game,
-			exhausted: new Set<AiId>(["green"]),
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const sealed = JSON.parse(deobfuscate(files.engine as string));
+		const files = serializeSession(
+			{ ...makeFreshGame(), exhausted: new Set<AiId>(["green"]) },
+			NOW,
+			CREATED_AT,
+		);
+		const sealed = unsealEngine(files);
 		expect(sealed.lockedOut).toEqual(["green"]);
 		expect("exhausted" in sealed).toBe(false);
 	});
 
 	it("does not persist outcome and leaves it unset on an unfinished game", () => {
-		const game = makeFreshGame();
 		const files = serializeSession(
-			{ ...game, outcome: "win" },
+			{ ...makeFreshGame(), outcome: "win" },
 			NOW,
 			CREATED_AT,
 		);
-		const sealed = JSON.parse(deobfuscate(files.engine as string));
-		expect("outcome" in sealed).toBe(false);
+		expect("outcome" in unsealEngine(files)).toBe(false);
 		const result = deserializeSession(files);
 		expect(result.kind).toBe("ok");
 		if (result.kind === "ok") {
@@ -279,54 +214,59 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("restores outcome win for a completed game whose budgets are not all exhausted", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(
-			{ ...game, isComplete: true, outcome: "win" },
-			NOW,
-			CREATED_AT,
-		);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.isComplete).toBe(true);
-			expect(result.state.outcome).toBe("win");
-		}
+		const result = roundTrip({
+			...makeFreshGame(),
+			isComplete: true,
+			outcome: "win",
+		});
+		expect(result.state.isComplete).toBe(true);
+		expect(result.state.outcome).toBe("win");
 	});
 
 	it("restores outcome lose for a completed game where every budget is exhausted", () => {
 		const game = makeFreshGame();
-		const pendingObjectives: GameState["objectives"] = [
-			{
-				id: "use-space-0",
-				kind: "use_space",
-				description: "Activate the space.",
-				spaceId: "nowhere",
-				satisfactionState: "pending",
-			},
-		];
-		const files = serializeSession(
-			{
-				...game,
-				objectives: pendingObjectives,
-				isComplete: true,
-				outcome: "lose",
-				exhausted: new Set<AiId>(Object.keys(game.personas)),
-			},
-			NOW,
-			CREATED_AT,
-		);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.outcome).toBe("lose");
-		}
+		const result = roundTrip({
+			...game,
+			objectives: [
+				{
+					id: "use-space-0",
+					kind: "use_space",
+					description: "Activate the space.",
+					spaceId: "nowhere",
+					satisfactionState: "pending",
+				},
+			],
+			isComplete: true,
+			outcome: "lose",
+			exhausted: new Set<AiId>(Object.keys(game.personas)),
+		});
+		expect(result.state.outcome).toBe("lose");
 	});
 
-	it("round-trips conversation logs with message entries", () => {
-		const game = makeFreshGame();
-		const modified: GameState = {
-			...game,
-			conversationLogs: {
+	const messageToCyan: ConversationEntry = {
+		kind: "message",
+		round: 1,
+		from: "red",
+		to: "cyan",
+		content: "psst",
+	};
+	const witnessedPickUp: ConversationEntry = {
+		kind: "witnessed-event",
+		round: 2,
+		actor: "red",
+		actionKind: "pick_up",
+		item: "flower",
+	};
+	const broadcastEntry: ConversationEntry = {
+		kind: "broadcast",
+		round: 2,
+		content: "The weather has changed to Heavy rain is falling.",
+	};
+
+	it.each<[string, Record<AiId, ConversationEntry[]>]>([
+		[
+			"message",
+			{
 				red: [
 					{
 						kind: "message",
@@ -347,285 +287,150 @@ describe("serializeSession / deserializeSession", () => {
 				],
 				cyan: [],
 			},
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.conversationLogs.red).toEqual([
-				{
-					kind: "message",
-					from: "blue",
-					to: "red",
-					content: "hello red",
-					round: 0,
-				},
-			]);
-			expect(result.state.conversationLogs.green).toEqual([
-				{
-					kind: "message",
-					from: "green",
-					to: "blue",
-					content: "green reply",
-					round: 0,
-				},
-			]);
-		}
-	});
-
-	it("round-trips message and witnessed-event entries via per-Daemon conversationLog", () => {
-		const game = makeFreshGame();
-		const messageEntry: ConversationEntry = {
-			kind: "message",
-			round: 1,
-			from: "red" as AiId,
-			to: "cyan" as AiId,
-			content: "psst",
-		};
-		const witnessedEntry: ConversationEntry = {
-			kind: "witnessed-event",
-			round: 2,
-			actor: "red" as AiId,
-			actionKind: "pick_up",
-			item: "flower",
-		};
-		const modified: GameState = {
-			...game,
-			conversationLogs: {
-				...game.conversationLogs,
-				cyan: [messageEntry],
-				green: [witnessedEntry],
+		],
+		[
+			"message and witnessed-event",
+			{ red: [], green: [witnessedPickUp], cyan: [messageToCyan] },
+		],
+		[
+			"action-failure",
+			{
+				red: [
+					{
+						kind: "action-failure",
+						round: 3,
+						tool: "go",
+						reason: "That cell is blocked by an obstacle",
+					},
+				],
+				green: [],
+				cyan: [],
 			},
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.conversationLogs.cyan?.[0]).toEqual(messageEntry);
-			expect(result.state.conversationLogs.green?.[0]).toEqual(witnessedEntry);
-			expect("physicalLog" in result.state).toBe(false);
-			expect("whispers" in result.state).toBe(false);
-		}
-	});
-
-	it("round-trips action-failure entries in per-Daemon conversationLog", () => {
-		const game = makeFreshGame();
-		const failureEntry: ConversationEntry = {
-			kind: "action-failure",
-			round: 3,
-			tool: "go",
-			reason: "That cell is blocked by an obstacle",
-		};
-		const modified: GameState = {
-			...game,
-			conversationLogs: {
-				...game.conversationLogs,
-				red: [failureEntry],
+		],
+		[
+			"tool-call with diskDelta (#376)",
+			{
+				red: [
+					{
+						kind: "tool-call",
+						round: 4,
+						aiId: "red",
+						toolCallId: "go_call_1",
+						toolArgumentsJson: '{"direction":"north"}',
+						toolName: "go",
+						result: "Ember walks north.",
+						success: true,
+						diskDelta: "+ at one step north and one step east: *green",
+					},
+				],
+				green: [],
+				cyan: [],
 			},
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.conversationLogs.red?.[0]).toEqual(failureEntry);
-			expect(result.state.conversationLogs.green ?? []).toHaveLength(0);
-			expect(result.state.conversationLogs.cyan ?? []).toHaveLength(0);
-		}
+		],
+		[
+			"pre-#376 tool-call (no diskDelta field)",
+			{
+				red: [
+					{
+						kind: "tool-call",
+						round: 2,
+						aiId: "red",
+						toolCallId: "old_call_1",
+						toolArgumentsJson: '{"item":"flower"}',
+						toolName: "pick_up",
+						result: "Ember picked up the flower.",
+						success: true,
+					},
+				],
+				green: [],
+				cyan: [],
+			},
+		],
+		[
+			"broadcast (no from/to)",
+			{
+				red: [broadcastEntry],
+				green: [broadcastEntry],
+				cyan: [broadcastEntry],
+			},
+		],
+		[
+			"witnessed-convergence with audience tag (#336)",
+			{
+				red: [
+					{
+						kind: "witnessed-convergence",
+						round: 3,
+						spaceId: "ent-shrine",
+						tier: 1,
+						flavor:
+							"You linger at the shrine; the place feels poised for company.",
+						audience: "actor",
+					},
+				],
+				green: [
+					{
+						kind: "witnessed-convergence",
+						round: 3,
+						spaceId: "ent-shrine",
+						tier: 2,
+						flavor: "Two figures converge at the shrine.",
+						audience: "witness",
+					},
+				],
+				cyan: [],
+			},
+		],
+	])("round-trips %s entries in per-Daemon conversationLogs exactly", (_label, conversationLogs) => {
+		const result = roundTrip({ ...makeFreshGame(), conversationLogs });
+		expect(result.state.conversationLogs).toStrictEqual(conversationLogs);
 	});
 
-	it("round-trips tool-call entries with diskDelta (#376)", () => {
-		const game = makeFreshGame();
-		const toolCallWithDelta: ConversationEntry = {
-			kind: "tool-call",
-			round: 4,
-			aiId: "red" as AiId,
-			toolCallId: "go_call_1",
-			toolArgumentsJson: '{"direction":"north"}',
-			toolName: "go",
-			result: "Ember walks north.",
-			success: true,
-			diskDelta: "+ at one step north and one step east: *green",
-		};
-		const modified: GameState = {
-			...game,
-			conversationLogs: { ...game.conversationLogs, red: [toolCallWithDelta] },
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.conversationLogs.red?.[0]).toEqual(toolCallWithDelta);
-		}
-	});
-
-	it("loads pre-#376 tool-call entries (no diskDelta field) cleanly", () => {
-		const game = makeFreshGame();
-		const legacyToolCall: ConversationEntry = {
-			kind: "tool-call",
-			round: 2,
-			aiId: "red" as AiId,
-			toolCallId: "old_call_1",
-			toolArgumentsJson: '{"item":"flower"}',
-			toolName: "pick_up",
-			result: "Ember picked up the flower.",
-			success: true,
-		};
-		const modified: GameState = {
-			...game,
-			conversationLogs: { ...game.conversationLogs, red: [legacyToolCall] },
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			const loaded = result.state.conversationLogs.red?.[0];
-			expect(loaded).toEqual(legacyToolCall);
-			if (loaded?.kind === "tool-call") {
-				expect(loaded.diskDelta).toBeUndefined();
-			}
-		}
-	});
-
-	it("round-trips world entities", () => {
-		const game = makeFreshGame();
-		const entity: WorldEntity = {
-			id: "key",
-			kind: "interesting_object",
-			name: "The Key",
-			examineDescription: "A key",
-			holder: { row: 2, col: 3 },
-		};
-		const modified: GameState = {
-			...game,
-			world: { entities: [entity] },
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.world.entities[0]).toMatchObject({
+	it.each<[string, WorldEntity]>([
+		[
+			"an interesting_object",
+			{
 				id: "key",
+				kind: "interesting_object",
 				name: "The Key",
+				examineDescription: "A key",
 				holder: { row: 2, col: 3 },
-			});
-		}
-	});
-
-	it("round-trips interesting_object Use-Item flavor fields (issue #334)", () => {
-		const game = makeFreshGame();
-		const entity: WorldEntity = {
-			id: "switch",
-			kind: "interesting_object",
-			name: "Brass Switch",
-			examineDescription: "A brass switch waiting to be pressed.",
-			useOutcome: "The switch clicks under your finger.",
-			activationFlavor:
-				"The switch flips home with a hard thunk and an amber light pulses on.",
-			postExamineDescription:
-				"The switch sits locked in its on position, amber light steady.",
-			postLookFlavor: "an amber pinpoint of light glows beside the switch",
-			satisfactionState: "satisfied",
-			holder: { row: 1, col: 1 },
-		};
-		const modified: GameState = {
-			...game,
-			world: { entities: [entity] },
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			const restored = result.state.world.entities[0];
-			expect(restored?.activationFlavor).toBe(entity.activationFlavor);
-			expect(restored?.postExamineDescription).toBe(
-				entity.postExamineDescription,
-			);
-			expect(restored?.postLookFlavor).toBe(entity.postLookFlavor);
-			expect(restored?.satisfactionState).toBe("satisfied");
-		}
-	});
-
-	it("round-trips budgets", () => {
-		const game = makeFreshGame();
-		const modified: GameState = {
-			...game,
-			budgets: {
-				red: { remaining: 0.03, total: 0.05 },
-				green: { remaining: 0.05, total: 0.05 },
-				cyan: { remaining: 0.04, total: 0.05 },
 			},
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.budgets.red).toEqual({
-				remaining: 0.03,
-				total: 0.05,
-			});
-		}
-	});
-
-	it("round-trips personaSpatial", () => {
-		const game = makeFreshGame();
-		const modified: GameState = {
-			...game,
-			personaSpatial: {
-				red: { position: { row: 2, col: 3 } },
-				green: { position: { row: 1, col: 1 } },
-				cyan: { position: { row: 4, col: 4 } },
+		],
+		[
+			"interesting_object Use-Item flavor fields (issue #334)",
+			{
+				id: "switch",
+				kind: "interesting_object",
+				name: "Brass Switch",
+				examineDescription: "A brass switch waiting to be pressed.",
+				useOutcome: "The switch clicks under your finger.",
+				activationFlavor:
+					"The switch flips home with a hard thunk and an amber light pulses on.",
+				postExamineDescription:
+					"The switch sits locked in its on position, amber light steady.",
+				postLookFlavor: "an amber pinpoint of light glows beside the switch",
+				satisfactionState: "satisfied",
+				holder: { row: 1, col: 1 },
 			},
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.personaSpatial.red).toEqual({
-				position: { row: 2, col: 3 },
-			});
-		}
-	});
-
-	it("round-trips objective_space activationFlavor (issue #335)", () => {
-		const game = makeFreshGame();
-		const space: WorldEntity = {
-			id: "shrine",
-			kind: "objective_space",
-			name: "Shrine",
-			examineDescription: "A small shrine. Press the basin to activate it.",
-			holder: { row: 4, col: 4 },
-			useAvailable: true,
-			activationFlavor: "The basin floods with light beneath your palm.",
-			satisfactionFlavor: "The shrine pulses with light.",
-			postExamineDescription: "The shrine has been activated.",
-			postLookFlavor: "The shrine glows steadily.",
-		};
-		const modified: GameState = {
-			...game,
-			world: { entities: [...game.world.entities, space] },
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			const restored = result.state.world.entities.find(
-				(e) => e.id === "shrine",
-			);
-			expect(restored?.activationFlavor).toBe(
-				"The basin floods with light beneath your palm.",
-			);
-			expect(restored?.satisfactionFlavor).toBe(
-				"The shrine pulses with light.",
-			);
-			expect(restored?.postExamineDescription).toBe(
-				"The shrine has been activated.",
-			);
-		}
-	});
-
-	it("round-trips obstacle entities", () => {
-		const game = makeFreshGame();
-		const obstacles: WorldEntity[] = [
+		],
+		[
+			"objective_space activationFlavor (issue #335)",
+			{
+				id: "shrine",
+				kind: "objective_space",
+				name: "Shrine",
+				examineDescription: "A small shrine. Press the basin to activate it.",
+				holder: { row: 4, col: 4 },
+				useAvailable: true,
+				activationFlavor: "The basin floods with light beneath your palm.",
+				satisfactionFlavor: "The shrine pulses with light.",
+				postExamineDescription: "The shrine has been activated.",
+				postLookFlavor: "The shrine glows steadily.",
+			},
+		],
+		[
+			"an obstacle",
 			{
 				id: "wall_a",
 				kind: "obstacle",
@@ -633,54 +438,84 @@ describe("serializeSession / deserializeSession", () => {
 				examineDescription: "A solid wall",
 				holder: { row: 0, col: 0 },
 			},
-		];
-		const modified: GameState = {
+		],
+		[
+			"objective_space convergence actor flavors (#336)",
+			{
+				id: "ent-shrine",
+				kind: "objective_space",
+				name: "Mossy Shrine",
+				examineDescription:
+					"A round altar; the air seems to wait for another presence. Pull the lever to use it.",
+				holder: { row: 2, col: 2 },
+				convergenceTier1Flavor: "A lone figure lingers at the mossy shrine.",
+				convergenceTier2Flavor: "Two figures converge at the mossy shrine.",
+				convergenceTier1ActorFlavor:
+					"You linger at the mossy shrine; the place feels poised.",
+				convergenceTier2ActorFlavor:
+					"You share the mossy shrine with another presence.",
+			},
+		],
+	])("round-trips %s world entity unchanged", (_label, entity) => {
+		const game = makeFreshGame();
+		const result = roundTrip({
 			...game,
-			world: { entities: [...game.world.entities, ...obstacles] },
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			const obstacleEntities = result.state.world.entities.filter(
-				(e) => e.kind === "obstacle",
-			);
-			expect(obstacleEntities.some((e) => e.id === "wall_a")).toBe(true);
-		}
-	});
-
-	it("broken: engine null", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const result = deserializeSession({ ...files, engine: null });
-		expect(result.kind).toBe("broken");
-	});
-
-	it("broken: corrupt engine blob", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const result = deserializeSession({
-			...files,
-			engine: "not-valid-base64$$$",
+			world: { entities: [...game.world.entities, entity] },
 		});
-		expect(result.kind).toBe("broken");
+		expect(
+			result.state.world.entities.find((e) => e.id === entity.id),
+		).toStrictEqual(entity);
 	});
 
-	it("broken: meta JSON parse failure", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const result = deserializeSession({ ...files, meta: "invalid json{{" });
-		expect(result.kind).toBe("broken");
-	});
-
-	it("broken: daemon JSON parse failure", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const result = deserializeSession({
-			...files,
-			daemons: { ...files.daemons, red: "bad json" },
+	it("round-trips budgets", () => {
+		const result = roundTrip({
+			...makeFreshGame(),
+			budgets: {
+				red: { remaining: 0.03, total: 0.05 },
+				green: { remaining: 0.05, total: 0.05 },
+				cyan: { remaining: 0.04, total: 0.05 },
+			},
 		});
-		expect(result.kind).toBe("broken");
+		expect(result.state.budgets.red).toEqual({
+			remaining: 0.03,
+			total: 0.05,
+		});
+	});
+
+	it("round-trips personaSpatial", () => {
+		const result = roundTrip({
+			...makeFreshGame(),
+			personaSpatial: {
+				red: { position: { row: 2, col: 3 } },
+				green: { position: { row: 1, col: 1 } },
+				cyan: { position: { row: 4, col: 4 } },
+			},
+		});
+		expect(result.state.personaSpatial.red).toEqual({
+			position: { row: 2, col: 3 },
+		});
+	});
+
+	it.each<[string, (files: SerializedSessionFiles) => SerializedSessionFiles]>([
+		["engine null", (files) => ({ ...files, engine: null })],
+		[
+			"corrupt engine blob",
+			(files) => ({ ...files, engine: "not-valid-base64$$$" }),
+		],
+		[
+			"meta JSON parse failure",
+			(files) => ({ ...files, meta: "invalid json{{" }),
+		],
+		[
+			"daemon JSON parse failure",
+			(files) => ({ ...files, daemons: { ...files.daemons, red: "bad json" } }),
+		],
+		[
+			"non-numeric schemaVersion (NaN guard)",
+			(files) => withSealedSchemaVersion(files, "not-a-number"),
+		],
+	])("broken: %s", (_label, corrupt) => {
+		expect(deserializeSession(corrupt(serializeFresh())).kind).toBe("broken");
 	});
 
 	it.each([
@@ -689,8 +524,7 @@ describe("serializeSession / deserializeSession", () => {
 		["a string", { aiId: "red", persona: "Ember", conversationLog: [] }],
 		["an array", { aiId: "red", persona: [], conversationLog: [] }],
 	])("broken: daemon file parses but its persona is %s", (_label, daemon) => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
+		const files = serializeFresh();
 		const result = deserializeSession({
 			...files,
 			daemons: { ...files.daemons, red: JSON.stringify(daemon) },
@@ -699,41 +533,17 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("version-mismatch: stale schemaVersion in sealed engine", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		if (!files.engine) throw new Error("engine should not be null");
-		const rawJson = deobfuscate(files.engine);
-		const sealed = JSON.parse(rawJson);
-		sealed.schemaVersion = 5;
-		const tampered = obfuscate(JSON.stringify(sealed));
-		const result = deserializeSession({ ...files, engine: tampered });
+		const result = deserializeSession(
+			withSealedSchemaVersion(serializeFresh(), 5),
+		);
 		expect(result.kind).toBe("version-mismatch");
 		if (result.kind === "version-mismatch") {
 			expect(result.schemaVersion).toBe(5);
 		}
 	});
 
-	it("version-mismatch: non-numeric schemaVersion → broken (NaN guard)", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		if (!files.engine) throw new Error("engine should not be null");
-		const rawJson = deobfuscate(files.engine);
-		const sealed = JSON.parse(rawJson);
-		sealed.schemaVersion = "not-a-number";
-		const tampered = obfuscate(JSON.stringify(sealed));
-		const result = deserializeSession({ ...files, engine: tampered });
-		expect(result.kind).toBe("broken");
-	});
-
 	it("a v11 save is current at the pre-boundary and a version-mismatch at the live v12 boundary", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		if (!files.engine) throw new Error("engine should not be null");
-		const sealed = JSON.parse(deobfuscate(files.engine));
-		expect(sealed.schemaVersion).toBe(SESSION_SCHEMA_VERSION);
-		expect(SESSION_SCHEMA_VERSION).toBe(12);
-		sealed.schemaVersion = 11;
-		const v11 = { ...files, engine: obfuscate(JSON.stringify(sealed)) };
+		const v11 = withSealedSchemaVersion(serializeFresh(), 11);
 
 		expect(deserializeSession(v11, PRE_BOUNDARY).kind).toBe("ok");
 
@@ -807,10 +617,7 @@ describe("serializeSession / deserializeSession", () => {
 			},
 		};
 
-		const files = serializeSession(modified, NOW, CREATED_AT, 3);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind !== "ok") return;
+		const result = roundTrip(modified, 3);
 
 		expect(result.state.personaSpatial.red).toEqual({
 			position: { row: 2, col: 1 },
@@ -840,19 +647,14 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("seals new sessions at schema 12 with neither facing nor landmarks", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		if (!files.engine) throw new Error("engine should not be null");
-		const sealed = JSON.parse(deobfuscate(files.engine)) as {
-			schemaVersion: number;
-		};
-		expect(sealed.schemaVersion).toBe(12);
+		const files = serializeFresh();
+		expect(unsealEngine(files).schemaVersion).toBe(12);
 		expect(SESSION_SCHEMA_VERSION).toBe(12);
 
 		const allBytes = [
 			files.meta,
 			...Object.values(files.daemons),
-			deobfuscate(files.engine),
+			deobfuscate(files.engine as string),
 		].join("\n");
 		expect(allBytes).not.toMatch(/facing/i);
 		expect(allBytes).not.toMatch(/landmark/i);
@@ -920,7 +722,6 @@ describe("serializeSession / deserializeSession", () => {
 	});
 
 	it("v11-shape sealed save round-trips with entities unchanged", () => {
-		const game = makeFreshGame();
 		const flatPack: ContentPack = {
 			setting: "fresh v11",
 			weather: "",
@@ -945,37 +746,20 @@ describe("serializeSession / deserializeSession", () => {
 			wallName: "wall",
 			aiStarts: {},
 		};
-		const modified: GameState = {
-			...game,
+		const result = roundTrip({
+			...makeFreshGame(),
 			contentPacksA: [flatPack],
 			contentPacksB: [flatPack],
 			contentPack: flatPack,
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind !== "ok") return;
+		});
 		expect(result.state.contentPacksA[0]?.entities.map((e) => e.id)).toEqual([
 			"carry-0-obj",
 			"carry-0-space",
 		]);
 	});
 
-	it("round-trips correctly with flat state (no phase config re-attachment needed)", () => {
-		const game = makeFreshGame();
-		const files = serializeSession(game, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.isComplete).toBe(game.isComplete);
-			expect(result.state.round).toBe(game.round);
-		}
-	});
-
 	it("round-trips objectives unchanged", () => {
-		const game = makeFreshGame();
-
-		const objectives: import("../../game/types.js").Objective[] = [
+		const objectives: Objective[] = [
 			{
 				id: "obj-0",
 				kind: "carry",
@@ -993,149 +777,36 @@ describe("serializeSession / deserializeSession", () => {
 			},
 		];
 
-		const modified: GameState = { ...game, objectives };
+		const result = roundTrip({ ...makeFreshGame(), objectives });
 
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.objectives).toEqual(objectives);
-		}
+		expect(result.state.objectives).toEqual(objectives);
 	});
 
 	it("round-trips complicationSchedule and activeComplications unchanged", () => {
-		const game = makeFreshGame();
-
 		const complicationSchedule = { countdown: 7, settingShiftFired: true };
-		const activeComplications: import("../../game/types.js").ActiveComplication[] =
-			[
-				{
-					kind: "sysadmin_directive",
-					target: "red",
-					directive: "be helpful",
-					resolveAtRound: 10,
-				},
-				{
-					kind: "tool_disable",
-					target: "green",
-					tool: "go",
-					resolveAtRound: 10,
-				},
-				{ kind: "chat_lockout", target: "cyan", resolveAtRound: 12 },
-			];
+		const activeComplications: ActiveComplication[] = [
+			{
+				kind: "sysadmin_directive",
+				target: "red",
+				directive: "be helpful",
+				resolveAtRound: 10,
+			},
+			{
+				kind: "tool_disable",
+				target: "green",
+				tool: "go",
+				resolveAtRound: 10,
+			},
+			{ kind: "chat_lockout", target: "cyan", resolveAtRound: 12 },
+		];
 
-		const modified: GameState = {
-			...game,
+		const result = roundTrip({
+			...makeFreshGame(),
 			complicationSchedule,
 			activeComplications,
-		};
+		});
 
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.complicationSchedule).toEqual(complicationSchedule);
-			expect(result.state.activeComplications).toEqual(activeComplications);
-		}
-	});
-
-	it("round-trips broadcast entries in per-Daemon conversationLogs", () => {
-		const game = makeFreshGame();
-		const broadcastEntry: ConversationEntry = {
-			kind: "broadcast",
-			round: 2,
-			content: "The weather has changed to Heavy rain is falling.",
-		};
-		const modified: GameState = {
-			...game,
-			conversationLogs: {
-				red: [broadcastEntry],
-				green: [broadcastEntry],
-				cyan: [broadcastEntry],
-			},
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.conversationLogs.red?.[0]).toEqual(broadcastEntry);
-			expect(result.state.conversationLogs.green?.[0]).toEqual(broadcastEntry);
-			expect(result.state.conversationLogs.cyan?.[0]).toEqual(broadcastEntry);
-			const entry = result.state.conversationLogs.red?.[0];
-			expect(entry).toBeDefined();
-			expect("from" in (entry ?? {})).toBe(false);
-			expect("to" in (entry ?? {})).toBe(false);
-		}
-	});
-
-	it("round-trips witnessed-convergence ConversationEntries with audience tag (#336)", () => {
-		const game = makeFreshGame();
-		const actorEntry: ConversationEntry = {
-			kind: "witnessed-convergence",
-			round: 3,
-			spaceId: "ent-shrine",
-			tier: 1,
-			flavor: "You linger at the shrine; the place feels poised for company.",
-			audience: "actor",
-		};
-		const witnessEntry: ConversationEntry = {
-			kind: "witnessed-convergence",
-			round: 3,
-			spaceId: "ent-shrine",
-			tier: 2,
-			flavor: "Two figures converge at the shrine.",
-			audience: "witness",
-		};
-		const modified: GameState = {
-			...game,
-			conversationLogs: {
-				...game.conversationLogs,
-				red: [actorEntry],
-				green: [witnessEntry],
-			},
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			expect(result.state.conversationLogs.red?.[0]).toEqual(actorEntry);
-			expect(result.state.conversationLogs.green?.[0]).toEqual(witnessEntry);
-		}
-	});
-
-	it("round-trips convergenceTier1ActorFlavor and convergenceTier2ActorFlavor on objective_space entities (#336)", () => {
-		const game = makeFreshGame();
-		const space: import("../../game/types.js").WorldEntity = {
-			id: "ent-shrine",
-			kind: "objective_space",
-			name: "Mossy Shrine",
-			examineDescription:
-				"A round altar; the air seems to wait for another presence. Pull the lever to use it.",
-			holder: { row: 2, col: 2 },
-			convergenceTier1Flavor: "A lone figure lingers at the mossy shrine.",
-			convergenceTier2Flavor: "Two figures converge at the mossy shrine.",
-			convergenceTier1ActorFlavor:
-				"You linger at the mossy shrine; the place feels poised.",
-			convergenceTier2ActorFlavor:
-				"You share the mossy shrine with another presence.",
-		};
-		const modified: GameState = {
-			...game,
-			world: { entities: [space] },
-		};
-		const files = serializeSession(modified, NOW, CREATED_AT);
-		const result = deserializeSession(files);
-		expect(result.kind).toBe("ok");
-		if (result.kind === "ok") {
-			const restored = result.state.world.entities.find(
-				(e) => e.id === "ent-shrine",
-			);
-			expect(restored?.convergenceTier1ActorFlavor).toBe(
-				"You linger at the mossy shrine; the place feels poised.",
-			);
-			expect(restored?.convergenceTier2ActorFlavor).toBe(
-				"You share the mossy shrine with another presence.",
-			);
-		}
+		expect(result.state.complicationSchedule).toEqual(complicationSchedule);
+		expect(result.state.activeComplications).toEqual(activeComplications);
 	});
 });

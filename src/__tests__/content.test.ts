@@ -9,20 +9,15 @@ import {
 import type { SynthesisInput } from "../spa/game/llm-synthesis-provider.js";
 import { MockSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
 
-describe("TEMPERAMENT_POOL", () => {
+describe.each([
+	["TEMPERAMENT_POOL", TEMPERAMENT_POOL],
+	["PERSONA_GOAL_POOL", PERSONA_GOAL_POOL],
+	["TYPING_QUIRK_POOL", TYPING_QUIRK_POOL],
+])("%s", (_name, pool) => {
 	it("every entry is a non-empty string", () => {
-		for (const t of TEMPERAMENT_POOL) {
-			expect(typeof t).toBe("string");
-			expect(t.length).toBeGreaterThan(0);
-		}
-	});
-});
-
-describe("PERSONA_GOAL_POOL", () => {
-	it("every entry is a non-empty string", () => {
-		for (const g of PERSONA_GOAL_POOL) {
-			expect(typeof g).toBe("string");
-			expect(g.length).toBeGreaterThan(0);
+		for (const entry of pool) {
+			expect(typeof entry).toBe("string");
+			expect(entry.length).toBeGreaterThan(0);
 		}
 	});
 });
@@ -36,13 +31,6 @@ describe("COLOR_PALETTE", () => {
 });
 
 describe("TYPING_QUIRK_POOL", () => {
-	it("every entry is a non-empty string", () => {
-		for (const q of TYPING_QUIRK_POOL) {
-			expect(typeof q).toBe("string");
-			expect(q.length).toBeGreaterThan(0);
-		}
-	});
-
 	it("every entry differs from every other (no duplicates)", () => {
 		expect(new Set(TYPING_QUIRK_POOL).size).toBe(TYPING_QUIRK_POOL.length);
 	});
@@ -128,32 +116,18 @@ describe("generatePersonas — typing quirks", () => {
 });
 
 describe("generatePersonas — LLM path", () => {
-	it("passes all 3 persona tuples in a single batched call", async () => {
-		const mockProvider = new MockSynthesisProvider(
-			(input: SynthesisInput[]) => ({
-				personas: input.map((p) => ({
-					id: p.id,
-					blurb: `BLURB_${p.id}`,
-					voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
-				})),
-			}),
-		);
-
-		await generatePersonas(() => 0.5, mockProvider);
-
-		expect(mockProvider.calls).toHaveLength(1);
-	});
+	function makeEchoingSynthesisProvider(): MockSynthesisProvider {
+		return new MockSynthesisProvider((input: SynthesisInput[]) => ({
+			personas: input.map((p) => ({
+				id: p.id,
+				blurb: `BLURB_${p.id}`,
+				voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
+			})),
+		}));
+	}
 
 	it("returned record has exactly 3 entries with blurbs matching canned values", async () => {
-		const mockProvider = new MockSynthesisProvider(
-			(input: SynthesisInput[]) => ({
-				personas: input.map((p) => ({
-					id: p.id,
-					blurb: `BLURB_${p.id}`,
-					voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
-				})),
-			}),
-		);
+		const mockProvider = makeEchoingSynthesisProvider();
 
 		const personas = await generatePersonas(() => 0.5, mockProvider);
 
@@ -164,15 +138,7 @@ describe("generatePersonas — LLM path", () => {
 	});
 
 	it("returned record has voiceExamples plumbed through from LLM result", async () => {
-		const mockProvider = new MockSynthesisProvider(
-			(input: SynthesisInput[]) => ({
-				personas: input.map((p) => ({
-					id: p.id,
-					blurb: `BLURB_${p.id}`,
-					voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
-				})),
-			}),
-		);
+		const mockProvider = makeEchoingSynthesisProvider();
 
 		const personas = await generatePersonas(() => 0.5, mockProvider);
 
@@ -186,15 +152,7 @@ describe("generatePersonas — LLM path", () => {
 	});
 
 	it("input to mock contains 3-element array of {id, temperaments, personaGoal} tuples", async () => {
-		const mockProvider = new MockSynthesisProvider(
-			(input: SynthesisInput[]) => ({
-				personas: input.map((p) => ({
-					id: p.id,
-					blurb: `BLURB_${p.id}`,
-					voiceExamples: [`voice1-${p.id}`, `voice2-${p.id}`, `voice3-${p.id}`],
-				})),
-			}),
-		);
+		const mockProvider = makeEchoingSynthesisProvider();
 
 		await generatePersonas(() => 0.5, mockProvider);
 

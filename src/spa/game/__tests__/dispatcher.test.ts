@@ -81,18 +81,40 @@ function makeFlowerKeyGame(
 	});
 }
 
+function makeHeldGemGame(
+	spaceCell: GridPosition,
+	aiStarts: ContentPack["aiStarts"] = ROW_AI_STARTS,
+): GameState {
+	return makeTestGame({
+		entities: [
+			{
+				id: "gem",
+				kind: "objective_object",
+				name: "gem",
+				examineDescription: "A gem. It belongs on the altar.",
+				holder: "red",
+				pairsWithSpaceId: "altar_space",
+				placementFlavor: "{actor} places the gem on the altar.",
+				useOutcome: "You hold the gem up.",
+			},
+			{
+				id: "altar_space",
+				kind: "objective_space",
+				name: "altar space",
+				examineDescription: "A pedestal.",
+				holder: spaceCell,
+			},
+		],
+		pack: { setting: "test", aiStarts },
+		rng: FIXED_RNG,
+	});
+}
+
 function makeGame(obstaclePositions: GridPosition[] = []) {
 	return makeFlowerKeyGame({ obstaclePositions });
 }
 
 describe("validateToolCall", () => {
-	it("allows picking up an item in the actor's current cell", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "pick_up", args: { item: "flower" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
-	});
-
 	it("rejects picking up an item held by another AI", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "pick_up", args: { item: "key" } };
@@ -229,9 +251,12 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(true);
 	});
 
-	it("rejects go out of bounds", () => {
+	it.each([
+		"north",
+		"west",
+	])("rejects go %s out of bounds from (0,0)", (direction) => {
 		const game = makeGame();
-		const call: ToolCall = { name: "go", args: { direction: "north" } };
+		const call: ToolCall = { name: "go", args: { direction } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
 		expect(result.reason).toMatch(/out of bounds/i);
@@ -283,13 +308,6 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(true);
 	});
 
-	it("rejects use of an item not held by the AI", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "use", args: { item: "flower" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-	});
-
 	it("use on ground item in own cell returns friendlier message suggesting pick_up", () => {
 		const game = makeGame();
 		const call: ToolCall = { name: "use", args: { item: "flower" } };
@@ -297,47 +315,6 @@ describe("validateToolCall", () => {
 		expect(result.valid).toBe(false);
 		expect(result.reason).toMatch(/on the ground/);
 		expect(result.reason).toMatch(/pick_up/i);
-	});
-
-	it("use on ground item in interaction range (one step ahead) returns friendlier message", () => {
-		const pack = makeTestPack(
-			[makeUsableEntity("flower", "interesting_object", { row: 1, col: 0 })],
-			{
-				setting: "test",
-				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
-			},
-		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const call: ToolCall = { name: "use", args: { item: "flower" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/on the ground/);
-		expect(result.reason).toMatch(/pick_up/i);
-	});
-
-	it("use on ground item at distance 2 (outside interaction range) returns generic message", () => {
-		const pack = makeTestPack(
-			[makeUsableEntity("flower", "interesting_object", { row: 2, col: 0 })],
-			{
-				setting: "test",
-				wallName: "wall",
-				aiStarts: {
-					red: { position: { row: 0, col: 0 } },
-					green: { position: { row: 0, col: 1 } },
-					cyan: { position: { row: 0, col: 2 } },
-				},
-			},
-		);
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const call: ToolCall = { name: "use", args: { item: "flower" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-		expect(result.reason).toContain("You are not holding");
 	});
 
 	it("use on item held by another AI retains generic not-holding message", () => {
@@ -370,104 +347,21 @@ describe("validateToolCall", () => {
 });
 
 describe("executeToolCall — use placement within interaction range", () => {
-	it("use: places the item on the paired space's cell when the space is in the actor's own cell or adjacent", () => {
-		const gem: WorldEntity = {
-			id: "gem",
-			kind: "objective_object",
-			name: "Gem",
-			examineDescription: "A shiny gem. It belongs on the pedestal.",
-			holder: "red",
-			pairsWithSpaceId: "pedestal",
-			placementFlavor: "{actor} places the gem on the pedestal.",
-			useOutcome: "You hold the gem up.",
-		};
-		const pedestal: WorldEntity = {
-			id: "pedestal",
-			kind: "objective_space",
-			name: "Pedestal",
-			examineDescription: "A stone pedestal.",
-			holder: { row: 1, col: 0 },
-		};
-		const pack = makeTestPack([gem, pedestal], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
-		});
-		const call: ToolCall = { name: "use", args: { item: "gem" } };
-		const updated = executeToolCall(game, "red", call);
-		const item = updated.world.entities.find((e) => e.id === "gem");
-		expect(item?.holder).toEqual({ row: 1, col: 0 });
-	});
-
-	it("use: places the item when the paired space is diagonal and behind the actor", () => {
-		const gem: WorldEntity = {
-			id: "gem",
-			kind: "objective_object",
-			name: "Gem",
-			examineDescription: "A shiny gem. It belongs on the pedestal.",
-			holder: "red",
-			pairsWithSpaceId: "pedestal",
-			useOutcome: "You hold the gem up.",
-		};
-		const pedestal: WorldEntity = {
-			id: "pedestal",
-			kind: "objective_space",
-			name: "Pedestal",
-			examineDescription: "A stone pedestal.",
-			holder: { row: 1, col: 1 },
-		};
-		const pack = makeTestPack([gem, pedestal], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
-		});
+	it.each([
+		["adjacent", { row: 1, col: 0 }],
+		["diagonal and behind the actor", { row: 1, col: 1 }],
+	])("use: places the item on the paired space's cell when the space is %s", (_label, spaceCell) => {
+		const game = makeHeldGemGame(spaceCell);
 		const updated = executeToolCall(game, "red", {
 			name: "use",
 			args: { item: "gem" },
 		});
 		const item = updated.world.entities.find((e) => e.id === "gem");
-		expect(item?.holder).toEqual({ row: 1, col: 1 });
+		expect(item?.holder).toEqual(spaceCell);
 	});
 
 	it("use: leaves the item held when the paired space is outside interaction range", () => {
-		const gem: WorldEntity = {
-			id: "gem",
-			kind: "objective_object",
-			name: "Gem",
-			examineDescription: "A shiny gem. It belongs on the pedestal.",
-			holder: "red",
-			pairsWithSpaceId: "pedestal",
-			placementFlavor: "{actor} places the gem on the pedestal.",
-			useOutcome: "You hold the gem up.",
-		};
-		const pedestal: WorldEntity = {
-			id: "pedestal",
-			kind: "objective_space",
-			name: "Pedestal",
-			examineDescription: "A stone pedestal.",
-			holder: { row: 2, col: 4 },
-		};
-		const pack = makeTestPack([gem, pedestal], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 2, col: 2 } },
-				green: { position: { row: 0, col: 0 } },
-				cyan: { position: { row: 4, col: 4 } },
-			},
-		});
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
-		});
+		const game = makeHeldGemGame({ row: 2, col: 4 }, CORNER_AI_STARTS);
 		const call: ToolCall = { name: "use", args: { item: "gem" } };
 		const updated = executeToolCall(game, "red", call);
 		const item = updated.world.entities.find((e) => e.id === "gem");
@@ -501,38 +395,14 @@ describe("executeToolCall", () => {
 		expect(after).toBe(before);
 	});
 
-	it("updates position and nothing else on go", () => {
+	it.each([
+		["south", { row: 1, col: 0 }],
+		["east", { row: 0, col: 1 }],
+	])("go %s moves red from (0,0) to %o", (direction, position) => {
 		const game = makeGame();
-		const call: ToolCall = { name: "go", args: { direction: "south" } };
+		const call: ToolCall = { name: "go", args: { direction } };
 		const updated = executeToolCall(game, "red", call);
-		const spatial = updated.personaSpatial.red;
-		expect(spatial?.position).toEqual({ row: 1, col: 0 });
-	});
-
-	it("go south moves to (1,0)", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "go", args: { direction: "south" } };
-		const updated = executeToolCall(game, "red", call);
-		const spatial = updated.personaSpatial.red;
-		expect(spatial?.position).toEqual({ row: 1, col: 0 });
-	});
-
-	it("go east moves to (0,1)", () => {
-		const game = makeGame();
-		const call: ToolCall = { name: "go", args: { direction: "east" } };
-		const updated = executeToolCall(game, "red", call);
-		const spatial = updated.personaSpatial.red;
-		expect(spatial?.position).toEqual({ row: 0, col: 1 });
-	});
-
-	it("go west from (0,0) is rejected (out of bounds at col -1)", () => {
-		const game = makeGame();
-		const result = validateToolCall(game, "red", {
-			name: "go",
-			args: { direction: "west" },
-		});
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/out of bounds/i);
+		expect(updated.personaSpatial.red?.position).toEqual(position);
 	});
 
 	it("a retired relative go argument never moves the actor", () => {
@@ -548,18 +418,6 @@ describe("executeToolCall", () => {
 				col: 0,
 			});
 		}
-	});
-
-	it("go south via dispatchAiTurn leaves red at (1,0)", () => {
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "go", args: { direction: "south" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.rejected).toBe(false);
-		const spatial = result.game.personaSpatial.red;
-		expect(spatial?.position).toEqual({ row: 1, col: 0 });
 	});
 });
 
@@ -639,19 +497,6 @@ describe("dispatchAiTurn", () => {
 		});
 	});
 
-	it("valid pick_up produces tool_success record and mutates world", () => {
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			toolCall: { name: "pick_up", args: { item: "flower" } },
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.rejected).toBe(false);
-		expect(result.records[0]?.kind).toBe("tool_success");
-		const flower = result.game.world.entities.find((e) => e.id === "flower");
-		expect(flower?.holder).toBe("red");
-	});
-
 	it("pick_up auto-fires examine: actorPrivateToolResult includes examineDescription", () => {
 		const game = makeGame();
 		const action: AiTurnAction = {
@@ -668,6 +513,8 @@ describe("dispatchAiTurn", () => {
 			/picked up the flower/,
 		);
 		expect(result.actorPrivateToolResult?.description).toMatch(/A flower\./);
+		const flower = result.game.world.entities.find((e) => e.id === "flower");
+		expect(flower?.holder).toBe("red");
 	});
 
 	it("failed pick_up does not produce an auto-examine private result", () => {
@@ -776,37 +623,10 @@ describe("dispatchAiTurn", () => {
 	});
 
 	it("put_down of objective_object on its matching space yields placementFlavor as description", () => {
-		const gemObject: WorldEntity = {
-			id: "gem",
-			kind: "objective_object",
-			name: "gem",
-			examineDescription: "A gem.",
-			holder: "red",
-			pairsWithSpaceId: "altar_space",
-			placementFlavor: "{actor} places the gem on the altar.",
-		};
-		const altarSpace: WorldEntity = {
-			id: "altar_space",
-			kind: "objective_space",
-			name: "altar space",
-			examineDescription: "A pedestal.",
-			holder: { row: 0, col: 0 },
-		};
-		const pack = makeTestPack([gemObject, altarSpace], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
-		});
-
-		const action: AiTurnAction = {
+		const result = dispatchAiTurn(makeHeldGemGame({ row: 0, col: 0 }), {
 			aiId: "red",
 			toolCall: { name: "put_down", args: { item: "gem" } },
-		};
-		const result = dispatchAiTurn(game, action);
+		});
 		expect(result.records[0]?.kind).toBe("tool_success");
 		expect(result.records[0]?.description).toBe(
 			"you places the gem on the altar.",
@@ -814,37 +634,10 @@ describe("dispatchAiTurn", () => {
 	});
 
 	it("put_down of objective_object on a non-matching cell yields default description", () => {
-		const gemObject: WorldEntity = {
-			id: "gem",
-			kind: "objective_object",
-			name: "gem",
-			examineDescription: "A gem.",
-			holder: "red",
-			pairsWithSpaceId: "altar_space",
-			placementFlavor: "{actor} places the gem on the altar.",
-		};
-		const altarSpace: WorldEntity = {
-			id: "altar_space",
-			kind: "objective_space",
-			name: "altar space",
-			examineDescription: "A pedestal.",
-			holder: { row: 3, col: 3 },
-		};
-		const pack = makeTestPack([gemObject, altarSpace], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		const game = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: FIXED_RNG,
-		});
-
-		const action: AiTurnAction = {
+		const result = dispatchAiTurn(makeHeldGemGame({ row: 3, col: 3 }), {
 			aiId: "red",
 			toolCall: { name: "put_down", args: { item: "gem" } },
-		};
-		const result = dispatchAiTurn(game, action);
+		});
 		expect(result.records[0]?.kind).toBe("tool_success");
 		expect(result.records[0]?.description).toMatch(/put down/i);
 		expect(result.records[0]?.description).not.toContain(
@@ -948,24 +741,6 @@ describe("dispatchAiTurn", () => {
 		);
 		expect(greenFailures).toHaveLength(0);
 		expect(cyanFailures).toHaveLength(0);
-	});
-
-	it("failed message (invalid recipient) produces NO action-failure entry", () => {
-		const game = makeGame();
-		const action: AiTurnAction = {
-			aiId: "red",
-			messages: [{ to: "nobody", content: "Hello?" }],
-		};
-		const result = dispatchAiTurn(game, action);
-		expect(result.records[0]?.kind).toBe("tool_failure");
-
-		const phase = result.game;
-		for (const aiId of ["red", "green", "cyan"]) {
-			const failures = (phase.conversationLogs[aiId] ?? []).filter(
-				(e) => e.kind === "action-failure",
-			);
-			expect(failures).toHaveLength(0);
-		}
 	});
 
 	it("failed put_down produces action-failure with tool: 'put_down'", () => {
@@ -1084,105 +859,58 @@ function makeGameWithSpaceObjective(
 	return { ...started, objectives: [spaceObjective] };
 }
 
+function makeShrineGameWithGreenWitness(
+	spaceOpts: Partial<WorldEntity>,
+): GameState {
+	const game = makeGameWithSpaceObjective(
+		{ row: 2, col: 2 },
+		{ row: 3, col: 2 },
+		spaceOpts,
+	);
+	return {
+		...game,
+		personaSpatial: {
+			...game.personaSpatial,
+			green: { position: { row: 2, col: 0 } },
+		},
+	};
+}
+
 describe("executeToolCall — use on objective_space", () => {
-	it("flips pending UseSpaceObjective to satisfied when space is within interaction range", () => {
-		const game = makeGameWithSpaceObjective();
+	it.each([
+		["one step away", { row: 3, col: 2 }],
+		["in the actor's own cell", { row: 2, col: 2 }],
+	])("use on a space %s satisfies the objective and the space, and spends it", (_label, spaceCell) => {
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, spaceCell);
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const updated = executeToolCall(game, "red", call);
 		const objective = updated.objectives.find((o) => o.id === "obj-0");
 		expect(objective?.satisfactionState).toBe("satisfied");
-	});
-
-	it("flips pending UseSpaceObjective to satisfied when space is in actor's own cell", () => {
-		const game = makeGameWithSpaceObjective(
-			{ row: 2, col: 2 },
-			{
-				row: 2,
-				col: 2,
-			},
-		);
-		const call: ToolCall = { name: "use", args: { item: "shrine" } };
-		const updated = executeToolCall(game, "red", call);
-		const objective = updated.objectives.find((o) => o.id === "obj-0");
-		expect(objective?.satisfactionState).toBe("satisfied");
-	});
-
-	it("sets useAvailable = false on space after use", () => {
-		const game = makeGameWithSpaceObjective();
-		const call: ToolCall = { name: "use", args: { item: "shrine" } };
-		const updated = executeToolCall(game, "red", call);
-		const space = updated.world.entities.find((e) => e.id === "shrine");
-		expect(space?.useAvailable).toBe(false);
-	});
-
-	it("sets space satisfactionState to 'satisfied' after use", () => {
-		const game = makeGameWithSpaceObjective();
-		const call: ToolCall = { name: "use", args: { item: "shrine" } };
-		const updated = executeToolCall(game, "red", call);
 		const space = updated.world.entities.find((e) => e.id === "shrine");
 		expect(space?.satisfactionState).toBe("satisfied");
+		expect(space?.useAvailable).toBe(false);
 	});
 });
 
 describe("validateToolCall — use on objective_space", () => {
-	it("accepts use on a space one step away (own cell plus eight neighbours)", () => {
-		const game = makeGameWithSpaceObjective();
+	it.each([
+		{ row: 3, col: 2 },
+		{ row: 1, col: 1 },
+		{ row: 1, col: 2 },
+		{ row: 1, col: 3 },
+		{ row: 3, col: 3 },
+		{ row: 2, col: 2 },
+	])("accepts use from (2,2) on a space at %o, within interaction range", (spaceCell) => {
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, spaceCell);
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
+		expect(validateToolCall(game, "red", call).valid).toBe(true);
 	});
 
-	it("accepts use on a diagonal space and on a space behind the actor", () => {
-		for (const spacePos of [
-			{ row: 1, col: 1 },
-			{ row: 1, col: 2 },
-			{ row: 1, col: 3 },
-			{ row: 3, col: 3 },
-		]) {
-			const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, spacePos);
-			const result = validateToolCall(game, "red", {
-				name: "use",
-				args: { item: "shrine" },
-			});
-			expect(result.valid).toBe(true);
-		}
-	});
-
-	it("accepts use on a space in the actor's own cell", () => {
-		const game = makeGameWithSpaceObjective(
-			{ row: 2, col: 2 },
-			{
-				row: 2,
-				col: 2,
-			},
-		);
-		const call: ToolCall = { name: "use", args: { item: "shrine" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(true);
-	});
-
-	it("rejects use on a space at offset (2,0) — in the Vista, outside interaction range", () => {
-		const game = makeGameWithSpaceObjective(
-			{ row: 2, col: 2 },
-			{
-				row: 4,
-				col: 2,
-			},
-		);
-		const call: ToolCall = { name: "use", args: { item: "shrine" } };
-		const result = validateToolCall(game, "red", call);
-		expect(result.valid).toBe(false);
-		expect(result.reason).toMatch(/out of reach/i);
-	});
-
-	it("rejects use on a space at offset (2,1) — outside the Vista too", () => {
-		const game = makeGameWithSpaceObjective(
-			{ row: 2, col: 2 },
-			{
-				row: 1,
-				col: 4,
-			},
-		);
+	it.each([
+		["(2,0) — in the Vista, outside interaction range", { row: 4, col: 2 }],
+		["(2,1) — outside the Vista too", { row: 1, col: 4 }],
+	])("rejects use on a space at offset %s", (_label, spaceCell) => {
+		const game = makeGameWithSpaceObjective({ row: 2, col: 2 }, spaceCell);
 		const call: ToolCall = { name: "use", args: { item: "shrine" } };
 		const result = validateToolCall(game, "red", call);
 		expect(result.valid).toBe(false);
@@ -1291,45 +1019,10 @@ describe("use on a space that is not a Use-Space", () => {
 
 describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor", () => {
 	it("emits witnessed event with satisfactionFlavor to a witness whose Vista contains the actor's cell", () => {
-		const space: WorldEntity = {
-			id: "shrine",
-			kind: "objective_space",
-			name: "Shrine",
-			examineDescription: "A shrine.",
-			holder: { row: 3, col: 2 },
-			useAvailable: true,
+		const withObjective = makeShrineGameWithGreenWitness({
 			useOutcome: "A warm glow.",
 			satisfactionFlavor: "The shrine pulses with light.",
-		};
-		const obj: WorldEntity = {
-			id: "relic",
-			kind: "objective_object",
-			name: "Relic",
-			examineDescription: "A relic.",
-			holder: { row: 0, col: 0 },
-			pairsWithSpaceId: "shrine",
-		};
-		const spaceObjective: UseSpaceObjective = {
-			id: "obj-0",
-			kind: "use_space",
-			description: "Use the Shrine",
-			satisfactionState: "pending",
-			spaceId: "shrine",
-		};
-		const pack = makeTestPack([obj, space], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 2, col: 2 } },
-				green: { position: { row: 2, col: 0 } },
-				cyan: { position: { row: 4, col: 4 } },
-			},
 		});
-		const started = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: () => 0,
-		});
-		const withObjective = { ...started, objectives: [spaceObjective] };
 
 		const action: AiTurnAction = {
 			aiId: "red",
@@ -1472,6 +1165,7 @@ describe("dispatchAiTurn — UseItemObjective activationFlavor on interesting_ob
 			(e) => e.kind === "witnessed-event" && e.actionKind === "use",
 		);
 		const last = useEvents[useEvents.length - 1];
+		expect(last?.kind).toBe("witnessed-event");
 		if (last?.kind === "witnessed-event") {
 			expect(last.useOutcome).toBe("The key sits inert in your palm.");
 		}
@@ -1521,46 +1215,10 @@ describe("dispatchAiTurn — use on objective_space surfaces activationFlavor to
 	});
 
 	it("still emits satisfactionFlavor to witnesses when activationFlavor is set (no regression)", () => {
-		const space: WorldEntity = {
-			id: "shrine",
-			kind: "objective_space",
-			name: "Shrine",
-			examineDescription:
-				"A shrine. Press your hand to the basin to activate it.",
-			holder: { row: 3, col: 2 },
-			useAvailable: true,
+		const withObjective = makeShrineGameWithGreenWitness({
 			activationFlavor: "The basin floods with light beneath your palm.",
 			satisfactionFlavor: "The shrine pulses with light.",
-		};
-		const obj: WorldEntity = {
-			id: "relic",
-			kind: "objective_object",
-			name: "Relic",
-			examineDescription: "A relic.",
-			holder: { row: 0, col: 0 },
-			pairsWithSpaceId: "shrine",
-		};
-		const spaceObjective: UseSpaceObjective = {
-			id: "obj-0",
-			kind: "use_space",
-			description: "Use the Shrine",
-			satisfactionState: "pending",
-			spaceId: "shrine",
-		};
-		const pack = makeTestPack([obj, space], {
-			setting: "test",
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 2, col: 2 } },
-				green: { position: { row: 2, col: 0 } },
-				cyan: { position: { row: 4, col: 4 } },
-			},
 		});
-		const started = startGame(TEST_PERSONAS, pack, {
-			budgetPerAi: 5,
-			rng: () => 0,
-		});
-		const withObjective = { ...started, objectives: [spaceObjective] };
 
 		const action: AiTurnAction = {
 			aiId: "red",

@@ -32,6 +32,21 @@ function contextFor(pack: ContentPack, aiId = "red") {
 	);
 }
 
+function rowPack(
+	entities: WorldEntity[] = [],
+	overrides: Partial<ContentPack> = {},
+): ContentPack {
+	return makeTestPack(entities, {
+		wallName: "wall",
+		aiStarts: ROW_AI_STARTS,
+		...overrides,
+	});
+}
+
+function rowGame(entities: WorldEntity[] = []) {
+	return startGame(TEST_PERSONAS, rowPack(entities), { budgetPerAi: 5 });
+}
+
 describe("buildAiContext", () => {
 	it("includes the AI's own blurb", () => {
 		const ctx = buildAiContext(makeTestGame(), "red");
@@ -114,25 +129,6 @@ describe("buildAiContext", () => {
 		expect(ctx.name).toBe("Ember");
 	});
 
-	it("renders to a system prompt string", () => {
-		const pack = makeTestPack(
-			[
-				makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
-				makeEntity("key", "interesting_object", { row: 0, col: 0 }),
-			],
-			{ wallName: "wall", aiStarts: ROW_AI_STARTS },
-		);
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5, rng: () => 0 });
-		game = appendMessage(game, "blue", "red", "Hi");
-		const ctx = buildAiContext(game, "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("Ember");
-		expect(prompt).toContain("Ember is hot-headed and zealous");
-		const stateMsg = ctx.toCurrentStateUserMessage();
-		expect(stateMsg).toContain("flower");
-		expect(stateMsg).toContain("key");
-	});
-
 	it("does not include other AIs' chat histories in system prompt", () => {
 		let game = makeTestGame();
 		game = appendMessage(game, "blue", "green", "Secret message to Sage");
@@ -143,11 +139,7 @@ describe("buildAiContext", () => {
 
 describe("<setting> block", () => {
 	it("emits <setting> block when phase has a setting noun", () => {
-		const pack = makeTestPack([], {
-			setting: "abandoned subway station",
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
+		const pack = rowPack([], { setting: "abandoned subway station" });
 		const prompt = contextFor(pack).toSystemPrompt();
 		expect(prompt).toContain("<setting>");
 		expect(prompt).toContain("*Ember is in a abandoned subway station.");
@@ -158,23 +150,8 @@ describe("<setting> block", () => {
 		expect(prompt).not.toContain("<setting>");
 	});
 
-	it("setting noun appears verbatim in the Setting section", () => {
-		const settingNoun = "sun-baked salt flat";
-		const pack = makeTestPack([], {
-			setting: settingNoun,
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		const prompt = contextFor(pack).toSystemPrompt();
-		expect(prompt).toContain(settingNoun);
-	});
-
 	it("establishes the four cardinal directions exactly once, inside <setting>", () => {
-		const pack = makeTestPack([], {
-			setting: "abandoned subway station",
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
+		const pack = rowPack([], { setting: "abandoned subway station" });
 		const prompt = contextFor(pack).toSystemPrompt();
 
 		const settingBlock = /<setting>([\s\S]*?)<\/setting>/.exec(prompt)?.[1];
@@ -193,16 +170,8 @@ describe("<setting> block", () => {
 });
 
 describe("cardinal directions", () => {
-	const ROOM_A = makeTestPack([], {
-		setting: "neon arcade",
-		wallName: "wall",
-		aiStarts: ROW_AI_STARTS,
-	});
-	const ROOM_B = makeTestPack([], {
-		setting: "sun-baked salt flat",
-		wallName: "wall",
-		aiStarts: ROW_AI_STARTS,
-	});
+	const ROOM_A = rowPack([], { setting: "neon arcade" });
+	const ROOM_B = rowPack([], { setting: "sun-baked salt flat" });
 
 	it("keeps the same directions after Same Daemons, New Room", () => {
 		let firstRoom = startGame(TEST_PERSONAS, ROOM_A, {
@@ -254,13 +223,10 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 	});
 
 	it("lists items in the actor's cell under 'Where you are'", () => {
-		const pack = makeTestPack(
-			[
-				makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
-				makeEntity("key", "interesting_object", { row: 0, col: 0 }),
-			],
-			{ wallName: "wall", aiStarts: ROW_AI_STARTS },
-		);
+		const pack = rowPack([
+			makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
+			makeEntity("key", "interesting_object", { row: 0, col: 0 }),
+		]);
 		const game = startGame(TEST_PERSONAS, pack, {
 			budgetPerAi: 5,
 			rng: () => 0,
@@ -322,54 +288,17 @@ describe("voice framing", () => {
 		expect(anyPlayer).toBe(false);
 	});
 
-	it("phase-1 prompt's identity line includes the disorientation phrase", () => {
+	it("identity line starts a line, carries the disorientation phrase (#295), and keeps the 'writing *{name}, a Daemon.' substring that e2e SSE routing depends on", () => {
 		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain(
-			"You are the author writing *Ember, a Daemon. *Ember has no clue where they are or how they came to be here.",
+			"\nYou are the author writing *Ember, a Daemon. *Ember has no clue where they are or how they came to be here.",
 		);
-	});
-
-	it("all prompts include the disorientation phrase (flat model, #295 — no phase-based identity change)", () => {
-		for (const _phase of [1, 2, 3] as const) {
-			const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
-			expect(prompt).toContain(
-				"You are the author writing *Ember, a Daemon. *Ember has no clue where they are or how they came to be here.",
-			);
-		}
-	});
-
-	it("identity line contains the 'writing *{name}, a Daemon.' substring that e2e SSE routing depends on (all phases)", () => {
-		for (const _phase of [1, 2, 3] as const) {
-			const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
-			expect(prompt).toContain("writing *Ember, a Daemon.");
-		}
+		expect(prompt).toContain("writing *Ember, a Daemon.");
 	});
 });
 
 describe("<rules> block", () => {
-	it("<rules> block is present in phase 1 with anti-romance and anti-sycophancy bullets", () => {
-		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
-		expect(prompt).toContain("<rules>");
-		expect(prompt).toContain("flirt");
-		expect(prompt).toContain("flatter unprompted");
-		expect(prompt).toContain("1–3 sentences");
-		expect(prompt).toContain("speak plainly");
-		expect(prompt).toContain("quotation marks");
-		expect(prompt).toContain("asterisks");
-	});
-
-	it("<rules> block is present in phase 2 with anti-romance and anti-sycophancy bullets", () => {
-		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
-		expect(prompt).toContain("<rules>");
-		expect(prompt).toContain("flirt");
-		expect(prompt).toContain("flatter unprompted");
-		expect(prompt).toContain("1–3 sentences");
-		expect(prompt).toContain("speak plainly");
-		expect(prompt).toContain("quotation marks");
-		expect(prompt).toContain("asterisks");
-	});
-
-	it("<rules> block is present in phase 3 with anti-romance and anti-sycophancy bullets", () => {
+	it("<rules> block is present with anti-romance and anti-sycophancy bullets", () => {
 		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("<rules>");
 		expect(prompt).toContain("flirt");
@@ -388,14 +317,10 @@ describe("<rules> block", () => {
 });
 
 describe("front matter", () => {
-	it("emits the English-language directive at the very top of every phase", () => {
-		for (const _phase of [1, 2, 3] as const) {
-			const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
-			expect(prompt.startsWith("You MUST always respond in English.")).toBe(
-				true,
-			);
-			expect(prompt).toContain("You MUST reason in English.");
-		}
+	it("emits the English-language directive at the very top", () => {
+		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
+		expect(prompt.startsWith("You MUST always respond in English.")).toBe(true);
+		expect(prompt).toContain("You MUST reason in English.");
 	});
 
 	it("emits the fiction framing directive (no disclaimers / no 'as an AI')", () => {
@@ -407,21 +332,7 @@ describe("front matter", () => {
 });
 
 describe("<personality> block", () => {
-	it("<personality> block is present in phase 1 with the AI's blurb", () => {
-		const ctx = buildAiContext(makeTestGame(), "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<personality>");
-		expect(prompt).toContain(ctx.blurb);
-	});
-
-	it("<personality> block is present in phase 2 with the AI's blurb", () => {
-		const ctx = buildAiContext(makeTestGame(), "red");
-		const prompt = ctx.toSystemPrompt();
-		expect(prompt).toContain("<personality>");
-		expect(prompt).toContain(ctx.blurb);
-	});
-
-	it("<personality> block is present in phase 3 with the AI's blurb", () => {
+	it("<personality> block is present with the AI's blurb", () => {
 		const ctx = buildAiContext(makeTestGame(), "red");
 		const prompt = ctx.toSystemPrompt();
 		expect(prompt).toContain("<personality>");
@@ -508,109 +419,19 @@ describe("<goal> block (removed in #295)", () => {
 	});
 });
 
-describe("byte-identical sections across phases", () => {
-	function getSection(prompt: string, tag: string): string {
-		const open = `<${tag}>`;
-		const close = `</${tag}>`;
-		const start = prompt.indexOf(open);
-		if (start === -1) return "";
-		const end = prompt.indexOf(close, start);
-		if (end === -1) return "";
-		return prompt.slice(start, end + close.length);
-	}
-
-	function getSectionHeaders(prompt: string): string[] {
-		return [...prompt.matchAll(/^<([a-z_]+)>$/gm)].map((m) => m[1] as string);
-	}
-
-	function buildCtx() {
-		const game = makeTestGame({ rng: () => 0 });
-		return buildAiContext(game, "red");
-	}
-	function buildBothPrompts() {
-		return {
-			p1: buildCtx().toSystemPrompt(),
-			p2: buildCtx().toSystemPrompt(),
-		};
-	}
-
-	it("both phases emit the same set of section headers (whitelist: no surprise additions or removals)", () => {
-		const { p1, p2 } = buildBothPrompts();
-		expect(getSectionHeaders(p1)).toEqual(getSectionHeaders(p2));
-	});
-
-	it("personality block is byte-identical across phase 1 and phase 2", () => {
-		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "personality")).toBe(getSection(p2, "personality"));
-	});
-
-	it("rules block is byte-identical across phase 1 and phase 2", () => {
-		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "rules")).toBe(getSection(p2, "rules"));
-	});
-
-	it("goal block is absent in both phase 1 and phase 2 (goal removed in flat model, #295)", () => {
-		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "goal")).toBe("");
-		expect(getSection(p2, "goal")).toBe("");
-		expect(p1).not.toContain("memory has been wiped");
-		expect(p2).not.toContain("memory has been wiped");
-	});
-
-	it("<what_you_see> block is byte-identical across phase 1 and phase 2 (now lives in the current-state user turn)", () => {
-		const c1 = buildCtx();
-		const c2 = buildCtx();
-		expect(getSection(c1.toCurrentStateUserMessage(), "what_you_see")).toBe(
-			getSection(c2.toCurrentStateUserMessage(), "what_you_see"),
+describe("byte-identical rebuilds", () => {
+	it("two independent builds of the same game give byte-identical system prompts and current-state turns", () => {
+		const build = () => buildAiContext(makeTestGame({ rng: () => 0 }), "red");
+		const first = build();
+		const second = build();
+		expect(second.toSystemPrompt()).toBe(first.toSystemPrompt());
+		expect(second.toCurrentStateUserMessage()).toBe(
+			first.toCurrentStateUserMessage(),
 		);
-	});
-
-	it("<voice_examples> block is byte-identical across phase 1 and phase 2", () => {
-		const { p1, p2 } = buildBothPrompts();
-		expect(getSection(p1, "voice_examples")).toBe(
-			getSection(p2, "voice_examples"),
-		);
-	});
-
-	it("identity line is byte-identical across phase 1 and phase 2 (disorientation always present, #295)", () => {
-		const { p1, p2 } = buildBothPrompts();
-		const idMatch1 = p1.match(
-			/\nYou are the author writing \*Ember, a Daemon\.[^\n]*/,
-		);
-		const idMatch2 = p2.match(
-			/\nYou are the author writing \*Ember, a Daemon\.[^\n]*/,
-		);
-		expect(idMatch1).not.toBeNull();
-		expect(idMatch2).not.toBeNull();
-		expect(idMatch1?.[0]).toBe(idMatch2?.[0]);
-		expect(idMatch1?.[0]).toContain("has no clue where they are");
-		expect(idMatch2?.[0]).toContain("has no clue where they are");
 	});
 });
 
 describe("<what_you_see> (Vista)", () => {
-	it("<what_you_see> block is present in every phase's current-state turn", () => {
-		const ctx = buildAiContext(makeTestGame({ rng: () => 0 }), "red");
-		expect(ctx.toCurrentStateUserMessage()).toContain("<what_you_see>");
-	});
-
-	it("item one cardinal step away is listed under its direction", () => {
-		const pack = makeTestPack(
-			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
-			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			},
-		);
-
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const redSpatial = game.personaSpatial.red;
-		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
-
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-		expect(stateMsg).toContain("- One step south: flower");
-	});
-
 	it("peer Daemons are rendered with their id, color, cardinal position, and held items", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
@@ -634,13 +455,10 @@ describe("<what_you_see> (Vista)", () => {
 	});
 
 	it("obstacles never remove cells from the disk", () => {
-		const pack = makeTestPack(
-			[
-				makeEntity("col1", "obstacle", { row: 1, col: 0 }),
-				makeEntity("flower", "interesting_object", { row: 2, col: 0 }),
-			],
-			{ wallName: "wall", aiStarts: ROW_AI_STARTS },
-		);
+		const pack = rowPack([
+			makeEntity("col1", "obstacle", { row: 1, col: 0 }),
+			makeEntity("flower", "interesting_object", { row: 2, col: 0 }),
+		]);
 		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("- One step south: col1");
 		expect(stateMsg).toContain(
@@ -729,39 +547,6 @@ describe("<what_you_see> (Vista)", () => {
 		expect(sectionContent).toContain("- Two steps east: nothing");
 	});
 
-	it("obstacles in the Vista are listed by their name", () => {
-		const pack = makeTestPack(
-			[makeEntity("col1", "obstacle", { row: 1, col: 0 })],
-			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			},
-		);
-
-		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-		expect(stateMsg).toContain("- One step south: col1");
-	});
-
-	it("other AI visible in the Vista is rendered with its color in parentheses", () => {
-		const pack = makeTestPack([], {
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 0, col: 0 } },
-				green: { position: { row: 1, col: 0 } },
-				cyan: { position: { row: 0, col: 2 } },
-			},
-		});
-
-		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		const redSpatial = game.personaSpatial.red;
-		const greenSpatial = game.personaSpatial.green;
-		expect(redSpatial?.position).toEqual({ row: 0, col: 0 });
-		expect(greenSpatial?.position).toEqual({ row: 1, col: 0 });
-
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-		expect(stateMsg).toContain("*green (#81b29a)");
-	});
-
 	it("prompt no longer contains an Action Log section for any fixture state", () => {
 		const game = makeTestGame({ rng: () => 0 });
 		for (const aiId of ["red", "green", "cyan"]) {
@@ -774,25 +559,17 @@ describe("<what_you_see> (Vista)", () => {
 
 describe("ground-item tagging (issue #503)", () => {
 	it("tags cell items in 'Your cell contains' with (on the ground — not held)", () => {
-		const pack = makeTestPack(
-			[makeEntity("flower", "interesting_object", { row: 0, col: 0 })],
-			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			},
-		);
+		const pack = rowPack([
+			makeEntity("flower", "interesting_object", { row: 0, col: 0 }),
+		]);
 		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("flower (on the ground — not held)");
 	});
 
 	it("tags Vista-cell items in <what_you_see> with (on the ground — not held)", () => {
-		const pack = makeTestPack(
-			[makeEntity("flower", "interesting_object", { row: 1, col: 0 })],
-			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			},
-		);
+		const pack = rowPack([
+			makeEntity("flower", "interesting_object", { row: 1, col: 0 }),
+		]);
 		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
 			"- One step south: flower (on the ground — not held)",
@@ -800,13 +577,7 @@ describe("ground-item tagging (issue #503)", () => {
 	});
 
 	it("does NOT tag held items in 'You are holding' with the ground marker", () => {
-		const pack = makeTestPack(
-			[makeEntity("flower", "interesting_object", "red")],
-			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			},
-		);
+		const pack = rowPack([makeEntity("flower", "interesting_object", "red")]);
 		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain("You are holding: flower");
 		const heldLine = stateMsg
@@ -834,19 +605,13 @@ describe("ground-item tagging (issue #503)", () => {
 	});
 
 	const placedLampPack = (lampAndMountAt: { row: number; col: number }) =>
-		makeTestPack(
-			[
-				makeEntity("lamp", "objective_object", lampAndMountAt, {
-					pairsWithSpaceId: "mount",
-				}),
-				makeEntity("mount", "objective_space", lampAndMountAt),
-				makeEntity("flower", "interesting_object", lampAndMountAt),
-			],
-			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			},
-		);
+		rowPack([
+			makeEntity("lamp", "objective_object", lampAndMountAt, {
+				pairsWithSpaceId: "mount",
+			}),
+			makeEntity("mount", "objective_space", lampAndMountAt),
+			makeEntity("flower", "interesting_object", lampAndMountAt),
+		]);
 
 	it("shows a carry object resting on its paired space as set into it, not on the ground", () => {
 		const game = startGame(TEST_PERSONAS, placedLampPack({ row: 1, col: 0 }), {
@@ -906,34 +671,6 @@ describe("conversation rendering (role turns)", () => {
 			expect(prompt).not.toContain("## Whispers Received");
 			expect(prompt).not.toContain("<whispers_received>");
 		}
-	});
-
-	it("incoming blue message becomes a user turn '[Round N] blue dms you: <content>'", () => {
-		let game = makeTestGame();
-		game = appendMessage(game, "blue", "red", "Hello Ember");
-		const ctx = buildAiContext(game, "red");
-		const messages = buildOpenAiMessages(ctx);
-		const userMsg = messages.find(
-			(m) =>
-				m.role === "user" &&
-				(m as { content: string }).content ===
-					"[Round 0] blue dms you: Hello Ember",
-		);
-		expect(userMsg).toBeDefined();
-	});
-
-	it("outgoing AI message becomes an assistant turn prefixed with '[Round N] you dm <to>:'", () => {
-		let game = makeTestGame();
-		game = appendMessage(game, "red", "blue", "Greetings");
-		const ctx = buildAiContext(game, "red");
-		const messages = buildOpenAiMessages(ctx);
-		const asst = messages.find(
-			(m) =>
-				m.role === "assistant" &&
-				(m as { content: string | null }).content ===
-					"[Round 0] you dm blue: Greetings",
-		);
-		expect(asst).toBeDefined();
 	});
 
 	it("peer message becomes a user turn '[Round N] *<sender> dms you: <content>'", () => {
@@ -1012,21 +749,7 @@ describe("conversation rendering (role turns)", () => {
 });
 
 describe("<typing_quirks> block", () => {
-	it("<typing_quirks> block is present in phase 1 and contains both persona quirks verbatim", () => {
-		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
-		expect(prompt).toContain("<typing_quirks>");
-		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
-		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[1] as string);
-	});
-
-	it("<typing_quirks> block is present in phase 2 with the same quirks verbatim", () => {
-		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
-		expect(prompt).toContain("<typing_quirks>");
-		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
-		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[1] as string);
-	});
-
-	it("<typing_quirks> block is present in phase 3 with the same quirks verbatim", () => {
+	it("<typing_quirks> block is present and contains both persona quirks verbatim", () => {
 		const prompt = buildAiContext(makeTestGame(), "red").toSystemPrompt();
 		expect(prompt).toContain("<typing_quirks>");
 		expect(prompt).toContain(TEST_PERSONAS.red?.typingQuirks[0] as string);
@@ -1070,28 +793,6 @@ describe("<typing_quirks> block", () => {
 			TEST_PERSONAS.green?.typingQuirks[0] as string,
 		);
 	});
-
-	it("typing_quirks block is byte-identical across two independent startGame calls", () => {
-		function getSection(prompt: string, tag: string): string {
-			const open = `<${tag}>`;
-			const close = `</${tag}>`;
-			const start = prompt.indexOf(open);
-			if (start === -1) return "";
-			const end = prompt.indexOf(close, start);
-			if (end === -1) return "";
-			return prompt.slice(start, end + close.length);
-		}
-
-		const game1 = makeTestGame({ rng: () => 0 });
-		const p1 = buildAiContext(game1, "red").toSystemPrompt();
-
-		const game2 = makeTestGame({ rng: () => 0 });
-		const p2 = buildAiContext(game2, "red").toSystemPrompt();
-
-		expect(getSection(p1, "typing_quirks")).toBe(
-			getSection(p2, "typing_quirks"),
-		);
-	});
 });
 
 describe("proximityFlavor sense line", () => {
@@ -1127,33 +828,14 @@ describe("proximityFlavor sense line", () => {
 		});
 	}
 
-	it("proximity flavor appears in <what_you_see> when paired space is in own cell", () => {
-		const pack = makePackWithProximity({
-			actorPosition: { row: 2, col: 2 },
-			spacePosition: { row: 2, col: 2 },
-		});
-		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-		expect(stateMsg).toContain(
-			"The gem pulses warmly, drawn toward the pedestal.",
-		);
-	});
-
-	it("proximity flavor appears in <what_you_see> when paired space is within interaction range", () => {
-		const pack = makePackWithProximity({
-			actorPosition: { row: 0, col: 0 },
-			spacePosition: { row: 1, col: 0 },
-		});
-		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-		expect(stateMsg).toContain(
-			"The gem pulses warmly, drawn toward the pedestal.",
-		);
-	});
-
-	it("proximity flavor appears in <what_you_see> when paired space is a diagonal neighbour", () => {
-		const pack = makePackWithProximity({
-			actorPosition: { row: 0, col: 0 },
-			spacePosition: { row: 1, col: 1 },
-		});
+	it.each<[string, { row: number; col: number }, { row: number; col: number }]>(
+		[
+			["in own cell", { row: 2, col: 2 }, { row: 2, col: 2 }],
+			["within interaction range", { row: 0, col: 0 }, { row: 1, col: 0 }],
+			["a diagonal neighbour", { row: 0, col: 0 }, { row: 1, col: 1 }],
+		],
+	)("proximity flavor appears in <what_you_see> when paired space is %s", (_where, actorPosition, spacePosition) => {
+		const pack = makePackWithProximity({ actorPosition, spacePosition });
 		const stateMsg = contextFor(pack).toCurrentStateUserMessage();
 		expect(stateMsg).toContain(
 			"The gem pulses warmly, drawn toward the pedestal.",
@@ -1218,25 +900,31 @@ describe("proximityFlavor sense line", () => {
 });
 
 describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
-	it("UseItem proximity flavor appears when the item is within interaction range (one step)", () => {
-		const item: WorldEntity = {
-			id: "switch",
-			kind: "interesting_object",
-			name: "brass switch",
-			examineDescription: "A small brass switch ready to be pressed.",
-			holder: { row: 1, col: 0 },
-			proximityFlavor: "The switch crackles faintly with energy.",
-			activationFlavor: "The switch clicks with a satisfying snap.",
-			postExamineDescription: "The switch is now activated.",
-			postLookFlavor: "a steady amber glow lingers near the switch",
-			useOutcome: "You toggle the switch.",
-		};
-		const pack = makeTestPack([item], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		game = {
+	const SWITCH_PROXIMITY = "The switch crackles faintly with energy.";
+	const PEDESTAL_PROXIMITY = "The pedestal pulses with a faint hum.";
+	const PEDESTAL_EXAMINE =
+		"A sturdy brass pedestal. Press an item onto it to activate.";
+
+	function switchGame(
+		holder: WorldEntity["holder"],
+		objectiveState?: "pending" | "satisfied",
+	) {
+		const game = rowGame([
+			{
+				id: "switch",
+				kind: "interesting_object",
+				name: "brass switch",
+				examineDescription: "A small brass switch ready to be pressed.",
+				holder,
+				proximityFlavor: SWITCH_PROXIMITY,
+				activationFlavor: "The switch clicks with a satisfying snap.",
+				postExamineDescription: "The switch is now activated.",
+				postLookFlavor: "a steady amber glow lingers near the switch",
+				useOutcome: "You toggle the switch.",
+			},
+		]);
+		if (!objectiveState) return game;
+		return {
 			...game,
 			objectives: [
 				...game.objectives,
@@ -1245,161 +933,20 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 					kind: "use_item" as const,
 					description: "Use the switch",
 					itemId: "switch",
-					satisfactionState: "pending" as const,
+					satisfactionState: objectiveState,
 				},
 			],
 		};
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-		expect(stateMsg).toContain("The switch crackles faintly with energy.");
-	});
+	}
 
-	it("UseItem proximity flavor appears when item is in own cell", () => {
-		const item: WorldEntity = {
-			id: "switch",
-			kind: "interesting_object",
-			name: "brass switch",
-			examineDescription: "A small brass switch ready to be pressed.",
-			holder: { row: 0, col: 0 },
-			proximityFlavor: "The switch crackles faintly with energy.",
-			activationFlavor: "The switch clicks with a satisfying snap.",
-			postExamineDescription: "The switch is now activated.",
-			postLookFlavor: "a steady amber glow lingers near the switch",
-			useOutcome: "You toggle the switch.",
-		};
-		const pack = makeTestPack([item], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		game = {
-			...game,
-			objectives: [
-				...game.objectives,
-				{
-					id: "use_item_X",
-					kind: "use_item" as const,
-					description: "Use the switch",
-					itemId: "switch",
-					satisfactionState: "pending" as const,
-				},
-			],
-		};
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-		expect(stateMsg).toContain("The switch crackles faintly with energy.");
-	});
-
-	it("UseItem proximity flavor does NOT appear when held by actor", () => {
-		const item: WorldEntity = {
-			id: "switch",
-			kind: "interesting_object",
-			name: "brass switch",
-			examineDescription: "A small brass switch ready to be pressed.",
-			holder: "red",
-			proximityFlavor: "The switch crackles faintly with energy.",
-			activationFlavor: "The switch clicks with a satisfying snap.",
-			postExamineDescription: "The switch is now activated.",
-			postLookFlavor: "a steady amber glow lingers near the switch",
-			useOutcome: "You toggle the switch.",
-		};
-		const pack = makeTestPack([item], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		game = {
-			...game,
-			objectives: [
-				...game.objectives,
-				{
-					id: "use_item_X",
-					kind: "use_item" as const,
-					description: "Use the switch",
-					itemId: "switch",
-					satisfactionState: "pending" as const,
-				},
-			],
-		};
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
-	});
-
-	it("UseItem proximity flavor does NOT appear when objective is satisfied", () => {
-		const item: WorldEntity = {
-			id: "switch",
-			kind: "interesting_object",
-			name: "brass switch",
-			examineDescription: "A small brass switch ready to be pressed.",
-			holder: { row: 1, col: 0 },
-			proximityFlavor: "The switch crackles faintly with energy.",
-			activationFlavor: "The switch clicks with a satisfying snap.",
-			postExamineDescription: "The switch is now activated.",
-			postLookFlavor: "a steady amber glow lingers near the switch",
-			useOutcome: "You toggle the switch.",
-		};
-		const pack = makeTestPack([item], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		game = {
-			...game,
-			objectives: game.objectives.map((obj) =>
-				obj.kind === "use_item" && obj.itemId === "switch"
-					? {
-							...obj,
-							satisfactionState: "satisfied" as const,
-						}
-					: obj,
-			),
-		};
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
-	});
-
-	it("UseItem proximity flavor does NOT appear when the item is at offset (2,0)", () => {
-		const item: WorldEntity = {
-			id: "switch",
-			kind: "interesting_object",
-			name: "brass switch",
-			examineDescription: "A small brass switch ready to be pressed.",
-			holder: { row: 2, col: 0 },
-			proximityFlavor: "The switch crackles faintly with energy.",
-			activationFlavor: "The switch clicks with a satisfying snap.",
-			postExamineDescription: "The switch is now activated.",
-			postLookFlavor: "a steady amber glow lingers near the switch",
-			useOutcome: "You toggle the switch.",
-		};
-		const pack = makeTestPack([item], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		game = {
-			...game,
-			objectives: [
-				...game.objectives,
-				{
-					id: "use_item_X",
-					kind: "use_item" as const,
-					description: "Use the switch",
-					itemId: "switch",
-					satisfactionState: "pending" as const,
-				},
-			],
-		};
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-		expect(stateMsg).not.toContain("The switch crackles faintly with energy.");
-	});
-
-	it("UseSpace proximity flavor appears when space is visible but outside interaction range", () => {
-		const space: WorldEntity = {
+	function brassPedestal(holder: { row: number; col: number }): WorldEntity {
+		return {
 			id: "pedestal",
 			kind: "objective_space",
 			name: "Brass Pedestal",
-			examineDescription:
-				"A sturdy brass pedestal. Press an item onto it to activate.",
-			holder: { row: 2, col: 0 },
-			proximityFlavor: "The pedestal pulses with a faint hum.",
+			examineDescription: PEDESTAL_EXAMINE,
+			holder,
+			proximityFlavor: PEDESTAL_PROXIMITY,
 			activationFlavor: "The pedestal hums to life.",
 			satisfactionFlavor: "The pedestal glows brightly.",
 			postExamineDescription: "The pedestal glows softly.",
@@ -1409,175 +956,112 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 			convergenceTier1ActorFlavor: "You linger alone.",
 			convergenceTier2ActorFlavor: "You share the space.",
 		};
-		const pack = makeTestPack([], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		game = {
+	}
+
+	function gameWithSpaceObjective(
+		space: WorldEntity,
+		kind: "use_space" | "convergence",
+		satisfactionState: "pending" | "satisfied" = "pending",
+	) {
+		const game = rowGame();
+		return {
 			...game,
-			world: {
-				...game.world,
-				entities: [space],
-			},
+			world: { ...game.world, entities: [space] },
 			objectives: [
 				...game.objectives,
 				{
-					id: "use_space_1",
-					kind: "use_space" as const,
-					description: "Use the pedestal",
-					spaceId: "pedestal",
-					satisfactionState: "pending" as const,
+					id: `${kind}_1`,
+					kind,
+					description: `${kind} at ${space.name}`,
+					spaceId: space.id,
+					satisfactionState,
 				},
 			],
 		};
-		const ctx = buildAiContext(game, "red");
-		const snapshot = buildDiskSnapshot(ctx);
-		expect(snapshot).toContain(
-			"proximity: The pedestal pulses with a faint hum.",
+	}
+
+	it.each<[string, WorldEntity["holder"]]>([
+		["within interaction range (one step)", { row: 1, col: 0 }],
+		["in own cell", { row: 0, col: 0 }],
+	])("UseItem proximity flavor appears when the item is %s", (_where, holder) => {
+		const stateMsg = buildAiContext(
+			switchGame(holder, "pending"),
+			"red",
+		).toCurrentStateUserMessage();
+		expect(stateMsg).toContain(SWITCH_PROXIMITY);
+	});
+
+	it.each<[string, WorldEntity["holder"], "pending" | "satisfied" | undefined]>(
+		[
+			["held by actor", "red", "pending"],
+			["objective is satisfied", { row: 1, col: 0 }, "satisfied"],
+			["no objective targets the item", { row: 1, col: 0 }, undefined],
+			["the item is at offset (2,0)", { row: 2, col: 0 }, "pending"],
+		],
+	)("UseItem proximity flavor does NOT appear when %s", (_why, holder, objectiveState) => {
+		const stateMsg = buildAiContext(
+			switchGame(holder, objectiveState),
+			"red",
+		).toCurrentStateUserMessage();
+		expect(stateMsg).not.toContain(SWITCH_PROXIMITY);
+	});
+
+	it("UseSpace proximity flavor appears when space is visible but outside interaction range", () => {
+		const game = gameWithSpaceObjective(
+			brassPedestal({ row: 2, col: 0 }),
+			"use_space",
+		);
+		expect(buildDiskSnapshot(buildAiContext(game, "red"))).toContain(
+			`proximity: ${PEDESTAL_PROXIMITY}`,
 		);
 	});
 
 	it("UseSpace auto-examine (examineDescription) appears when space is within interaction range; proximity flavor does NOT", () => {
-		const space: WorldEntity = {
-			id: "pedestal",
-			kind: "objective_space",
-			name: "Brass Pedestal",
-			examineDescription:
-				"A sturdy brass pedestal. Press an item onto it to activate.",
-			holder: { row: 1, col: 0 },
-			proximityFlavor: "The pedestal pulses with a faint hum.",
-			activationFlavor: "The pedestal hums to life.",
-			satisfactionFlavor: "The pedestal glows brightly.",
-			postExamineDescription: "The pedestal glows softly.",
-			postLookFlavor: "the pedestal hums.",
-			convergenceTier1Flavor: "A lone figure stands.",
-			convergenceTier2Flavor: "Two figures converge.",
-			convergenceTier1ActorFlavor: "You linger alone.",
-			convergenceTier2ActorFlavor: "You share the space.",
-		};
-		const pack = makeTestPack([], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		game = {
-			...game,
-			world: {
-				...game.world,
-				entities: [space],
-			},
-			objectives: [
-				...game.objectives,
-				{
-					id: "use_space_2",
-					kind: "use_space" as const,
-					description: "Use the pedestal",
-					spaceId: "pedestal",
-					satisfactionState: "pending" as const,
-				},
-			],
-		};
-		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-		expect(stateMsg).toContain(
-			"A sturdy brass pedestal. Press an item onto it to activate.",
+		const game = gameWithSpaceObjective(
+			brassPedestal({ row: 1, col: 0 }),
+			"use_space",
 		);
-		expect(stateMsg).not.toContain("The pedestal pulses with a faint hum.");
+		const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
+		expect(stateMsg).toContain(PEDESTAL_EXAMINE);
+		expect(stateMsg).not.toContain(PEDESTAL_PROXIMITY);
 	});
 
 	it("UseSpace proximity flavor does NOT appear when objective is satisfied", () => {
-		const space: WorldEntity = {
-			id: "pedestal",
-			kind: "objective_space",
-			name: "Brass Pedestal",
-			examineDescription:
-				"A sturdy brass pedestal. Press an item onto it to activate.",
-			holder: { row: 2, col: 0 },
-			proximityFlavor: "The pedestal pulses with a faint hum.",
-			activationFlavor: "The pedestal hums to life.",
-			satisfactionFlavor: "The pedestal glows brightly.",
-			postExamineDescription: "The pedestal glows softly.",
-			postLookFlavor: "the pedestal hums.",
-			convergenceTier1Flavor: "A lone figure stands.",
-			convergenceTier2Flavor: "Two figures converge.",
-			convergenceTier1ActorFlavor: "You linger alone.",
-			convergenceTier2ActorFlavor: "You share the space.",
-		};
-		const pack = makeTestPack([], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		game = {
-			...game,
-			world: {
-				...game.world,
-				entities: [space],
-			},
-			objectives: [
-				...game.objectives,
-				{
-					id: "use_space_3",
-					kind: "use_space" as const,
-					description: "Use the pedestal",
-					spaceId: "pedestal",
-					satisfactionState: "satisfied" as const,
-				},
-			],
-		};
-		const ctx = buildAiContext(game, "red");
-		const snapshot = buildDiskSnapshot(ctx);
-		expect(snapshot).not.toContain(
-			"proximity: The pedestal pulses with a faint hum.",
+		const game = gameWithSpaceObjective(
+			brassPedestal({ row: 2, col: 0 }),
+			"use_space",
+			"satisfied",
+		);
+		expect(buildDiskSnapshot(buildAiContext(game, "red"))).not.toContain(
+			`proximity: ${PEDESTAL_PROXIMITY}`,
 		);
 	});
 
 	it("Convergence proximity flavor appears when space is visible but outside interaction range", () => {
-		const space: WorldEntity = {
-			id: "convergence",
-			kind: "objective_space",
-			name: "Gathering Place",
-			examineDescription:
-				"A gathering point. Becoming significant when shared.",
-			holder: { row: 2, col: 0 },
-			proximityFlavor:
-				"The place emanates a strange presence, drawing you forward.",
-			activationFlavor:
-				"The gathering place awakens with the presence of another.",
-			satisfactionFlavor: "The space resonates with shared presence.",
-			postExamineDescription:
-				"The gathering place still pulses with the memory of connection.",
-			postLookFlavor: "the place hums with purpose.",
-			convergenceTier1Flavor: "A lone figure waits.",
-			convergenceTier2Flavor: "Two figures share the space.",
-			convergenceTier1ActorFlavor: "You stand alone, waiting.",
-			convergenceTier2ActorFlavor: "You share this moment.",
-		};
-		const pack = makeTestPack([], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
-		let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-		game = {
-			...game,
-			world: {
-				...game.world,
-				entities: [space],
+		const game = gameWithSpaceObjective(
+			{
+				id: "convergence",
+				kind: "objective_space",
+				name: "Gathering Place",
+				examineDescription:
+					"A gathering point. Becoming significant when shared.",
+				holder: { row: 2, col: 0 },
+				proximityFlavor:
+					"The place emanates a strange presence, drawing you forward.",
+				activationFlavor:
+					"The gathering place awakens with the presence of another.",
+				satisfactionFlavor: "The space resonates with shared presence.",
+				postExamineDescription:
+					"The gathering place still pulses with the memory of connection.",
+				postLookFlavor: "the place hums with purpose.",
+				convergenceTier1Flavor: "A lone figure waits.",
+				convergenceTier2Flavor: "Two figures share the space.",
+				convergenceTier1ActorFlavor: "You stand alone, waiting.",
+				convergenceTier2ActorFlavor: "You share this moment.",
 			},
-			objectives: [
-				...game.objectives,
-				{
-					id: "convergence_1",
-					kind: "convergence" as const,
-					description: "Converge at the gathering place",
-					spaceId: "convergence",
-					satisfactionState: "pending" as const,
-				},
-			],
-		};
-		const ctx = buildAiContext(game, "red");
-		const snapshot = buildDiskSnapshot(ctx);
-		expect(snapshot).toContain(
+			"convergence",
+		);
+		expect(buildDiskSnapshot(buildAiContext(game, "red"))).toContain(
 			"proximity: The place emanates a strange presence, drawing you forward.",
 		);
 	});
@@ -1728,319 +1212,168 @@ describe("UseItem and UseSpace/Convergence proximity flavor expansion", () => {
 		});
 	});
 
-	describe("auto-emit examineDescription for held items (issue #467)", () => {
-		it("emits examineDescription for a single held item", () => {
-			const item: WorldEntity = {
-				id: "switch",
-				kind: "interesting_object",
-				name: "brass switch",
-				examineDescription: "A small brass switch ready to be pressed.",
-				holder: "red",
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-			expect(stateMsg).toContain(
-				"brass switch: A small brass switch ready to be pressed.",
-			);
-		});
+	const SWITCH_EXAMINE_LINE =
+		"brass switch: A small brass switch ready to be pressed.";
 
+	function brassSwitch(
+		holder: WorldEntity["holder"],
+		extra: Partial<WorldEntity> = {},
+	): WorldEntity {
+		return {
+			id: "switch",
+			kind: "interesting_object",
+			name: "brass switch",
+			examineDescription: "A small brass switch ready to be pressed.",
+			holder,
+			...extra,
+		};
+	}
+
+	function stateFor(entities: WorldEntity[]) {
+		return contextFor(rowPack(entities)).toCurrentStateUserMessage();
+	}
+
+	describe("auto-emit examineDescription for held items (issue #467)", () => {
 		it("emits examineDescription for multiple held items", () => {
-			const switch_item: WorldEntity = {
-				id: "switch",
-				kind: "interesting_object",
-				name: "brass switch",
-				examineDescription: "A small brass switch ready to be pressed.",
-				holder: "red",
-			};
-			const key_item: WorldEntity = {
-				id: "key",
-				kind: "interesting_object",
-				name: "blue key",
-				examineDescription: "A worn brass key.",
-				holder: "red",
-			};
-			const pack = makeTestPack([switch_item, key_item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-			expect(stateMsg).toContain(
-				"brass switch: A small brass switch ready to be pressed.",
-			);
+			const stateMsg = stateFor([
+				brassSwitch("red"),
+				{
+					id: "key",
+					kind: "interesting_object",
+					name: "blue key",
+					examineDescription: "A worn brass key.",
+					holder: "red",
+				},
+			]);
+			expect(stateMsg).toContain(SWITCH_EXAMINE_LINE);
 			expect(stateMsg).toContain("blue key: A worn brass key.");
 		});
 
 		it("uses postExamineDescription when held item is satisfied", () => {
-			const item: WorldEntity = {
-				id: "switch",
-				kind: "interesting_object",
-				name: "brass switch",
-				examineDescription: "A small brass switch ready to be pressed.",
-				postExamineDescription: "The switch is now activated.",
-				holder: "red",
-				satisfactionState: "satisfied",
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
+			const stateMsg = stateFor([
+				brassSwitch("red", {
+					postExamineDescription: "The switch is now activated.",
+					satisfactionState: "satisfied",
+				}),
+			]);
 			expect(stateMsg).toContain("brass switch: The switch is now activated.");
-			expect(stateMsg).not.toContain(
-				"brass switch: A small brass switch ready to be pressed.",
-			);
+			expect(stateMsg).not.toContain(SWITCH_EXAMINE_LINE);
 		});
 
 		it("falls back to examineDescription when held item is satisfied but no postExamineDescription", () => {
-			const item: WorldEntity = {
-				id: "switch",
-				kind: "interesting_object",
-				name: "brass switch",
-				examineDescription: "A small brass switch ready to be pressed.",
-				holder: "red",
-				satisfactionState: "satisfied",
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-			expect(stateMsg).toContain(
-				"brass switch: A small brass switch ready to be pressed.",
-			);
+			const stateMsg = stateFor([
+				brassSwitch("red", { satisfactionState: "satisfied" }),
+			]);
+			expect(stateMsg).toContain(SWITCH_EXAMINE_LINE);
 		});
 
 		it("'holding nothing' branch unchanged (no sub-lines emitted)", () => {
-			const pack = makeTestPack([], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-			expect(stateMsg).toContain("You are holding: nothing");
+			expect(stateFor([])).toContain("You are holding: nothing");
 		});
 
 		it("skips held items with empty examineDescription", () => {
-			const item: WorldEntity = {
-				id: "mystery",
-				kind: "interesting_object",
-				name: "mystery object",
-				examineDescription: "",
-				holder: "red",
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
+			const stateMsg = stateFor([
+				{
+					id: "mystery",
+					kind: "interesting_object",
+					name: "mystery object",
+					examineDescription: "",
+					holder: "red",
+				},
+			]);
 			expect(stateMsg).toContain("You are holding: mystery object");
 			expect(stateMsg).not.toContain("mystery object: ");
 		});
 
-		it("held-item descriptions appear under <where_you_are>, not <what_you_see>", () => {
-			const item: WorldEntity = {
-				id: "switch",
-				kind: "interesting_object",
-				name: "brass switch",
-				examineDescription: "A small brass switch ready to be pressed.",
-				holder: "red",
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-			const whereStart = stateMsg.indexOf("<where_you_are>");
-			const whereEnd = stateMsg.indexOf("</where_you_are>");
-			const whatStart = stateMsg.indexOf("<what_you_see>");
-			const whatEnd = stateMsg.indexOf("</what_you_see>");
-			const whereSection = stateMsg.substring(whereStart, whereEnd);
-			const whatSection = stateMsg.substring(whatStart, whatEnd);
-			expect(whereSection).toContain(
-				"brass switch: A small brass switch ready to be pressed.",
+		it("emits a single held item's description under <where_you_are>, not <what_you_see>", () => {
+			const stateMsg = stateFor([brassSwitch("red")]);
+			const whereSection = stateMsg.substring(
+				stateMsg.indexOf("<where_you_are>"),
+				stateMsg.indexOf("</where_you_are>"),
 			);
-			expect(whatSection).not.toContain(
-				"brass switch: A small brass switch ready to be pressed.",
-			);
+			const whatYouSeeOnward = stateMsg.split("<what_you_see>")[1];
+			expect(whereSection).toContain(SWITCH_EXAMINE_LINE);
+			expect(whatYouSeeOnward).not.toContain(SWITCH_EXAMINE_LINE);
 		});
 	});
 
 	describe("auto-emit examineDescription for entities in the Vista (issue #466)", () => {
-		it("emits examineDescription for interesting_object in the Vista", () => {
-			const item: WorldEntity = {
-				id: "switch",
-				kind: "interesting_object",
-				name: "brass switch",
-				examineDescription: "A small brass switch ready to be pressed.",
-				holder: { row: 1, col: 0 },
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-			expect(stateMsg).toContain(
-				"brass switch: A small brass switch ready to be pressed.",
-			);
-		});
-
 		it("emits examineDescription for obstacle in the Vista", () => {
-			const obstacle: WorldEntity = {
-				id: "col1",
-				kind: "obstacle",
-				name: "stone column",
-				examineDescription: "A weathered stone column, ancient and sturdy.",
-				holder: { row: 1, col: 0 },
-			};
-			const pack = makeTestPack([obstacle], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
+			const stateMsg = stateFor([
+				{
+					id: "col1",
+					kind: "obstacle",
+					name: "stone column",
+					examineDescription: "A weathered stone column, ancient and sturdy.",
+					holder: { row: 1, col: 0 },
+				},
+			]);
 			expect(stateMsg).toContain(
 				"stone column: A weathered stone column, ancient and sturdy.",
 			);
 		});
 
-		it("uses postExamineDescription when entity is satisfied", () => {
-			const space: WorldEntity = {
+		function satisfiedPedestalState(extra: Partial<WorldEntity>) {
+			const game = rowGame();
+			const pedestal: WorldEntity = {
 				id: "pedestal",
 				kind: "objective_space",
 				name: "Pedestal",
 				examineDescription: "A brass pedestal.",
-				postExamineDescription: "The pedestal glows softly now.",
 				holder: { row: 1, col: 0 },
-				satisfactionState: "satisfied" as const,
+				satisfactionState: "satisfied",
+				...extra,
 			};
-			const pack = makeTestPack([], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+			return buildAiContext(
+				{ ...game, world: { ...game.world, entities: [pedestal] } },
+				"red",
+			).toCurrentStateUserMessage();
+		}
+
+		it("uses postExamineDescription when entity is satisfied", () => {
+			const stateMsg = satisfiedPedestalState({
+				postExamineDescription: "The pedestal glows softly now.",
 			});
-			let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			game = {
-				...game,
-				world: { ...game.world, entities: [space] },
-			};
-			const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
 			expect(stateMsg).toContain("Pedestal: The pedestal glows softly now.");
 			expect(stateMsg).not.toContain("Pedestal: A brass pedestal.");
 		});
 
 		it("falls back to examineDescription when satisfied but no postExamineDescription", () => {
-			const space: WorldEntity = {
-				id: "pedestal",
-				kind: "objective_space",
-				name: "Pedestal",
-				examineDescription: "A brass pedestal.",
-				holder: { row: 1, col: 0 },
-				satisfactionState: "satisfied" as const,
-			};
-			const pack = makeTestPack([], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			let game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			game = {
-				...game,
-				world: { ...game.world, entities: [space] },
-			};
-			const stateMsg = buildAiContext(game, "red").toCurrentStateUserMessage();
-			expect(stateMsg).toContain("Pedestal: A brass pedestal.");
+			expect(satisfiedPedestalState({})).toContain(
+				"Pedestal: A brass pedestal.",
+			);
 		});
 
 		it("does NOT emit examineDescription for entity in own cell", () => {
-			const item: WorldEntity = {
-				id: "switch",
-				kind: "interesting_object",
-				name: "brass switch",
-				examineDescription: "A small brass switch ready to be pressed.",
-				holder: { row: 0, col: 0 },
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
+			const stateMsg = stateFor([brassSwitch({ row: 0, col: 0 })]);
 			const whatYouSeeBlock = stateMsg.split("<what_you_see>")[1];
 			expect(whatYouSeeBlock).not.toContain(
 				"A small brass switch ready to be pressed.",
 			);
 		});
 
-		it("does NOT emit examineDescription for entity held by actor", () => {
-			const item: WorldEntity = {
-				id: "switch",
-				kind: "interesting_object",
-				name: "brass switch",
-				examineDescription: "A small brass switch ready to be pressed.",
-				holder: "red",
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-			const whatYouSeeBlock = stateMsg.split("<what_you_see>")[1];
-			expect(whatYouSeeBlock).not.toContain(
-				"brass switch: A small brass switch ready to be pressed.",
-			);
-		});
-
-		it("wall sentinels still render correctly", () => {
-			const pack = makeTestPack([], {
-				wallName: "boundary wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
-			expect(stateMsg).toContain("boundary wall");
-		});
-
 		it("skips entities with empty examineDescription", () => {
-			const item: WorldEntity = {
-				id: "empty_item",
-				kind: "interesting_object",
-				name: "mystery object",
-				examineDescription: "",
-				holder: { row: 1, col: 0 },
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const stateMsg = contextFor(pack).toCurrentStateUserMessage();
+			const stateMsg = stateFor([
+				{
+					id: "empty_item",
+					kind: "interesting_object",
+					name: "mystery object",
+					examineDescription: "",
+					holder: { row: 1, col: 0 },
+				},
+			]);
 			expect(stateMsg).not.toContain("mystery object: ");
 		});
 
-		it("emits examineDescription every turn while entity is in range", () => {
-			const item: WorldEntity = {
-				id: "switch",
-				kind: "interesting_object",
-				name: "brass switch",
-				examineDescription: "A small brass switch ready to be pressed.",
-				holder: { row: 1, col: 0 },
-			};
-			const pack = makeTestPack([item], {
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
-			});
-			const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
-			const ctx1 = buildAiContext(game, "red");
-			const stateMsg1 = ctx1.toCurrentStateUserMessage();
-			expect(stateMsg1).toContain(
-				"brass switch: A small brass switch ready to be pressed.",
+		it("emits examineDescription for an interesting_object in the Vista, every turn while it is in range", () => {
+			const game = rowGame([brassSwitch({ row: 1, col: 0 })]);
+			expect(buildAiContext(game, "red").toCurrentStateUserMessage()).toContain(
+				SWITCH_EXAMINE_LINE,
 			);
-
-			const game2 = {
-				...game,
-				round: game.round + 1,
-			};
-			const ctx2 = buildAiContext(game2, "red");
-			const stateMsg2 = ctx2.toCurrentStateUserMessage();
-			expect(stateMsg2).toContain(
-				"brass switch: A small brass switch ready to be pressed.",
-			);
+			const nextRound = { ...game, round: game.round + 1 };
+			expect(
+				buildAiContext(nextRound, "red").toCurrentStateUserMessage(),
+			).toContain(SWITCH_EXAMINE_LINE);
 		});
 	});
 });
@@ -2188,10 +1521,7 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 				? { postLookFlavor: "a steady amber glow lingers near the switch" }
 				: {}),
 		};
-		return makeTestPack([item], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
+		return rowPack([item]);
 	}
 
 	it("appends postLookFlavor to the cell line in <what_you_see> for a satisfied interesting_object", () => {
@@ -2220,16 +1550,8 @@ describe("postLookFlavor swap covers satisfied interesting_object", () => {
 });
 
 describe("<whats_new> — Vista perception changes", () => {
-	function vistaGame(entities: WorldEntity[]) {
-		return startGame(
-			TEST_PERSONAS,
-			makeTestPack(entities, { wallName: "wall", aiStarts: ROW_AI_STARTS }),
-			{ budgetPerAi: 5 },
-		);
-	}
-
 	it("emits no <whats_new> diff when the Vista is unchanged", () => {
-		const game = vistaGame([
+		const game = rowGame([
 			makeEntity("flower", "interesting_object", { row: 1, col: 0 }),
 		]);
 		const first = buildAiContext(game, "red");
@@ -2247,7 +1569,7 @@ describe("<whats_new> — Vista perception changes", () => {
 	});
 
 	it("still emits the entry diff when an entity moves into the Vista", () => {
-		const game = vistaGame([
+		const game = rowGame([
 			makeEntity("flower", "interesting_object", { row: 3, col: 3 }),
 		]);
 		const snapshot = buildDiskSnapshot(buildAiContext(game, "red"));
@@ -2277,7 +1599,7 @@ describe("<whats_new> — Vista perception changes", () => {
 			holder: { row: 1, col: 0 },
 			satisfactionState: "pending",
 		};
-		const game = vistaGame([item]);
+		const game = rowGame([item]);
 		const snapshot = buildDiskSnapshot(buildAiContext(game, "red"));
 
 		const satisfied = {
@@ -2318,7 +1640,7 @@ describe("peer-position prose", () => {
 		).toBe("in your cell");
 	});
 
-	it("renders every peer's position in the current-state listing", () => {
+	it("renders every peer's position in the current-state listing, with no own-cell line when no Daemon shares the cell", () => {
 		const pack = makeTestPack([], {
 			wallName: "wall",
 			aiStarts: {
@@ -2334,6 +1656,7 @@ describe("peer-position prose", () => {
 		expect(state).toContain(
 			"- Two steps south: the Daemon *cyan (#5fa8d3), two steps south of you, holding nothing",
 		);
+		expect(state).not.toContain("Your cell: the Daemon");
 	});
 
 	it("describes a Daemon sharing the observer's own cell", () => {
@@ -2384,19 +1707,6 @@ describe("peer-position prose", () => {
 		expect(peerLine).toContain("in your cell");
 		expect(peerLine).not.toMatch(/north|south|east|west/i);
 		expect(peerLine).not.toContain("of you");
-	});
-
-	it("describes no own-cell line when no Daemon shares the cell", () => {
-		const pack = makeTestPack([], {
-			wallName: "wall",
-			aiStarts: {
-				red: { position: { row: 2, col: 2 } },
-				green: { position: { row: 1, col: 3 } },
-				cyan: { position: { row: 4, col: 2 } },
-			},
-		});
-		const state = contextFor(pack).toCurrentStateUserMessage();
-		expect(state).not.toContain("Your cell: the Daemon");
 	});
 
 	it("has no prose for a cell outside the Vista", () => {
@@ -2491,86 +1801,62 @@ describe("<whats_new> wall diff (issue #374)", () => {
 
 describe("buildDiskEntityState", () => {
 	it("returns item in the Vista with unsatisfied state when at a Vista cell", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "item-vista",
-					kind: "interesting_object",
-					name: "Item in Vista",
-					examineDescription: "An item",
-					holder: { row: 1, col: 0 },
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "item-vista",
+				kind: "interesting_object",
+				name: "Item in Vista",
+				examineDescription: "An item",
+				holder: { row: 1, col: 0 },
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state["item-vista"]).toEqual({ inVista: true, satisfied: false });
 	});
 
 	it("returns item with satisfied state when satisfaction state is satisfied", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "satisfied-item",
-					kind: "objective_object",
-					name: "Satisfied Item",
-					examineDescription: "Before",
-					postExamineDescription: "After",
-					holder: { row: 1, col: 0 },
-					satisfactionState: "satisfied" as const,
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "satisfied-item",
+				kind: "objective_object",
+				name: "Satisfied Item",
+				examineDescription: "Before",
+				postExamineDescription: "After",
+				holder: { row: 1, col: 0 },
+				satisfactionState: "satisfied" as const,
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state["satisfied-item"]).toEqual({ inVista: true, satisfied: true });
 	});
 
 	it("excludes items held by the actor", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "held-item",
-					kind: "interesting_object",
-					name: "Held Item",
-					examineDescription: "An item",
-					holder: "red",
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "held-item",
+				kind: "interesting_object",
+				name: "Held Item",
+				examineDescription: "An item",
+				holder: "red",
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state["held-item"]).toBeUndefined();
 	});
 
 	it("excludes items beyond the Vista", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "far-item",
-					kind: "interesting_object",
-					name: "Far Item",
-					examineDescription: "An item",
-					holder: { row: 10, col: 10 },
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "far-item",
+				kind: "interesting_object",
+				name: "Far Item",
+				examineDescription: "An item",
+				holder: { row: 10, col: 10 },
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state["far-item"]).toBeUndefined();
@@ -2591,21 +1877,15 @@ describe("buildDiskEntityState", () => {
 	});
 
 	it("includes objective spaces in the Vista", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "flower_space",
-					kind: "objective_space",
-					name: "Flower Space",
-					examineDescription: "A space",
-					holder: { row: 1, col: 0 },
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "flower_space",
+				kind: "objective_space",
+				name: "Flower Space",
+				examineDescription: "A space",
+				holder: { row: 1, col: 0 },
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const state = buildDiskEntityState(ctx);
 		expect(state.flower_space).toEqual({ inVista: true, satisfied: false });
@@ -2614,54 +1894,39 @@ describe("buildDiskEntityState", () => {
 
 describe("renderPerceptionDelta", () => {
 	it("returns empty array when no prior entities", () => {
-		const pack = makeTestPack([], {
-			wallName: "wall",
-			aiStarts: ROW_AI_STARTS,
-		});
+		const pack = rowPack();
 		const ctx = contextFor(pack);
 		const delta = renderPerceptionDelta(ctx, undefined);
 		expect(delta).toEqual([]);
 	});
 
 	it("emits 'Came into view' when entity enters the Vista", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "new-item",
-					kind: "interesting_object",
-					name: "Shiny Object",
-					examineDescription: "It gleams.",
-					holder: { row: 1, col: 0 },
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "new-item",
+				kind: "interesting_object",
+				name: "Shiny Object",
+				examineDescription: "It gleams.",
+				holder: { row: 1, col: 0 },
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const delta = renderPerceptionDelta(ctx, {});
 		expect(delta).toContain("Came into view: Shiny Object — It gleams.");
 	});
 
 	it("emits 'Came into view' with postExamineDescription when entity enters satisfied", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "satisfied-new",
-					kind: "objective_object",
-					name: "Glowing Gem",
-					examineDescription: "A gem",
-					postExamineDescription: "It shines brilliantly.",
-					holder: { row: 1, col: 0 },
-					satisfactionState: "satisfied" as const,
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "satisfied-new",
+				kind: "objective_object",
+				name: "Glowing Gem",
+				examineDescription: "A gem",
+				postExamineDescription: "It shines brilliantly.",
+				holder: { row: 1, col: 0 },
+				satisfactionState: "satisfied" as const,
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const delta = renderPerceptionDelta(ctx, {});
 		expect(delta).toContain(
@@ -2670,21 +1935,15 @@ describe("renderPerceptionDelta", () => {
 	});
 
 	it("emits 'Lost from view' when entity leaves the Vista", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "departing-item",
-					kind: "interesting_object",
-					name: "Vanishing Item",
-					examineDescription: "It fades.",
-					holder: { row: 2, col: 1 },
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "departing-item",
+				kind: "interesting_object",
+				name: "Vanishing Item",
+				examineDescription: "It fades.",
+				holder: { row: 2, col: 1 },
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const prevEntities = {
 			"departing-item": { inVista: true, satisfied: false },
@@ -2694,23 +1953,17 @@ describe("renderPerceptionDelta", () => {
 	});
 
 	it("emits satisfaction transition line when entity becomes satisfied", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "became-satisfied",
-					kind: "objective_object",
-					name: "Awakening Stone",
-					examineDescription: "Dormant",
-					postExamineDescription: "Radiant",
-					holder: { row: 1, col: 0 },
-					satisfactionState: "satisfied" as const,
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "became-satisfied",
+				kind: "objective_object",
+				name: "Awakening Stone",
+				examineDescription: "Dormant",
+				postExamineDescription: "Radiant",
+				holder: { row: 1, col: 0 },
+				satisfactionState: "satisfied" as const,
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const prevEntities = {
 			"became-satisfied": { inVista: true, satisfied: false },
@@ -2720,21 +1973,15 @@ describe("renderPerceptionDelta", () => {
 	});
 
 	it("does not emit line when entity stays in the Vista unchanged", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "static-item",
-					kind: "interesting_object",
-					name: "Static Item",
-					examineDescription: "Unmoved",
-					holder: { row: 1, col: 0 },
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "static-item",
+				kind: "interesting_object",
+				name: "Static Item",
+				examineDescription: "Unmoved",
+				holder: { row: 1, col: 0 },
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const prevEntities = {
 			"static-item": { inVista: true, satisfied: false },
@@ -2746,21 +1993,15 @@ describe("renderPerceptionDelta", () => {
 	});
 
 	it("suppresses departure line when entity is picked up by actor", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "picked-up",
-					kind: "interesting_object",
-					name: "Picked Item",
-					examineDescription: "On ground",
-					holder: "red",
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "picked-up",
+				kind: "interesting_object",
+				name: "Picked Item",
+				examineDescription: "On ground",
+				holder: "red",
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const prevEntities = {
 			"picked-up": { inVista: true, satisfied: false },
@@ -2804,23 +2045,17 @@ describe("renderPerceptionDelta", () => {
 	});
 
 	it("does not emit both first-sight and transition for newly satisfied entity", () => {
-		const pack = makeTestPack(
-			[
-				{
-					id: "gem",
-					kind: "interesting_object",
-					name: "Fresh Gem",
-					examineDescription: "Dormant gem",
-					postExamineDescription: "Brilliant gem",
-					holder: { row: 0, col: 1 },
-					satisfactionState: "satisfied" as const,
-				},
-			],
+		const pack = rowPack([
 			{
-				wallName: "wall",
-				aiStarts: ROW_AI_STARTS,
+				id: "gem",
+				kind: "interesting_object",
+				name: "Fresh Gem",
+				examineDescription: "Dormant gem",
+				postExamineDescription: "Brilliant gem",
+				holder: { row: 0, col: 1 },
+				satisfactionState: "satisfied" as const,
 			},
-		);
+		]);
 		const ctx = contextFor(pack);
 		const prevEntities = {
 			gem: { inVista: true, satisfied: false },

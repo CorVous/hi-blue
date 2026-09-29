@@ -10,6 +10,7 @@ import {
 } from "./fixtures/local-storage";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
+import { waitUntilPasses } from "./fixtures/wait-until-passes";
 
 const TEST_CONTENT_PACK: ContentPack = {
 	setting: "",
@@ -163,7 +164,7 @@ describe("renderGame — game_ended disables #send permanently (regression #89)"
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(getEl<HTMLButtonElement>("#send").disabled).toBe(true);
 		});
 

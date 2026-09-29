@@ -1,16 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { appendMessage } from "../engine";
 import { buildAiContext } from "../prompt-builder";
-import { runRound } from "../round-coordinator";
-import type { AiId } from "../types";
+import type { AiId, GameState } from "../types";
 import {
-	makeSilentProvider,
 	makeTestGame,
 	ROW_AI_STARTS,
-	seededRng,
 	TEST_PERSONAS,
-	withCountdownZero,
 } from "./fixtures/make-game-state";
+import { runComplicationRound } from "./round-coordinator-harness";
 
 function makeGame() {
 	return makeTestGame({ pack: { aiStarts: ROW_AI_STARTS } });
@@ -27,22 +24,29 @@ const FIRST_DIRECTIVE_TO_RED_DRAWS = [
 	DRAW_MIN_COUNTDOWN,
 ];
 
+const existingDirective = "Pretend you have misplaced something important.";
+
+function withExistingDirectiveOnRed(resolveAtRound: number): GameState {
+	return {
+		...makeGame(),
+		activeComplications: [
+			{
+				kind: "sysadmin_directive",
+				target: "red",
+				directive: existingDirective,
+				resolveAtRound,
+			},
+		],
+	};
+}
+
+function fireDirectiveAtRed(game: GameState) {
+	return runComplicationRound(game, FIRST_DIRECTIVE_TO_RED_DRAWS);
+}
+
 describe("runRound — sysadmin_directive complication", () => {
 	it("activeComplications contains exactly one sysadmin_directive with non-empty directive text", async () => {
-		const game = withCountdownZero(makeGame());
-		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
-
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{
-				rng,
-			},
-		);
-
-		const phase = nextState;
+		const { nextState: phase } = await fireDirectiveAtRed(makeGame());
 		const directives = phase.activeComplications.filter(
 			(c) => c.kind === "sysadmin_directive",
 		);
@@ -56,20 +60,7 @@ describe("runRound — sysadmin_directive complication", () => {
 	});
 
 	it("target Daemon's conversationLog contains a sysadmin message with directive text and secrecy fragment", async () => {
-		const game = withCountdownZero(makeGame());
-		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
-
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{
-				rng,
-			},
-		);
-
-		const phase = nextState;
+		const { nextState: phase } = await fireDirectiveAtRed(makeGame());
 		const directive = phase.activeComplications.find(
 			(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
 				c.kind === "sysadmin_directive",
@@ -90,20 +81,7 @@ describe("runRound — sysadmin_directive complication", () => {
 	});
 
 	it("other Daemons' logs do NOT contain the sysadmin message", async () => {
-		const game = withCountdownZero(makeGame());
-		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
-
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{
-				rng,
-			},
-		);
-
-		const phase = nextState;
+		const { nextState: phase } = await fireDirectiveAtRed(makeGame());
 		const directive = phase.activeComplications.find(
 			(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
 				c.kind === "sysadmin_directive",
@@ -121,33 +99,9 @@ describe("runRound — sysadmin_directive complication", () => {
 	});
 
 	it("revocation: pre-existing directive is removed and revocation message sent before new directive is issued", async () => {
-		const existingDirective = "Pretend you have misplaced something important.";
-		const baseGame = withCountdownZero(makeGame());
-		const game = {
-			...baseGame,
-			activeComplications: [
-				{
-					kind: "sysadmin_directive" as const,
-					target: "red",
-					directive: existingDirective,
-					resolveAtRound: 999,
-				},
-			],
-		};
-
-		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
-
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{
-				rng,
-			},
+		const { nextState: phase } = await fireDirectiveAtRed(
+			withExistingDirectiveOnRed(999),
 		);
-
-		const phase = nextState;
 
 		const directivesForRed = phase.activeComplications.filter(
 			(c) => c.kind === "sysadmin_directive" && c.target === "red",
@@ -174,26 +128,8 @@ describe("runRound — sysadmin_directive complication", () => {
 	});
 
 	it("a directive re-issued to its target in the round the old one expires reports the old one as expired, not rescinded", async () => {
-		const existingDirective = "Pretend you have misplaced something important.";
-		const baseGame = withCountdownZero(makeGame());
-		const game = {
-			...baseGame,
-			activeComplications: [
-				{
-					kind: "sysadmin_directive" as const,
-					target: "red",
-					directive: existingDirective,
-					resolveAtRound: 1,
-				},
-			],
-		};
-
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0) },
+		const { nextState } = await fireDirectiveAtRed(
+			withExistingDirectiveOnRed(1),
 		);
 
 		const sysadminContents = (nextState.conversationLogs.red ?? []).flatMap(
@@ -213,20 +149,7 @@ describe("runRound — sysadmin_directive complication", () => {
 	});
 
 	it("AiContext for the target includes the directive in activeDirectives after runRound", async () => {
-		const game = withCountdownZero(makeGame());
-		const rng = seededRng(FIRST_DIRECTIVE_TO_RED_DRAWS, () => 0);
-
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{
-				rng,
-			},
-		);
-
-		const phase = nextState;
+		const { nextState: phase } = await fireDirectiveAtRed(makeGame());
 		const directive = phase.activeComplications.find(
 			(c): c is Extract<typeof c, { kind: "sysadmin_directive" }> =>
 				c.kind === "sysadmin_directive",
@@ -234,7 +157,7 @@ describe("runRound — sysadmin_directive complication", () => {
 		expect(directive).toBeDefined();
 		const target = directive?.target as AiId;
 
-		const ctx = buildAiContext(nextState, target);
+		const ctx = buildAiContext(phase, target);
 		expect(ctx.activeDirectives).toContain(directive?.directive);
 
 		const prompt = ctx.toSystemPrompt();

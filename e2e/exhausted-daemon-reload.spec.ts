@@ -3,31 +3,13 @@ import {
 	collectPageErrors,
 	expectNoPageErrors,
 	goToGame,
-	readActiveSessionEngine,
 	requireActiveSessionId,
-	type SealedEngine,
+	waitForActiveSessionEngine,
 	waitForRound,
 	writeActiveSessionEngine,
 } from "./helpers";
 
 const NEARLY_SPENT_USD = 0.001;
-
-type SealedEngineWithBudgets = SealedEngine & {
-	budgets: Record<string, { total: number; remaining: number }>;
-};
-
-async function waitForSealedEngine(page: Page): Promise<void> {
-	await expect
-		.poll(async () => {
-			try {
-				await readActiveSessionEngine(page);
-				return true;
-			} catch {
-				return false;
-			}
-		})
-		.toBe(true);
-}
 
 async function playRound(
 	page: Page,
@@ -62,14 +44,11 @@ test("an exhausted Daemon's panel reads the same live as after a reload", async 
 	const pageErrors = collectPageErrors(page);
 	const { ids, names } = await goToGame(page, { sse: ["still here"] });
 	const exhaustedId = ids[0] ?? "";
-	await waitForSealedEngine(page);
-
-	const { sessionId, sealed } = await readActiveSessionEngine(page);
-	const withBudgets = sealed as SealedEngineWithBudgets;
-	const exhaustedBudget = withBudgets.budgets[exhaustedId];
+	const { sessionId, sealed } = await waitForActiveSessionEngine(page);
+	const exhaustedBudget = sealed.budgets?.[exhaustedId];
 	if (!exhaustedBudget) throw new Error("e2e: no budget for the first Daemon");
 	exhaustedBudget.remaining = NEARLY_SPENT_USD;
-	await writeActiveSessionEngine(page, sessionId, withBudgets);
+	await writeActiveSessionEngine(page, sessionId, sealed);
 	await page.reload();
 	await expect(page.locator("#composer")).toBeVisible({ timeout: 15_000 });
 	expect(await requireActiveSessionId(page)).toBe(sessionId);

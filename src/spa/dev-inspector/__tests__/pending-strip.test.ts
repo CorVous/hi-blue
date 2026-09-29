@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { STATIC_CONTENT_PACKS } from "../../__tests__/fixtures/static-content-packs.js";
+import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas.js";
+import { GameSession } from "../../game/game-session.js";
 import type {
 	PendingBootstrap,
 	PendingCallMeta,
 } from "../../game/pending-bootstrap.js";
+import { renderInspector } from "../index.js";
 import {
 	__resetPendingStripForTests,
 	clearPendingStrip,
@@ -20,6 +24,23 @@ function makePending(
 		status,
 		...(error !== undefined ? { error } : {}),
 	};
+}
+
+function appendMapAndFooter(): {
+	containerEl: HTMLElement;
+	mapEl: HTMLElement;
+	footerEl: HTMLElement;
+} {
+	const mapEl = document.createElement("div");
+	mapEl.id = "dev-world-map";
+	document.body.appendChild(mapEl);
+
+	const footerEl = document.createElement("div");
+	footerEl.className = "dev-daemon-footer";
+	document.body.appendChild(footerEl);
+
+	const containerEl = document.getElementById("dev-game-strip") as HTMLElement;
+	return { containerEl, mapEl, footerEl };
 }
 
 describe("pending-strip.ts", () => {
@@ -291,34 +312,12 @@ describe("pending-strip.ts", () => {
 		clearIntervalSpy.mockRestore();
 	});
 
-	it("renderInspector branch: pendingBootstrap-only → pending strip renders, map hidden", async () => {
-		const { renderInspector } = await import("../index.js");
+	it("renderInspector branch: pendingBootstrap-only → pending strip renders, map hidden", () => {
+		const { containerEl, mapEl, footerEl } = appendMapAndFooter();
 
-		const pending = makePending("pending");
-		const meta: PendingCallMeta = {
-			callName: "content-pack",
-			startedAtMs: Date.now(),
-			retryCount: 1,
-			retryMax: 3,
-		};
-
-		const mapEl = document.createElement("div");
-		mapEl.id = "dev-world-map";
-		document.body.appendChild(mapEl);
-
-		const footerEl = document.createElement("div");
-		footerEl.className = "dev-daemon-footer";
-		document.body.appendChild(footerEl);
-
-		const containerEl = document.getElementById(
-			"dev-game-strip",
-		) as HTMLElement;
-
-		vi.doMock("../../game/pending-bootstrap.js", () => ({
-			getPendingCallMeta: () => meta,
-		}));
-
-		renderInspector(document.body, { pendingBootstrap: pending });
+		renderInspector(document.body, {
+			pendingBootstrap: makePending("pending"),
+		});
 
 		expect(containerEl.getAttribute("hidden")).toBeNull();
 		expect(containerEl.getAttribute("data-strip")).toBe("pending");
@@ -326,31 +325,11 @@ describe("pending-strip.ts", () => {
 		expect(footerEl.getAttribute("hidden")).toBe("");
 	});
 
-	it("renderInspector branch: session-set → pending strip cleared, game-strip renders", async () => {
-		const { renderInspector } = await import("../index.js");
-		const { STATIC_CONTENT_PACKS } = await import(
-			"../../__tests__/fixtures/static-content-packs.js"
-		);
-		const { STATIC_PERSONAS } = await import(
-			"../../__tests__/fixtures/static-personas.js"
-		);
-		const { GameSession } = await import("../../game/game-session.js");
-
+	it("renderInspector branch: session-set → pending strip cleared, game-strip renders", () => {
 		const contentPack = STATIC_CONTENT_PACKS[0];
 		if (!contentPack) throw new Error("Content pack missing");
 		const session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		const mapEl = document.createElement("div");
-		mapEl.id = "dev-world-map";
-		document.body.appendChild(mapEl);
-
-		const footerEl = document.createElement("div");
-		footerEl.className = "dev-daemon-footer";
-		document.body.appendChild(footerEl);
-
-		const containerEl = document.getElementById(
-			"dev-game-strip",
-		) as HTMLElement;
+		const { containerEl, mapEl, footerEl } = appendMapAndFooter();
 
 		renderInspector(document.body, { session });
 
@@ -360,20 +339,8 @@ describe("pending-strip.ts", () => {
 		expect(footerEl.getAttribute("hidden")).toBeNull();
 	});
 
-	it("renderInspector branch: neither set → strip hidden + empty", async () => {
-		const { renderInspector } = await import("../index.js");
-
-		const mapEl = document.createElement("div");
-		mapEl.id = "dev-world-map";
-		document.body.appendChild(mapEl);
-
-		const footerEl = document.createElement("div");
-		footerEl.className = "dev-daemon-footer";
-		document.body.appendChild(footerEl);
-
-		const containerEl = document.getElementById(
-			"dev-game-strip",
-		) as HTMLElement;
+	it("renderInspector branch: neither set → strip hidden + empty", () => {
+		const { containerEl, mapEl, footerEl } = appendMapAndFooter();
 
 		renderInspector(document.body, {});
 

@@ -3,31 +3,46 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const script = path.resolve(__dirname, "../check-no-comments.mjs");
 
+const sourcesToCheck = new Map<string, string>();
+const flaggedByName = new Map<string, number[]>();
 let workDir: string;
 
-beforeEach(() => {
+beforeAll(() => {
 	workDir = fs.mkdtempSync(path.join(os.tmpdir(), "check-no-comments-"));
-});
-
-afterEach(() => {
-	fs.rmSync(workDir, { recursive: true, force: true });
-});
-
-function flaggedLines(name: string, text: string): number[] {
-	const file = path.join(workDir, name);
-	fs.writeFileSync(file, text);
-	const result = spawnSync("node", [script, file], {
+	for (const [name, text] of sourcesToCheck) {
+		fs.writeFileSync(path.join(workDir, name), text);
+	}
+	const result = spawnSync("node", [script, ...sourcesToCheck.keys()], {
 		cwd: workDir,
 		encoding: "utf-8",
 	});
-	return [...result.stderr.matchAll(/:(\d+): comment is not allowed/g)].map(
-		(match) => Number(match[1]),
-	);
+	for (const match of result.stderr.matchAll(
+		/^(.+):(\d+): comment is not allowed$/gm,
+	)) {
+		const [, name = "", line] = match;
+		flaggedByName.set(name, [...(flaggedByName.get(name) ?? []), Number(line)]);
+	}
+});
+
+afterAll(() => {
+	fs.rmSync(workDir, { recursive: true, force: true });
+});
+
+function itFlags(
+	title: string,
+	name: string,
+	lines: string[],
+	expected: number[],
+): void {
+	sourcesToCheck.set(name, lines.join("\n"));
+	it(title, () => {
+		expect(flaggedByName.get(name) ?? []).toEqual(expected);
+	});
 }
 
 function fixed(name: string, text: string): string {
@@ -38,42 +53,50 @@ function fixed(name: string, text: string): string {
 }
 
 describe("check-no-comments.mjs: scripts", () => {
-	it("flags line and block comments but not // inside strings", () => {
-		const text = [
+	itFlags(
+		"flags line and block comments but not // inside strings",
+		"a.ts",
+		[
 			"const url = 'https://example.com';",
 			"// a comment",
 			"const x = 1; /* trailing */",
-		].join("\n");
-		expect(flaggedLines("a.ts", text)).toEqual([2, 3]);
-	});
+		],
+		[2, 3],
+	);
 
-	it("keeps tool directives, including both PURE spellings and the block vitest-environment", () => {
-		const text = [
+	itFlags(
+		"keeps tool directives, including both PURE spellings and the block vitest-environment",
+		"b.ts",
+		[
 			"/** @vitest-environment jsdom */",
 			"// @vitest-environment node",
 			"// biome-ignore lint/style/noNonNullAssertion: reason",
 			"const a = /*#__PURE__*/ make();",
 			"const b = /* @__PURE__ */ make();",
 			"function make() { return 1; }",
-		].join("\n");
-		expect(flaggedLines("b.ts", text)).toEqual([]);
-	});
+		],
+		[],
+	);
 });
 
 describe("check-no-comments.mjs: shell", () => {
-	it("keeps the shebang and flags whole-line and trailing comments", () => {
-		const text = [
+	itFlags(
+		"keeps the shebang and flags whole-line and trailing comments",
+		"a.sh",
+		[
 			"#!/usr/bin/env bash",
 			"# whole line",
 			"echo hi # trailing",
 			"echo \"a # in quotes\" 'b # too'",
 			"echo $\x7b#ARR[@]} foo#bar $#",
-		].join("\n");
-		expect(flaggedLines("a.sh", text)).toEqual([2, 3]);
-	});
+		],
+		[2, 3],
+	);
 
-	it("skips heredoc bodies", () => {
-		const text = [
+	itFlags(
+		"skips heredoc bodies",
+		"b.sh",
+		[
 			"cat <<'EOF' > out.md",
 			"# a heading, not a comment",
 			"EOF",
@@ -82,39 +105,42 @@ describe("check-no-comments.mjs: shell", () => {
 			"\tEOF",
 			'cat <<<"here # string"',
 			"# real comment",
-		].join("\n");
-		expect(flaggedLines("b.sh", text)).toEqual([8]);
-	});
+		],
+		[8],
+	);
 
-	it("does not treat a shift inside arithmetic as a heredoc", () => {
-		const text = [
+	itFlags(
+		"does not treat a shift inside arithmetic as a heredoc",
+		"d.sh",
+		[
 			"mask=$((1<<BITS))",
 			"# comment after arithmetic",
 			"((flags = flags<<SHIFT))",
 			"# another comment",
-		].join("\n");
-		expect(flaggedLines("d.sh", text)).toEqual([2, 4]);
-	});
+		],
+		[2, 4],
+	);
 
-	it("does not treat <<EOF inside quotes as a heredoc", () => {
-		const text = [
-			"echo \"use <<EOF to start\" 'or <<-END'",
-			"# comment after quoted text",
-		].join("\n");
-		expect(flaggedLines("e.sh", text)).toEqual([2]);
-	});
+	itFlags(
+		"does not treat <<EOF inside quotes as a heredoc",
+		"e.sh",
+		["echo \"use <<EOF to start\" 'or <<-END'", "# comment after quoted text"],
+		[2],
+	);
 
-	it("skips the bodies of several heredocs started on one line", () => {
-		const text = [
+	itFlags(
+		"skips the bodies of several heredocs started on one line",
+		"f.sh",
+		[
 			"paste <(cat <<A) <(cat <<\\B)",
 			"# body of A",
 			"A",
 			"# body of B",
 			"B",
 			"# real comment",
-		].join("\n");
-		expect(flaggedLines("f.sh", text)).toEqual([6]);
-	});
+		],
+		[6],
+	);
 
 	it("--fix strips a trailing comment and keeps the command", () => {
 		expect(fixed("c.sh", "echo hi # trailing\n# gone\necho bye\n")).toBe(
@@ -124,27 +150,31 @@ describe("check-no-comments.mjs: shell", () => {
 });
 
 describe("check-no-comments.mjs: css", () => {
-	it("ignores /* inside strings and url()", () => {
-		const text = [
+	itFlags(
+		"ignores /* inside strings and url()",
+		"a.css",
+		[
 			'a { background: url("data:x/*y"); }',
 			"b { background: url(/*/path); }",
 			"c::before { content: '/* not */'; }",
 			"/* real */",
-		].join("\n");
-		expect(flaggedLines("a.css", text)).toEqual([4]);
-	});
+		],
+		[4],
+	);
 });
 
 describe("check-no-comments.mjs: html", () => {
-	it("ignores <!-- inside script strings and flags comments in both places", () => {
-		const text = [
+	itFlags(
+		"ignores <!-- inside script strings and flags comments in both places",
+		"a.html",
+		[
 			"<p>hi</p>",
 			"<!-- markup comment -->",
 			"<script>",
 			'  const s = "<!-- not a comment -->";',
 			"  // script comment",
 			"</script>",
-		].join("\n");
-		expect(flaggedLines("a.html", text)).toEqual([2, 5]);
-	});
+		],
+		[2, 5],
+	);
 });

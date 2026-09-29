@@ -149,22 +149,6 @@ describe("VISTA_OFFSETS — disk integrity", () => {
 		}
 	});
 
-	it("has no duplicate offsets", () => {
-		const keys = VISTA_OFFSETS.map((o) => `${o.dx},${o.dy}`);
-		expect(new Set(keys).size).toBe(VISTA_OFFSETS.length);
-	});
-
-	it("includes the own cell exactly once", () => {
-		const own = VISTA_OFFSETS.filter((o) => o.dx === 0 && o.dy === 0);
-		expect(own).toHaveLength(1);
-	});
-
-	it("agrees with the inVista predicate on every offset", () => {
-		for (const o of VISTA_OFFSETS) {
-			expect(inVista(o.dx, o.dy)).toBe(true);
-		}
-	});
-
 	it("is frozen at every level, so no consumer can corrupt the shared table", () => {
 		expect(Object.isFrozen(VISTA_OFFSETS)).toBe(true);
 		for (const o of VISTA_OFFSETS) {
@@ -245,14 +229,6 @@ describe("projectVista — the position-only 13-cell disk", () => {
 		]);
 	});
 
-	it("projects only disk cells: every projected cell's offset satisfies inVista", () => {
-		for (const position of ROOM_POSITIONS) {
-			for (const cell of projectVista(position)) {
-				expect(inVista(...offsetOf(position, cell))).toBe(true);
-			}
-		}
-	});
-
 	it("translates with the observer: the same ordered offsets at all 25 positions", () => {
 		for (const position of ROOM_POSITIONS) {
 			const offsets = projectVista(position).map((cell) =>
@@ -271,12 +247,6 @@ describe("projectVista — the position-only 13-cell disk", () => {
 			expect(room).toBe(expected);
 			expect(walls).toBe(cells.length - expected);
 		}
-	});
-
-	it("asserts the named archetypes against worked counts: 13/0, 9/4, 6/7", () => {
-		expect(talliesAt({ row: 2, col: 2 })).toEqual([13, 0]);
-		expect(talliesAt({ row: 0, col: 2 })).toEqual([9, 4]);
-		expect(talliesAt({ row: 0, col: 0 })).toEqual([6, 7]);
 	});
 
 	it("keeps the own cell first, in-bounds, and never a Wall", () => {

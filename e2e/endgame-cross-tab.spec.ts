@@ -8,9 +8,9 @@ import {
 	isDualContentPackRequest,
 	listSessionIds,
 	reachEndgame,
+	readStoredDaemonLogs,
 	renderedPlayerLine,
 	requireActiveSessionId,
-	sessionDir,
 	sessionFileKey,
 	stubNewGameLLM,
 } from "./helpers";
@@ -62,19 +62,6 @@ function muteStorageEvents(page: Page): Promise<void> {
 	return page.evaluate(() => {
 		(window as unknown as Record<string, unknown>).__muteStorageEvents = true;
 	});
-}
-
-function readStoredDaemonLogs(page: Page, sessionId: string): Promise<string> {
-	return page.evaluate((prefix) => {
-		const logs: string[] = [];
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key?.startsWith(prefix) && key.endsWith(".txt")) {
-				logs.push(localStorage.getItem(key) ?? "");
-			}
-		}
-		return logs.join("\n");
-	}, sessionDir(sessionId));
 }
 
 async function readStoredEpoch(page: Page, sessionId: string): Promise<number> {

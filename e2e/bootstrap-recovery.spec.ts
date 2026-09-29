@@ -1,64 +1,34 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
 	classifyJsonRequest,
+	expectVisibleSkippingRetryBackoff,
+	parseRequestBody,
 	stubNewGameLLM,
-	stubPersonaSynthesis,
-} from "./helpers/stubs.js";
+} from "./helpers";
 
-test("regen happy path: content-pack fails, recover via regen button, game renders", async ({
-	page,
-}) => {
-	const INITIAL_BOOTSTRAP_OUTER_BUDGET_CALLS = 3;
-	let contentPackCalls = 0;
+const CONTENT_PACK_OUTER_BUDGET_CALLS = 3;
 
-	await stubNewGameLLM(page, { sse: ["stub", "reply"] });
-
-	await page.route("**/v1/chat/completions", async (route, request) => {
-		const body = JSON.parse(request.postData() ?? "null") as Parameters<
-			typeof classifyJsonRequest
-		>[0];
-		if (classifyJsonRequest(body) === "dual-content-pack") {
-			contentPackCalls++;
-			if (contentPackCalls <= INITIAL_BOOTSTRAP_OUTER_BUDGET_CALLS) {
-				await route.abort("failed");
-				return;
-			}
-		}
-		await route.fallback();
-	});
-
-	await page.goto("/?skipDialup=1");
+async function loginFromStartScreen(page: Page): Promise<void> {
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
 	await page.locator("#password").fill("password");
 	await page.locator("#begin").click();
 	await expect(page.locator('main[data-view="game"]')).toBeAttached({
 		timeout: 10_000,
 	});
+}
 
-	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
-		timeout: 30_000,
-	});
-	await expect(page.locator("main")).toHaveAttribute("data-view", "game");
+async function openGameSkippingRetryBackoff(page: Page): Promise<void> {
+	await page.clock.install();
+	await page.goto("/?skipDialup=1");
+	await loginFromStartScreen(page);
+}
 
-	await page.locator("#bootstrap-recovery-regen").click();
-
-	await expect(page.locator("#bootstrap-recovery")).toBeHidden({
-		timeout: 5_000,
-	});
-
-	await expect(page.locator("#composer")).toBeVisible({ timeout: 30_000 });
-	await expect(page.locator("article.ai-panel")).toHaveCount(3, {
-		timeout: 30_000,
-	});
-	await expect(page.locator("main")).toHaveAttribute("data-view", "game");
-});
-
-test("regen button: disabled while regenerating, enabled again after a retryable failure", async ({
+test("regen button: disabled while regenerating, enabled again after a retryable failure, and regenerates without re-resolving personas", async ({
 	page,
 }) => {
-	const CONTENT_PACK_OUTER_BUDGET_CALLS = 3;
 	const FAILED_REGEN_LAST_CALL = 2 * CONTENT_PACK_OUTER_BUDGET_CALLS;
 	let contentPackCalls = 0;
+	let synthesisCalls = 0;
 	let signalRegenCallArrived: () => void = () => undefined;
 	const regenCallArrived = new Promise<void>((resolve) => {
 		signalRegenCallArrived = resolve;
@@ -71,10 +41,9 @@ test("regen button: disabled while regenerating, enabled again after a retryable
 	await stubNewGameLLM(page, { sse: ["stub", "reply"] });
 
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		const body = JSON.parse(request.postData() ?? "null") as Parameters<
-			typeof classifyJsonRequest
-		>[0];
-		if (classifyJsonRequest(body) !== "dual-content-pack") {
+		const kind = classifyJsonRequest(parseRequestBody(request));
+		if (kind === "synthesis") synthesisCalls++;
+		if (kind !== "dual-content-pack") {
 			await route.fallback();
 			return;
 		}
@@ -92,17 +61,12 @@ test("regen button: disabled while regenerating, enabled again after a retryable
 		await route.fallback();
 	});
 
-	await page.goto("/?skipDialup=1");
-	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
-	await page.locator("#password").fill("password");
-	await page.locator("#begin").click();
-	await expect(page.locator('main[data-view="game"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await openGameSkippingRetryBackoff(page);
 
 	const recovery = page.locator("#bootstrap-recovery");
 	const regenBtn = page.locator("#bootstrap-recovery-regen");
-	await expect(recovery).toBeVisible({ timeout: 30_000 });
+	await expectVisibleSkippingRetryBackoff(page, recovery);
+	await expect(page.locator("main")).toHaveAttribute("data-view", "game");
 	await expect(regenBtn).toBeEnabled();
 
 	await regenBtn.click();
@@ -112,7 +76,7 @@ test("regen button: disabled while regenerating, enabled again after a retryable
 
 	releaseFailedRegen();
 
-	await expect(recovery).toBeVisible({ timeout: 30_000 });
+	await expectVisibleSkippingRetryBackoff(page, recovery);
 	await expect(regenBtn).toBeEnabled();
 
 	await regenBtn.click();
@@ -121,82 +85,43 @@ test("regen button: disabled while regenerating, enabled again after a retryable
 		timeout: 30_000,
 	});
 	await expect(page.locator("#composer")).toBeVisible({ timeout: 30_000 });
+	await expect(page.locator("main")).toHaveAttribute("data-view", "game");
+	expect(contentPackCalls).toBe(FAILED_REGEN_LAST_CALL + 1);
+	expect(synthesisCalls).toBe(1);
 });
 
-test("abandon path: recovery UI visible, click abandon to return to start with broken reason", async ({
-	page,
-}) => {
-	await stubPersonaSynthesis(page);
-
-	await page.route("**/v1/chat/completions", async (route, request) => {
-		const body = JSON.parse(request.postData() ?? "null") as Parameters<
-			typeof classifyJsonRequest
-		>[0];
-		if (classifyJsonRequest(body) === "dual-content-pack") {
-			await route.abort("failed");
-			return;
-		}
-		await route.fallback();
-	});
-
-	await page.goto("/?skipDialup=1");
-	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
-	await page.locator("#password").fill("password");
-	await page.locator("#begin").click();
-	await expect(page.locator('main[data-view="game"]')).toBeAttached({
-		timeout: 10_000,
-	});
-
-	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
-		timeout: 30_000,
-	});
-
-	await page.locator("#bootstrap-recovery-abandon").click();
-
-	await expect(page.locator('main[data-view="start"]')).toBeAttached({
-		timeout: 5_000,
-	});
-	await expect(page.locator("main")).toHaveAttribute("data-reason", "broken");
-});
-
-test("the start screen's reason banner does not follow the player into the game", async ({
+test("abandon returns to start with the broken reason, and its banner does not follow the player into the game", async ({
 	page,
 }) => {
 	let failContentPacks = true;
 	await stubNewGameLLM(page, { sse: ["stub", "reply"] });
 	await page.route("**/v1/chat/completions", async (route, request) => {
-		const body = JSON.parse(request.postData() ?? "null") as Parameters<
-			typeof classifyJsonRequest
-		>[0];
-		if (failContentPacks && classifyJsonRequest(body) === "dual-content-pack") {
+		if (
+			failContentPacks &&
+			classifyJsonRequest(parseRequestBody(request)) === "dual-content-pack"
+		) {
 			await route.abort("failed");
 			return;
 		}
 		await route.fallback();
 	});
 
-	await page.goto("/?skipDialup=1");
-	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
-	await page.locator("#password").fill("password");
-	await page.locator("#begin").click();
-	await expect(page.locator("#bootstrap-recovery")).toBeVisible({
-		timeout: 30_000,
-	});
+	await openGameSkippingRetryBackoff(page);
+	await expectVisibleSkippingRetryBackoff(
+		page,
+		page.locator("#bootstrap-recovery"),
+	);
 	await page.locator("#bootstrap-recovery-abandon").click();
 
 	const warning = page.locator("#persistence-warning");
 	await expect(page.locator('main[data-view="start"]')).toBeAttached({
 		timeout: 5_000,
 	});
+	await expect(page.locator("main")).toHaveAttribute("data-reason", "broken");
 	await expect(warning).toBeVisible();
 
 	failContentPacks = false;
-	await expect(page.locator("#begin")).toBeEnabled({ timeout: 30_000 });
-	await page.locator("#password").fill("password");
-	await page.locator("#begin").click();
-	await expect(page.locator('main[data-view="game"]')).toBeAttached({
-		timeout: 10_000,
-	});
+	await loginFromStartScreen(page);
 	await expect(page.locator("#composer")).toBeVisible({ timeout: 30_000 });
 	await expect(warning).toBeHidden();
 });

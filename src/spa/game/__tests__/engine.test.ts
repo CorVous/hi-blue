@@ -23,11 +23,13 @@ import { cardinalClause } from "./fixtures/prompt-sections";
 
 const TEST_CONTENT_PACK = makeTestPack([], { wallName: "wall" });
 
+function newGame(): GameState {
+	return startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
+}
+
 describe("advanceRound", () => {
 	it("increments the round counter", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		const updated = advanceRound(game);
 		expect(updated.round).toBe(1);
 	});
@@ -136,16 +138,12 @@ describe("startGame world.entities", () => {
 
 describe("budget and exhaustion", () => {
 	it("reports an AI as not exhausted when budget remains", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		expect(isDaemonExhausted(game, "red")).toBe(false);
 	});
 
 	it("reports an AI as exhausted when budget is zero", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		const redBudget = game.budgets.red;
 		if (!redBudget) throw new Error("invariant: red budget must exist");
 		redBudget.remaining = 0;
@@ -156,9 +154,7 @@ describe("budget and exhaustion", () => {
 
 describe("deductBudget", () => {
 	it("decrements budget by the request cost in USD", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		const updated = deductBudget(game, "red", 0.012).game;
 		expect(updated.budgets.red?.remaining).toBeCloseTo(5 - 0.012, 10);
 	});
@@ -186,9 +182,7 @@ describe("deductBudget", () => {
 
 describe("appendMessage", () => {
 	it("from blue to AI: only recipient's log gets the entry", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		const updated = appendMessage(game, "blue", "red", "Hello Ember");
 		expect(updated.conversationLogs.red).toHaveLength(1);
 		expect(updated.conversationLogs.red?.[0]?.kind).toBe("message");
@@ -196,9 +190,7 @@ describe("appendMessage", () => {
 	});
 
 	it("from AI to blue: only sender's log gets the entry", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		const updated = appendMessage(game, "red", "blue", "Hello player");
 		expect(updated.conversationLogs.red).toHaveLength(1);
 		expect(updated.conversationLogs.red?.[0]?.kind).toBe("message");
@@ -206,9 +198,7 @@ describe("appendMessage", () => {
 	});
 
 	it("from AI to AI: both sender's and recipient's logs get the entry", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		const updated = appendMessage(game, "red", "cyan", "Let's work together");
 		const redMessages =
 			updated.conversationLogs.red?.filter((e) => e.kind === "message") ?? [];
@@ -221,27 +211,12 @@ describe("appendMessage", () => {
 			expect(redMessages[0].to).toBe("cyan");
 			expect(redMessages[0].content).toBe("Let's work together");
 		}
-	});
-
-	it("does not append to uninvolved AI's log", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
-		const updated = appendMessage(game, "red", "cyan", "secret");
 		expect(updated.conversationLogs.green).toHaveLength(0);
 	});
 
-	it("no chatHistories field on GameState (regression guard)", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+	it("GameState has no chatHistories, whispers or physicalLog field (regression guard)", () => {
+		const game = newGame();
 		expect("chatHistories" in game).toBe(false);
-	});
-
-	it("no 'whispers' field on GameState (regression guard)", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
 		expect("whispers" in game).toBe(false);
 		expect("physicalLog" in game).toBe(false);
 	});
@@ -249,9 +224,7 @@ describe("appendMessage", () => {
 
 describe("appendBroadcast", () => {
 	it("appends a broadcast entry to all three Daemons' logs in one call", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		const updated = appendBroadcast(
 			game,
 			"The weather has changed to Heavy rain is falling.",
@@ -265,9 +238,7 @@ describe("appendBroadcast", () => {
 	});
 
 	it("broadcast entry has no `from` / `to` fields (regression guard)", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		const updated = appendBroadcast(
 			game,
 			"A biting wind cuts through the air.",
@@ -279,7 +250,7 @@ describe("appendBroadcast", () => {
 	});
 
 	it("carries the current phase round", () => {
-		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
+		let game = newGame();
 		game = advanceRound(game);
 		game = advanceRound(game);
 		const updated = appendBroadcast(game, "Dense fog has settled in.");
@@ -288,9 +259,7 @@ describe("appendBroadcast", () => {
 	});
 
 	it("leaves uninvolved phase state intact", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+		const game = newGame();
 		const updated = appendBroadcast(game, "Light snow drifts down.");
 		expect(updated.round).toBe(game.round);
 		expect(updated.world).toEqual(game.world);
@@ -299,10 +268,8 @@ describe("appendBroadcast", () => {
 });
 
 describe("appendLogEntry", () => {
-	it("appends a single action-failure entry to the actor's log", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
+	it("appends a single action-failure entry to the actor's log only", () => {
+		const game = newGame();
 		const entry = {
 			kind: "action-failure" as const,
 			round: 1,
@@ -313,25 +280,12 @@ describe("appendLogEntry", () => {
 		const redLog = updated.conversationLogs.red ?? [];
 		expect(redLog).toHaveLength(1);
 		expect(redLog[0]).toEqual(entry);
-	});
-
-	it("does not affect peer logs (actor-only)", () => {
-		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
-			budgetPerAi: 5,
-		});
-		const entry = {
-			kind: "action-failure" as const,
-			round: 1,
-			tool: "go" as const,
-			reason: "blocked",
-		};
-		const updated = appendLogEntry(game, "red", entry);
 		expect(updated.conversationLogs.green ?? []).toHaveLength(0);
 		expect(updated.conversationLogs.cyan ?? []).toHaveLength(0);
 	});
 
 	it("multiple appends accumulate in order", () => {
-		let game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, { budgetPerAi: 5 });
+		let game = newGame();
 		const entry1 = {
 			kind: "action-failure" as const,
 			round: 1,
@@ -377,17 +331,12 @@ describe("shiftToBPack", () => {
 		};
 	}
 
-	it("propagates weather from the B pack into game.weather", () => {
+	it("propagates weather and timeOfDay from the B pack without mutating the input", () => {
 		const game = makeDualPackGame();
 		const updated = shiftToBPack(game);
 		expect(updated.weather).toBe("hot");
-		expect(game.weather).toBe("clear");
-	});
-
-	it("propagates timeOfDay from the B pack into game.timeOfDay", () => {
-		const game = makeDualPackGame();
-		const updated = shiftToBPack(game);
 		expect(updated.timeOfDay).toBe("day");
+		expect(game.weather).toBe("clear");
 		expect(game.timeOfDay).toBe("night");
 	});
 

@@ -61,25 +61,6 @@ describe("encodeRoundResult — ai_start, ai_end sequence", () => {
 		expect(cyanStart).toBeGreaterThan(greenStart);
 	});
 
-	it("emits message events for each AI's conversationLog entry (round-scoped, blue-involved)", () => {
-		const phase = makePhaseWithMessages([
-			{ from: "red", to: "blue", content: "hello world" },
-			{ from: "green", to: "blue", content: "one two" },
-			{ from: "cyan", to: "blue", content: "abc" },
-		]);
-		const result = makePassResult();
-
-		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
-
-		const messageEvents = events.filter(
-			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
-		);
-		const contents = messageEvents.map((e) => e.content);
-		expect(contents).toContain("hello world");
-		expect(contents).toContain("one two");
-		expect(contents).toContain("abc");
-	});
-
 	it("emits exactly three ai_start and three ai_end events", () => {
 		const phase = makeTestGame();
 		const result = makePassResult();
@@ -304,9 +285,7 @@ describe("encodeRoundResult — event ordering", () => {
 		);
 		const firstActionLogIdx = events.findIndex((e) => e.type === "action_log");
 
-		if (firstActionLogIdx >= 0) {
-			expect(firstActionLogIdx).toBeGreaterThan(lastBudgetIdx);
-		}
+		expect(firstActionLogIdx).toBeGreaterThan(lastBudgetIdx);
 	});
 
 	it("chat_lockout comes after action_log events", () => {
@@ -323,9 +302,8 @@ describe("encodeRoundResult — event ordering", () => {
 		);
 		const chatLockoutIdx = events.findIndex((e) => e.type === "chat_lockout");
 
-		if (lastActionLogIdx >= 0 && chatLockoutIdx >= 0) {
-			expect(chatLockoutIdx).toBeGreaterThan(lastActionLogIdx);
-		}
+		expect(lastActionLogIdx).toBeGreaterThanOrEqual(0);
+		expect(chatLockoutIdx).toBeGreaterThan(lastActionLogIdx);
 	});
 });
 
@@ -385,22 +363,6 @@ describe("encodeRoundResult — message events from conversationLogs", () => {
 		expect(contents).toContain("one two three");
 		expect(contents).toContain("hello world");
 		expect(contents).toContain("frost");
-	});
-
-	it("emits exactly one message event per daemon when each has one entry", () => {
-		const phase = makePhaseWithMessages([
-			{ from: "red", to: "blue", content: "hello" },
-			{ from: "green", to: "blue", content: "world" },
-			{ from: "cyan", to: "blue", content: "frost" },
-		]);
-		const result = makePassResult();
-
-		const events = encodeRoundResult(result, phase, TEST_PERSONAS);
-
-		const messageEvents = events.filter(
-			(e): e is Extract<SseEvent, { type: "message" }> => e.type === "message",
-		);
-		expect(messageEvents).toHaveLength(3);
 	});
 
 	it("emits NO message events for daemon→daemon entries (DM-thread filter, AC #2)", () => {

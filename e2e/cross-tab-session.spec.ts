@@ -6,26 +6,13 @@ import {
 	goToGame,
 	holdChatCompletions,
 	isGameplayRequest,
+	readStoredDaemonLogs,
 	renderedPlayerLine,
 	requireActiveSessionId,
-	sessionDir,
 	setComplicationCountdown,
 	stubNewGameLLM,
 	waitForRound,
 } from "./helpers";
-
-function readStoredDaemonLogs(page: Page, sessionId: string): Promise<string> {
-	return page.evaluate((prefix) => {
-		const logs: string[] = [];
-		for (let i = 0; i < localStorage.length; i++) {
-			const key = localStorage.key(i);
-			if (key?.startsWith(prefix) && key.endsWith(".txt")) {
-				logs.push(localStorage.getItem(key) ?? "");
-			}
-		}
-		return logs.join("\n");
-	}, sessionDir(sessionId));
-}
 
 async function openSecondTab(context: BrowserContext): Promise<Page> {
 	const second = await context.newPage();

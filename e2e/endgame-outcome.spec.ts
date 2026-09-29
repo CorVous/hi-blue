@@ -7,7 +7,7 @@ import {
 	isJsonModeRequest,
 	parseRequestBody,
 	readActiveSessionEngine,
-	type SealedEngine,
+	waitForActiveSessionEngine,
 	writeActiveSessionEngine,
 } from "./helpers";
 
@@ -15,11 +15,6 @@ const WIN_LINE = "You have completed the objectives.";
 const BUDGET_EXHAUSTED_LINE = "You have hit your budget.";
 const NEARLY_SPENT_USD = 0.001;
 const FINAL_TURN_ONE = /TURN 0*1\b/;
-
-type SealedEngineWithEnding = SealedEngine & {
-	budgets: Record<string, { total: number; remaining: number }>;
-	isComplete: boolean;
-};
 
 test("a win shows the win line, the final turn and the final round's lines, and survives a reload", async ({
 	page,
@@ -43,7 +38,7 @@ test("a win shows the win line, the final turn and the final round's lines, and 
 	).toHaveCount(3);
 
 	const { sealed } = await readActiveSessionEngine(page);
-	expect((sealed as SealedEngineWithEnding).isComplete).toBe(true);
+	expect(sealed.isComplete).toBe(true);
 
 	await page.reload();
 
@@ -60,22 +55,11 @@ test("a budget-exhausted ending shows its own line", async ({ page }) => {
 
 	const { names } = await goToGame(page, { sse: ["last ", "gasp"] });
 
-	await expect
-		.poll(async () => {
-			try {
-				await readActiveSessionEngine(page);
-				return true;
-			} catch {
-				return false;
-			}
-		})
-		.toBe(true);
-	const { sessionId, sealed } = await readActiveSessionEngine(page);
-	const withBudgets = sealed as SealedEngineWithEnding;
-	for (const budget of Object.values(withBudgets.budgets)) {
+	const { sessionId, sealed } = await waitForActiveSessionEngine(page);
+	for (const budget of Object.values(sealed.budgets ?? {})) {
 		budget.remaining = NEARLY_SPENT_USD;
 	}
-	await writeActiveSessionEngine(page, sessionId, withBudgets);
+	await writeActiveSessionEngine(page, sessionId, sealed);
 
 	await page.reload();
 	await expect(page.locator("#composer")).toBeVisible({ timeout: 15_000 });

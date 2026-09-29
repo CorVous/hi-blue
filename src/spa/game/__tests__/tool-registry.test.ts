@@ -2,25 +2,10 @@ import { describe, expect, it } from "vitest";
 import { parseToolCallArguments, TOOL_DEFINITIONS } from "../tool-registry";
 import type { ToolName } from "../types";
 
-const DAEMON_TOOLS: ToolName[] = [
-	"pick_up",
-	"put_down",
-	"use",
-	"go",
-	"message",
-];
-
 describe("TOOL_DEFINITIONS", () => {
-	it("lists exactly five tools: pick_up, put_down, use, go, message", () => {
+	it("lists exactly five tools, and no `face` tool: pick_up, put_down, use, go, message", () => {
 		const names = TOOL_DEFINITIONS.map((t) => t.function.name);
 		expect(names).toEqual(["pick_up", "put_down", "use", "go", "message"]);
-		expect(names).toEqual(DAEMON_TOOLS);
-	});
-
-	it("has no `face` tool", () => {
-		expect(
-			TOOL_DEFINITIONS.find((t) => t.function.name === "face"),
-		).toBeUndefined();
 	});
 
 	it("each definition has type: 'function'", () => {
@@ -92,119 +77,35 @@ describe("TOOL_DEFINITIONS", () => {
 });
 
 describe("parseToolCallArguments", () => {
-	it("parses valid pick_up arguments", () => {
-		const result = parseToolCallArguments("pick_up", '{"item":"flower"}');
+	it.each<[ToolName, string, Record<string, string>]>([
+		["pick_up", '{"item":"flower"}', { item: "flower" }],
+		["put_down", '{"item":"key"}', { item: "key" }],
+		["use", '{"item":"wand"}', { item: "wand" }],
+		["message", '{"to":"cyan","content":"hi"}', { to: "cyan", content: "hi" }],
+		["message", '{"to":"*6nho","content":"hi"}', { to: "6nho", content: "hi" }],
+		["message", '{"to":"**foo","content":"hi"}', { to: "*foo", content: "hi" }],
+		["go", '{"direction":"north"}', { direction: "north" }],
+	])("parses valid %s arguments %s (a single leading '*' on message.to is stripped)", (tool, json, args) => {
+		const result = parseToolCallArguments(tool, json);
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.args).toEqual({ item: "flower" });
+			expect(result.args).toEqual(args);
 		}
 	});
 
-	it("parses valid put_down arguments", () => {
-		const result = parseToolCallArguments("put_down", '{"item":"key"}');
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ item: "key" });
-		}
-	});
-
-	it("parses valid use arguments", () => {
-		const result = parseToolCallArguments("use", '{"item":"wand"}');
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ item: "wand" });
-		}
-	});
-
-	it("returns ok:false with /malformed/i reason for invalid JSON", () => {
-		const result = parseToolCallArguments("pick_up", "not json");
+	it.each<[ToolName, string, RegExp]>([
+		["pick_up", "not json", /malformed/i],
+		["pick_up", '["item","flower"]', /malformed/i],
+		["pick_up", "{}", /required/i],
+		["message", '{"to":"*","content":"hi"}', /required/i],
+		["message", '{"content":"hi"}', /required/i],
+		["message", '{"to":"cyan"}', /required/i],
+		["go", "{}", /required/i],
+	])("rejects %s arguments %s with a reason matching %s", (tool, json, reason) => {
+		const result = parseToolCallArguments(tool, json);
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
-			expect(result.reason).toMatch(/malformed/i);
-		}
-	});
-
-	it("returns ok:false with /malformed/i reason for JSON array", () => {
-		const result = parseToolCallArguments("pick_up", '["item","flower"]');
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/malformed/i);
-		}
-	});
-
-	it("returns ok:false with /required/i reason when 'item' is missing for pick_up", () => {
-		const result = parseToolCallArguments("pick_up", "{}");
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("parses valid message arguments", () => {
-		const result = parseToolCallArguments(
-			"message",
-			'{"to":"cyan","content":"hi"}',
-		);
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ to: "cyan", content: "hi" });
-		}
-	});
-
-	it("strips a leading '*' from message.to (conversation log renders ids as *foo)", () => {
-		const result = parseToolCallArguments(
-			"message",
-			'{"to":"*6nho","content":"hi"}',
-		);
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ to: "6nho", content: "hi" });
-		}
-	});
-
-	it("only strips a single leading '*' from message.to", () => {
-		const result = parseToolCallArguments(
-			"message",
-			'{"to":"**foo","content":"hi"}',
-		);
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ to: "*foo", content: "hi" });
-		}
-	});
-
-	it("returns ok:false when message.to is just '*' (empty after strip)", () => {
-		const result = parseToolCallArguments(
-			"message",
-			'{"to":"*","content":"hi"}',
-		);
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("returns ok:false with /required/i reason when 'to' is missing for message", () => {
-		const result = parseToolCallArguments("message", '{"content":"hi"}');
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("returns ok:false with /required/i reason when 'content' is missing for message", () => {
-		const result = parseToolCallArguments("message", '{"to":"cyan"}');
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
-		}
-	});
-
-	it("parses valid go arguments with a cardinal direction", () => {
-		const result = parseToolCallArguments("go", '{"direction":"north"}');
-		expect(result.ok).toBe(true);
-		if (result.ok) {
-			expect(result.args).toEqual({ direction: "north" });
+			expect(result.reason).toMatch(reason);
 		}
 	});
 
@@ -217,14 +118,6 @@ describe("parseToolCallArguments", () => {
 		if (!result.ok) {
 			expect(result.reason).toMatch(/unknown tool/i);
 			expect(result.reason).toContain("face");
-		}
-	});
-
-	it("returns ok:false with /required/i reason when 'direction' is missing for go", () => {
-		const result = parseToolCallArguments("go", "{}");
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.reason).toMatch(/required/i);
 		}
 	});
 

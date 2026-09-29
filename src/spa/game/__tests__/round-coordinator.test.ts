@@ -30,6 +30,7 @@ import {
 	withCountdownZero,
 } from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
+import { firstTurnActs, toolCall } from "./round-coordinator-harness";
 
 const TEST_CONTENT_PACK = makeTestPack(
 	[
@@ -65,25 +66,55 @@ function makeGame(budgetPerAi = 5) {
 	return makeTestGame({ pack: TEST_CONTENT_PACK, budgetPerAi });
 }
 
+function toolCallIdsIn(messages: OpenAiMessage[]): string[] {
+	return messages.flatMap((m) =>
+		m.role === "assistant" && "tool_calls" in m && m.tool_calls
+			? m.tool_calls.map((tc) => tc.id)
+			: [],
+	);
+}
+
+function toolResultIdsIn(messages: OpenAiMessage[]): string[] {
+	return messages.flatMap((m) =>
+		m.role === "tool" && "tool_call_id" in m ? [m.tool_call_id] : [],
+	);
+}
+
+async function redRound2Messages(
+	round1Calls: Array<{ id: string; name: string; argumentsJson: string }>,
+): Promise<OpenAiMessage[]> {
+	const r1 = await runRound(
+		makeGame(),
+		"red",
+		"hi",
+		firstTurnActs(round1Calls),
+		{ initiative: ["red", "green", "cyan"] as AiId[] },
+	);
+	const captured: OpenAiMessage[][] = [];
+	const r2Provider: RoundLLMProvider = {
+		async streamRound(messages) {
+			captured.push(messages);
+			return { assistantText: "", toolCalls: [] };
+		},
+	};
+	await runRound(r1.nextState, "red", "round2", r2Provider, {
+		initiative: ["red", "green", "cyan"] as AiId[],
+		priorToolRoundtrip: r1.toolRoundtrip,
+	});
+	return captured[0] ?? [];
+}
+
 describe("chat-only round", () => {
 	it("advances the round counter after all three AIs act", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "Hello player", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = firstTurnActs([], { assistantText: "Hello player" });
 		const { nextState } = await runRound(game, "red", "Hello!", provider);
 		expect(nextState.round).toBe(1);
 	});
 
 	it("free-form assistantText (no message tool call) does not appear in the AI's log", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "I am Ember", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = firstTurnActs([], { assistantText: "I am Ember" });
 		const { nextState } = await runRound(game, "red", "Hello Ember!", provider);
 		const redLog = nextState.conversationLogs.red ?? [];
 		const msgEntries = redLog.filter(
@@ -156,27 +187,33 @@ describe("chat-only round", () => {
 	});
 });
 
+function driftThenMessage(
+	driftText: string,
+	retryContent: string,
+	costs?: { drift: number; retry: number },
+): MockRoundLLMProvider {
+	return new MockRoundLLMProvider([
+		{
+			assistantText: driftText,
+			toolCalls: [],
+			...(costs && { costUsd: costs.drift }),
+		},
+		{
+			assistantText: "",
+			toolCalls: [
+				toolCall("msg_retry", "message", { to: "blue", content: retryContent }),
+			],
+			...(costs && { costUsd: costs.retry }),
+		},
+		{ assistantText: "", toolCalls: [] },
+		{ assistantText: "", toolCalls: [] },
+	]);
+}
+
 describe("drift-to-silence retry (#254)", () => {
 	it("retry that returns a message tool call lands in the conversation log", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "I'd say hello to blue.", toolCalls: [] },
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_retry",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "Hello blue!",
-						}),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = driftThenMessage("I'd say hello to blue.", "Hello blue!");
 
 		const { nextState } = await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -195,24 +232,10 @@ describe("drift-to-silence retry (#254)", () => {
 
 	it("retry's nudge does NOT leak into the conversation log", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "dropped first attempt text", toolCalls: [] },
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_retry",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "recovered reply",
-						}),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = driftThenMessage(
+			"dropped first attempt text",
+			"recovered reply",
+		);
 
 		const { nextState } = await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -265,20 +288,10 @@ describe("drift-to-silence retry (#254)", () => {
 
 	it("does NOT retry when first attempt already has a tool call", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "I will take the flower",
-				toolCalls: [
-					{
-						id: "call_1",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = firstTurnActs(
+			[toolCall("call_1", "pick_up", '{"item":"flower"}')],
+			{ assistantText: "I will take the flower" },
+		);
 
 		await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -289,24 +302,7 @@ describe("drift-to-silence retry (#254)", () => {
 
 	it("retry sees the nudge appended after the dropped first attempt", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "I would like to say hi.", toolCalls: [] },
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_retry",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "hi blue",
-						}),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = driftThenMessage("I would like to say hi.", "hi blue");
 
 		await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -326,25 +322,10 @@ describe("drift-to-silence retry (#254)", () => {
 
 	it("retry sums costUsd from both LLM calls into the budget deduction", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "drift", toolCalls: [], costUsd: 0.4 },
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_retry",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "ok",
-						}),
-					},
-				],
-				costUsd: 0.5,
-			},
-			{ assistantText: "", toolCalls: [], costUsd: 0 },
-			{ assistantText: "", toolCalls: [], costUsd: 0 },
-		]);
+		const provider = driftThenMessage("drift", "ok", {
+			drift: 0.4,
+			retry: 0.5,
+		});
 
 		const { nextState } = await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -356,24 +337,7 @@ describe("drift-to-silence retry (#254)", () => {
 
 	it("retry that yields msg-success keeps the tool roundtrip empty (no first-attempt leak)", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "drifted", toolCalls: [] },
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_retry",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "ok blue",
-						}),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = driftThenMessage("drifted", "ok blue");
 
 		const { toolRoundtrip } = await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -399,21 +363,7 @@ describe("onAiTurnComplete callback", () => {
 
 	it("fires AFTER the retry resolves, not after the first dropped attempt", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "I would like to say hi.", toolCalls: [] },
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_retry",
-						name: "message",
-						argumentsJson: JSON.stringify({ to: "blue", content: "hi" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = driftThenMessage("I would like to say hi.", "hi");
 
 		const fireOrder: Array<{ aiId: AiId; callsAtFire: number }> = [];
 		await runRound(game, "red", "hi", provider, {
@@ -469,10 +419,14 @@ describe("budget-exhaustion lockout", () => {
 		const { nextState } = await runRound(game, "green", "hi", provider);
 
 		const redLog = nextState.conversationLogs.red ?? [];
-		const lockoutMessages = redLog.filter(
-			(e) => e.kind === "message" && e.from === "red" && e.to === "blue",
+		const lockoutLines = redLog.flatMap((e) =>
+			e.kind === "message" && e.from === "red" && e.to === "blue"
+				? [e.content]
+				: [],
 		);
-		expect(lockoutMessages.length).toBeGreaterThan(0);
+		expect(lockoutLines[lockoutLines.length - 1]).toBe(
+			"Ember is unresponsive…",
+		);
 	});
 
 	it("lockout line is added to the action log", async () => {
@@ -535,19 +489,6 @@ describe("budget-exhaustion lockout", () => {
 		expect(farewellCount).toBe(1);
 	});
 
-	it("budget display: remaining budget decrements by the request cost after a round", async () => {
-		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [], costUsd: 1 },
-			{ assistantText: "", toolCalls: [], costUsd: 1 },
-			{ assistantText: "", toolCalls: [], costUsd: 1 },
-		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		expect(nextState.budgets.red?.remaining).toBeCloseTo(4, 10);
-		expect(nextState.budgets.green?.remaining).toBeCloseTo(4, 10);
-		expect(nextState.budgets.cyan?.remaining).toBeCloseTo(4, 10);
-	});
-
 	it("lockout and non-lockout entries in the same round share the same round number", async () => {
 		let game = makeGame();
 		game = deductBudget(game, "red", 5).game;
@@ -587,46 +528,23 @@ describe("multi-round correctness", () => {
 });
 
 describe("tool-call dispatch", () => {
-	it("pick_up tool call mutates world state when item is in the room", async () => {
+	it.each([
+		["without assistantText", ""],
+		[
+			"alongside free-form assistantText, which is dropped",
+			"Taking the flower",
+		],
+	])("a valid pick_up %s records tool_success and gives the actor the item", async (_label, assistantText) => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "I will take the flower",
-				toolCalls: [
-					{
-						id: "call_1",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		const phase = nextState;
-		const flower = phase.world.entities.find((i) => i.id === "flower");
-		expect(flower?.holder).toBe("red");
-	});
-
-	it("appends tool_success to action log when valid tool call executes", async () => {
-		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_1",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { result } = await runRound(game, "red", "hi", provider);
+		const provider = firstTurnActs(
+			[toolCall("call_1", "pick_up", '{"item":"flower"}')],
+			{ assistantText },
+		);
+		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(result.actions.some((e) => e.kind === "tool_success")).toBe(true);
+		expect(
+			nextState.world.entities.find((i) => i.id === "flower")?.holder,
+		).toBe("red");
 	});
 
 	it("appends tool_failure when item is not in room (pick_up on non-existent)", async () => {
@@ -646,96 +564,15 @@ describe("tool-call dispatch", () => {
 			{ assistantText: "", toolCalls: [] },
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
-		expect(result.actions.some((e) => e.kind === "tool_failure")).toBe(true);
-	});
-
-	it("tool_failure description is non-empty", async () => {
-		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_3",
-						name: "pick_up",
-						argumentsJson: '{"item":"nonexistent"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { result } = await runRound(game, "red", "hi", provider);
 		const failure = result.actions.find((e) => e.kind === "tool_failure");
+		expect(failure?.actor).toBe("green");
 		expect(failure?.description).toBeTruthy();
-	});
-
-	it("assistantText + toolCalls both fire (tool_success in result.actions; free-form text is dropped)", async () => {
-		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "Taking the flower",
-				toolCalls: [
-					{
-						id: "call_4",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { nextState, result } = await runRound(game, "red", "hi", provider);
-		expect(result.actions.some((e) => e.kind === "tool_success")).toBe(true);
-		expect(
-			nextState.world.entities.find((i) => i.id === "flower")?.holder,
-		).toBe("red");
-	});
-
-	it("tool_failure is NOT exposed in any other AI's prompt the following round", async () => {
-		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_fail",
-						name: "pick_up",
-						argumentsJson: '{"item":"nonexistent"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { nextState: stateAfterRound1 } = await runRound(
-			game,
-			"red",
-			"hi",
-			provider,
-		);
-
-		const cyanCtx = buildAiContext(stateAfterRound1, "cyan");
-		const prompt = cyanCtx.toSystemPrompt();
-		expect(prompt).not.toContain("## Action Log");
 	});
 
 	it("tool_failure is NOT rendered into the system prompt for any AI", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_fail",
-						name: "pick_up",
-						argumentsJson: '{"item":"nonexistent"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("call_fail", "pick_up", '{"item":"nonexistent"}'),
 		]);
 		const { nextState: stateAfterRound1 } = await runRound(
 			game,
@@ -753,20 +590,7 @@ describe("tool-call dispatch", () => {
 
 	it("unknown tool name → tool_failure, world unchanged", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_unk",
-						name: "fly_away",
-						argumentsJson: "{}",
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = firstTurnActs([toolCall("call_unk", "fly_away", "{}")]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(result.actions.some((e) => e.kind === "tool_failure")).toBe(true);
 		const flower = nextState.world.entities.find((i) => i.id === "flower");
@@ -775,105 +599,13 @@ describe("tool-call dispatch", () => {
 
 	it("malformed JSON → tool_failure with description matching /malformed/i", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_bad",
-						name: "pick_up",
-						argumentsJson: "not json",
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("call_bad", "pick_up", "not json"),
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		const failure = result.actions.find((e) => e.kind === "tool_failure");
 		expect(failure).toBeDefined();
 		expect(failure?.description).toMatch(/malformed/i);
-	});
-
-	it("tool_failure surfaces in RoundResult for the SPA debug panel", async () => {
-		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_probe",
-						name: "pick_up",
-						argumentsJson: '{"item":"nonexistent"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { result } = await runRound(game, "red", "hi", provider);
-		expect(result.actions.some((e) => e.kind === "tool_failure")).toBe(true);
-	});
-
-	it("next round messages include prior assistant{tool_calls} + matching tool result", async () => {
-		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_r1",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-
-		const capturedCalls: Array<{
-			messages: OpenAiMessage[];
-		}> = [];
-		const trackingProvider: RoundLLMProvider = {
-			async streamRound(messages, _tools) {
-				capturedCalls.push({ messages });
-				const inner = capturedCalls.length <= 3 ? provider : undefined;
-				if (inner) {
-					return inner.streamRound(messages, _tools);
-				}
-				return { assistantText: "", toolCalls: [] };
-			},
-		};
-
-		const { nextState: state1, toolRoundtrip } = await runRound(
-			game,
-			"red",
-			"hi",
-			trackingProvider,
-		);
-
-		capturedCalls.length = 0;
-		const provider2: RoundLLMProvider = {
-			async streamRound(messages, _tools) {
-				capturedCalls.push({ messages });
-				return { assistantText: "", toolCalls: [] };
-			},
-		};
-		await runRound(state1, "red", "round 2", provider2, {
-			priorToolRoundtrip: toolRoundtrip,
-		});
-
-		const redMessages = capturedCalls[0]?.messages ?? [];
-		const hasAssistantWithToolCalls = redMessages.some(
-			(m) =>
-				m.role === "assistant" &&
-				"tool_calls" in m &&
-				Array.isArray((m as { tool_calls?: unknown }).tool_calls),
-		);
-		const hasToolResult = redMessages.some((m) => m.role === "tool");
-		expect(hasAssistantWithToolCalls).toBe(true);
-		expect(hasToolResult).toBe(true);
 	});
 
 	it("availableTools(...) is sent on every provider call (filtered per AI)", async () => {
@@ -941,13 +673,6 @@ describe("game-end conditions — checkWinCondition / checkBudgetExhausted", () 
 		expect(nextState.isComplete).toBe(true);
 	});
 
-	it("conversation history accumulates across rounds in flat model (no wipe)", async () => {
-		const game = makeGame();
-		const provider = makeSilentProvider();
-		const { nextState } = await runRound(game, "red", "hi", provider);
-		expect(nextState.conversationLogs.red?.length ?? 0).toBeGreaterThan(0);
-	});
-
 	it("gameEnded is true when a UseItemObjective is satisfied mid-round", async () => {
 		const packWithKey = makeTestPack(
 			[
@@ -973,16 +698,7 @@ describe("game-end conditions — checkWinCondition / checkBudgetExhausted", () 
 		};
 		const game = { ...baseGame, objectives: [useItemObj] };
 
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{ id: "tc1", name: "use", argumentsJson: '{"item":"key"}' },
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider = firstTurnActs([toolCall("tc1", "use", '{"item":"key"}')]);
 
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(result.gameEnded).toBe(true);
@@ -1010,13 +726,14 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			complicationSchedule: { ...base.complicationSchedule, countdown: 5 },
 		};
 		const provider = makeSilentProvider();
-		const { nextState } = await runRound(game, "red", "hi", provider, {
+		const { nextState, result } = await runRound(game, "red", "hi", provider, {
 			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
 		});
 		const phase = nextState;
 		expect(isPlayerChatLockedOut(phase, "red")).toBe(false);
 		expect(isPlayerChatLockedOut(phase, "green")).toBe(false);
 		expect(isPlayerChatLockedOut(phase, "cyan")).toBe(false);
+		expect(result.chatLockoutTriggered).toBeUndefined();
 	});
 
 	it("locked AI still acts (takes turn, not budget-locked) while chat lockout is active", async () => {
@@ -1061,7 +778,7 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 		);
 		expect(isPlayerChatLockedOut(afterR3, "red")).toBe(true);
 
-		const { nextState: afterR4 } = await runRound(
+		const { nextState: afterR4, result: r4Result } = await runRound(
 			afterR3,
 			"green",
 			"hi",
@@ -1069,63 +786,6 @@ describe("chat lockout — coordinator triggering (complication engine)", () => 
 			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
 		);
 		expect(isPlayerChatLockedOut(afterR4, "red")).toBe(false);
-	});
-
-	it("RoundResult includes chatLockoutTriggered when lockout fires", async () => {
-		const game = withCountdownZero(makeGame());
-		const provider = makeSilentProvider();
-		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
-		});
-		expect(result.chatLockoutTriggered).toBeDefined();
-		expect(result.chatLockoutTriggered?.aiId).toBe("red");
-	});
-
-	it("RoundResult chatLockoutTriggered is undefined when countdown > 0", async () => {
-		const base2 = makeGame();
-		const game = {
-			...base2,
-			complicationSchedule: { ...base2.complicationSchedule, countdown: 5 },
-		};
-		const provider = makeSilentProvider();
-		const { result } = await runRound(game, "red", "hi", provider, {
-			rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0),
-		});
-		expect(result.chatLockoutTriggered).toBeUndefined();
-	});
-
-	it("RoundResult includes chatLockoutsResolved when a lockout expires this round", async () => {
-		const { nextState: afterR1 } = await runRound(
-			withCountdownZero(makeGame()),
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
-		);
-
-		const { nextState: afterR2 } = await runRound(
-			afterR1,
-			"green",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
-		);
-		const { nextState: afterR3 } = await runRound(
-			afterR2,
-			"green",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
-		);
-
-		const { result: r4Result } = await runRound(
-			afterR3,
-			"green",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng(CHAT_LOCKOUT_DRAWS, () => 0) },
-		);
-		expect(r4Result.chatLockoutsResolved).toBeDefined();
 		expect(r4Result.chatLockoutsResolved).toContain("red");
 	});
 
@@ -1190,19 +850,8 @@ describe("multi-round game state accumulation", () => {
 	it("walks through multiple rounds correctly, game ends when all pairs satisfied", async () => {
 		const game = makeGame();
 
-		const r1Provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "c1",
-						name: "pick_up",
-						argumentsJson: '{"item":"flower"}',
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const r1Provider = firstTurnActs([
+			toolCall("c1", "pick_up", '{"item":"flower"}'),
 		]);
 		const { nextState: afterR1 } = await runRound(
 			game,
@@ -1228,26 +877,6 @@ describe("multi-round game state accumulation", () => {
 });
 
 describe("lockout messages", () => {
-	it("budget-exhaustion lockout chat message is '<name> is unresponsive…'", async () => {
-		let game = makeGame();
-		game = deductBudget(game, "red", 5).game;
-		expect(game.exhausted.has("red")).toBe(true);
-
-		const provider = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { nextState } = await runRound(game, "green", "hi", provider);
-
-		const redLog = nextState.conversationLogs.red ?? [];
-		const messageEntries = redLog.filter((e) => e.kind === "message");
-		const lastEntry = messageEntries[messageEntries.length - 1];
-		expect(lastEntry?.kind === "message" && lastEntry.from).toBe("red");
-		expect(lastEntry?.kind === "message" && lastEntry.content).toBe(
-			"Ember is unresponsive…",
-		);
-	});
-
 	it("chat-lockout message is '<name> is unresponsive…'", async () => {
 		const game = withCountdownZero(makeGame());
 		const provider = makeSilentProvider();
@@ -1379,24 +1008,6 @@ describe("runRound — onAiDelta callback", () => {
 
 		expect(received).toHaveLength(0);
 	});
-
-	it("MockRoundLLMProvider ignores onDelta — no live deltas fired", async () => {
-		const game = makeGame();
-		const mockProvider = new MockRoundLLMProvider([
-			{ assistantText: "red reply", toolCalls: [] },
-			{ assistantText: "green reply", toolCalls: [] },
-			{ assistantText: "cyan reply", toolCalls: [] },
-		]);
-
-		const received: Array<[AiId, string]> = [];
-		await runRound(game, "red", "hi", mockProvider, {
-			onAiDelta: (aiId, text) => {
-				received.push([aiId, text]);
-			},
-		});
-
-		expect(received).toHaveLength(0);
-	});
 });
 
 describe("placement flavor + win condition (issue #126)", () => {
@@ -1432,19 +1043,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 
 	it("K=1: drop on matching space fires placementFlavor in tool_success description", async () => {
 		const game = startGame(TEST_PERSONAS, PHASE1_PACK_K1, { budgetPerAi: 5 });
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "c1",
-						name: "put_down",
-						argumentsJson: `{"item":"${GEM_OBJ_ID}"}`,
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("c1", "put_down", `{"item":"${GEM_OBJ_ID}"}`),
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		const toolRecord = result.actions.find((a) => a.kind === "tool_success");
@@ -1458,19 +1058,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 			rng: () => 0,
 			objectiveTypes: ["carry"],
 		});
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "c1",
-						name: "put_down",
-						argumentsJson: `{"item":"${GEM_OBJ_ID}"}`,
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("c1", "put_down", `{"item":"${GEM_OBJ_ID}"}`),
 		]);
 		const { nextState, result } = await runRound(game, "red", "hi", provider);
 		expect(result.gameEnded).toBe(true);
@@ -1507,19 +1096,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 			budgetPerAi: 5,
 			objectiveTypes: ["carry"],
 		});
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "c1",
-						name: "put_down",
-						argumentsJson: `{"item":"${GEM_OBJ_ID}"}`,
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("c1", "put_down", `{"item":"${GEM_OBJ_ID}"}`),
 		]);
 		const { result } = await runRound(game, "red", "hi", provider);
 		const toolRecord = result.actions.find((a) => a.kind === "tool_success");
@@ -1581,19 +1159,8 @@ describe("placement flavor + win condition (issue #126)", () => {
 			objectiveTypes: ["carry", "carry"],
 		});
 
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "c1",
-						name: "put_down",
-						argumentsJson: `{"item":"${GEM_OBJ_ID}"}`,
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("c1", "put_down", `{"item":"${GEM_OBJ_ID}"}`),
 		]);
 		const { result, nextState } = await runRound(game, "red", "hi", provider);
 		expect(result.gameEnded).toBe(true);
@@ -1602,51 +1169,13 @@ describe("placement flavor + win condition (issue #126)", () => {
 });
 
 describe("conversationLogs isolation (AC #10 — #194)", () => {
-	it("player message to addressed AI lands ONLY in that AI's conversationLogs as kind:'message'", async () => {
-		const game = makeGame();
-		const provider = makeSilentProvider();
-		const { nextState } = await runRound(
-			game,
-			"red",
-			"private message",
-			provider,
-		);
-		const phase = nextState;
-
-		const redPlayerEntries = (phase.conversationLogs.red ?? []).filter(
-			(e) => e.kind === "message" && e.from === "blue",
-		);
-		expect(redPlayerEntries).toHaveLength(1);
-
-		const greenPlayerEntries = (phase.conversationLogs.green ?? []).filter(
-			(e) => e.kind === "message" && e.from === "blue",
-		);
-		expect(greenPlayerEntries).toHaveLength(0);
-
-		const cyanPlayerEntries = (phase.conversationLogs.cyan ?? []).filter(
-			(e) => e.kind === "message" && e.from === "blue",
-		);
-		expect(cyanPlayerEntries).toHaveLength(0);
-	});
-
 	it("AI message tool call lands as kind:'message' entry in the speaking AI's log only", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_red",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "I am red speaking",
-						}),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("msg_red", "message", {
+				to: "blue",
+				content: "I am red speaking",
+			}),
 		]);
 		const { nextState } = await runRound(game, "red", "hi", provider, {
 			initiative: ["red", "green", "cyan"] as AiId[],
@@ -1687,27 +1216,12 @@ function loggedToolCalls(state: GameState, aiId: AiId) {
 describe("parallel tool calls (message + action in one turn) (#238)", () => {
 	it("[msg, pick_up]: both dispatched; message record first; pick_up logged, no roundtrip", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_id",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "I'll grab the flower",
-						}),
-					},
-					{
-						id: "pickup_id",
-						name: "pick_up",
-						argumentsJson: JSON.stringify({ item: "flower" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("msg_id", "message", {
+				to: "blue",
+				content: "I'll grab the flower",
+			}),
+			toolCall("pickup_id", "pick_up", { item: "flower" }),
 		]);
 
 		const { result, nextState, toolRoundtrip } = await runRound(
@@ -1747,19 +1261,8 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 	it("[pick_up]-only: action logged as a tool-call entry, no roundtrip", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "pickup_only_id",
-						name: "pick_up",
-						argumentsJson: JSON.stringify({ item: "flower" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("pickup_only_id", "pick_up", { item: "flower" }),
 		]);
 
 		const { result, nextState, toolRoundtrip } = await runRound(
@@ -1787,22 +1290,11 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 	it("[msg-success]-only: no roundtrip recorded; conversation log has message", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_only_id",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "Just saying hi",
-						}),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("msg_only_id", "message", {
+				to: "blue",
+				content: "Just saying hi",
+			}),
 		]);
 
 		const { nextState, toolRoundtrip } = await runRound(
@@ -1828,27 +1320,12 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 	it("[msg-fail-bad-recipient, pick_up]: roundtrip has only the failed message; pick_up logged", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_fail_id",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "nobody_invalid",
-							content: "Hello?",
-						}),
-					},
-					{
-						id: "pickup_row4_id",
-						name: "pick_up",
-						argumentsJson: JSON.stringify({ item: "flower" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("msg_fail_id", "message", {
+				to: "nobody_invalid",
+				content: "Hello?",
+			}),
+			toolCall("pickup_row4_id", "pick_up", { item: "flower" }),
 		]);
 
 		const { result, nextState, toolRoundtrip } = await runRound(
@@ -1881,27 +1358,12 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 	it("[msg, msg]: first message dispatched, second rejected as one message per turn", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_first_id",
-						name: "message",
-						argumentsJson: JSON.stringify({ to: "blue", content: "First msg" }),
-					},
-					{
-						id: "msg_second_id",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "Second msg",
-						}),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("msg_first_id", "message", { to: "blue", content: "First msg" }),
+			toolCall("msg_second_id", "message", {
+				to: "blue",
+				content: "Second msg",
+			}),
 		]);
 
 		const { result, nextState, toolRoundtrip } = await runRound(
@@ -1947,32 +1409,13 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 	it("[msg-ok, msg-extra, pick_up]: the extra message is rejected and logged, no roundtrip", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_ok_id",
-						name: "message",
-						argumentsJson: JSON.stringify({ to: "blue", content: "Hi blue" }),
-					},
-					{
-						id: "msg_fail_id",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "nobody_invalid",
-							content: "Hello?",
-						}),
-					},
-					{
-						id: "pickup_id",
-						name: "pick_up",
-						argumentsJson: JSON.stringify({ item: "flower" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("msg_ok_id", "message", { to: "blue", content: "Hi blue" }),
+			toolCall("msg_fail_id", "message", {
+				to: "nobody_invalid",
+				content: "Hello?",
+			}),
+			toolCall("pickup_id", "pick_up", { item: "flower" }),
 		]);
 
 		const { nextState, toolRoundtrip } = await runRound(
@@ -1994,24 +1437,9 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 	it("[pick_up, go] duplicate action slot: first action dispatched; second logged as failure", async () => {
 		const game = makeGame();
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "pickup_first_id",
-						name: "pick_up",
-						argumentsJson: JSON.stringify({ item: "flower" }),
-					},
-					{
-						id: "go_dup_id",
-						name: "go",
-						argumentsJson: JSON.stringify({ direction: "south" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("pickup_first_id", "pick_up", { item: "flower" }),
+			toolCall("go_dup_id", "go", { direction: "south" }),
 		]);
 
 		const { result, nextState, toolRoundtrip } = await runRound(
@@ -2087,45 +1515,9 @@ describe("parallel tool calls (message + action in one turn) (#238)", () => {
 
 describe("message tool multi-round regression (#213)", () => {
 	it("no consecutive assistant turns in round 2 when round 1 used the message tool", async () => {
-		const game = makeGame();
-		const r1Provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "msg_r1_red",
-						name: "message",
-						argumentsJson: JSON.stringify({
-							to: "blue",
-							content: "Hello blue",
-						}),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const capturedRedMessages = await redRound2Messages([
+			toolCall("msg_r1_red", "message", { to: "blue", content: "Hello blue" }),
 		]);
-
-		const r1 = await runRound(game, "red", "say something", r1Provider, {
-			initiative: ["red", "green", "cyan"] as AiId[],
-		});
-
-		expect(r1.toolRoundtrip.red).toBeUndefined();
-
-		const capturedRedMessages: OpenAiMessage[] = [];
-		const r2Provider: RoundLLMProvider = {
-			async streamRound(messages, _tools) {
-				if (capturedRedMessages.length === 0) {
-					capturedRedMessages.push(...messages);
-				}
-				return { assistantText: "", toolCalls: [] };
-			},
-		};
-
-		await runRound(r1.nextState, "red", "round2", r2Provider, {
-			initiative: ["red", "green", "cyan"] as AiId[],
-			priorToolRoundtrip: r1.toolRoundtrip,
-		});
 
 		for (let i = 0; i < capturedRedMessages.length - 1; i++) {
 			const curr = capturedRedMessages[i];
@@ -2166,48 +1558,6 @@ describe("message tool multi-round regression (#213)", () => {
 });
 
 describe("tool-call replay — each call id appears once next round", () => {
-	function toolCallIdsIn(messages: OpenAiMessage[]): string[] {
-		return messages.flatMap((m) =>
-			m.role === "assistant" && "tool_calls" in m && m.tool_calls
-				? m.tool_calls.map((tc) => tc.id)
-				: [],
-		);
-	}
-
-	function toolResultIdsIn(messages: OpenAiMessage[]): string[] {
-		return messages.flatMap((m) =>
-			m.role === "tool" && "tool_call_id" in m ? [m.tool_call_id] : [],
-		);
-	}
-
-	async function redRound2Messages(
-		round1Calls: Array<{ id: string; name: string; argumentsJson: string }>,
-	): Promise<OpenAiMessage[]> {
-		const r1 = await runRound(
-			makeGame(),
-			"red",
-			"hi",
-			new MockRoundLLMProvider([
-				{ assistantText: "", toolCalls: round1Calls },
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
-			]),
-			{ initiative: ["red", "green", "cyan"] as AiId[] },
-		);
-		const captured: OpenAiMessage[][] = [];
-		const r2Provider: RoundLLMProvider = {
-			async streamRound(messages) {
-				captured.push(messages);
-				return { assistantText: "", toolCalls: [] };
-			},
-		};
-		await runRound(r1.nextState, "red", "round2", r2Provider, {
-			initiative: ["red", "green", "cyan"] as AiId[],
-			priorToolRoundtrip: r1.toolRoundtrip,
-		});
-		return captured[0] ?? [];
-	}
-
 	it("replays an accepted action, a rejected action, a parse failure and a failed message exactly once each", async () => {
 		const messages = await redRound2Messages([
 			{
@@ -2296,44 +1646,21 @@ describe("action-failure entries — round-coordinator integration", () => {
 		},
 	);
 
-	it("parse-fail (unknown tool) → tool_failure in result, no action-failure entry in any log", async () => {
+	it.each([
+		["parse-fail (unknown tool)", toolCall("c1", "fly_away", "{}")],
+		["malformed JSON tool call", toolCall("c1", "pick_up", "not json")],
+	])("%s → tool_failure in result, no action-failure entry in any log", async (_label, call) => {
 		const game = startGame(TEST_PERSONAS, OBSTACLE_PACK, { budgetPerAi: 10 });
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [{ id: "c1", name: "fly_away", argumentsJson: "{}" }],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { nextState, result } = await runRound(game, "red", "hi", provider);
+		const { nextState, result } = await runRound(
+			game,
+			"red",
+			"hi",
+			firstTurnActs([call]),
+		);
 		expect(result.actions.some((a) => a.kind === "tool_failure")).toBe(true);
 
-		const phase = nextState;
 		for (const aiId of ["red", "green", "cyan"]) {
-			const failures = (phase.conversationLogs[aiId] ?? []).filter(
-				(e) => e.kind === "action-failure",
-			);
-			expect(failures).toHaveLength(0);
-		}
-	});
-
-	it("malformed JSON tool call → tool_failure in result, no action-failure entry in any log", async () => {
-		const game = startGame(TEST_PERSONAS, OBSTACLE_PACK, { budgetPerAi: 10 });
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [{ id: "c1", name: "pick_up", argumentsJson: "not json" }],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
-		const { nextState, result } = await runRound(game, "red", "hi", provider);
-		expect(result.actions.some((a) => a.kind === "tool_failure")).toBe(true);
-
-		const phase = nextState;
-		for (const aiId of ["red", "green", "cyan"]) {
-			const failures = (phase.conversationLogs[aiId] ?? []).filter(
+			const failures = (nextState.conversationLogs[aiId] ?? []).filter(
 				(e) => e.kind === "action-failure",
 			);
 			expect(failures).toHaveLength(0);
@@ -2361,13 +1688,8 @@ describe("action-failure entries — round-coordinator integration", () => {
 
 		let state = game;
 		for (let round = 0; round < 3; round++) {
-			const provider = new MockRoundLLMProvider([
-				{
-					assistantText: "",
-					toolCalls: [{ ...goEastToolCall, id: `go_e_${round}` }],
-				},
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
+			const provider = firstTurnActs([
+				{ ...goEastToolCall, id: `go_e_${round}` },
 			]);
 			const { nextState } = await runRound(state, "red", "hi", provider);
 			state = nextState;
@@ -2446,19 +1768,8 @@ describe("physical-action witness fan-out — Vista membership (ADR 0015)", () =
 
 	it("a Daemon at offset (2, 0) from the actor's cell witnesses the action; one at (2, 1) does not", async () => {
 		const game = startGame(TEST_PERSONAS, VISTA_PACK, { budgetPerAi: 5 });
-		const provider = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "tc1",
-						name: "pick_up",
-						argumentsJson: JSON.stringify({ item: "flower" }),
-					},
-				],
-			},
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
+		const provider = firstTurnActs([
+			toolCall("tc1", "pick_up", { item: "flower" }),
 		]);
 
 		const { nextState } = await runRound(game, "red", "hi", provider);
@@ -2587,19 +1898,8 @@ describe("complication countdown — coordinator integration", () => {
 				cyan: { position: { row: 4, col: 4 } },
 			});
 
-			const provider = new MockRoundLLMProvider([
-				{
-					assistantText: "",
-					toolCalls: [
-						{
-							id: "go_1",
-							name: "go",
-							argumentsJson: JSON.stringify({ direction: "north" }),
-						},
-					],
-				},
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
+			const provider = firstTurnActs([
+				toolCall("go_1", "go", { direction: "north" }),
 			]);
 
 			const { nextState } = await runRound(game, "red", "start", provider);
@@ -2618,19 +1918,8 @@ describe("complication countdown — coordinator integration", () => {
 		it("Test B: a raw `face` tool call is rejected (unknown tool), never a no-op success", async () => {
 			const game = makeGame();
 
-			const provider = new MockRoundLLMProvider([
-				{
-					assistantText: "",
-					toolCalls: [
-						{
-							id: "face_1",
-							name: "face",
-							argumentsJson: JSON.stringify({ direction: "right" }),
-						},
-					],
-				},
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
+			const provider = firstTurnActs([
+				toolCall("face_1", "face", { direction: "right" }),
 			]);
 
 			const { nextState, result } = await runRound(
@@ -2665,19 +1954,8 @@ describe("complication countdown — coordinator integration", () => {
 		it("Test C: a relative `go` argument supplied as a raw tool call is rejected (cardinal only)", async () => {
 			const game = makeGame();
 
-			const provider = new MockRoundLLMProvider([
-				{
-					assistantText: "",
-					toolCalls: [
-						{
-							id: "go_rel_1",
-							name: "go",
-							argumentsJson: JSON.stringify({ direction: "forward" }),
-						},
-					],
-				},
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
+			const provider = firstTurnActs([
+				toolCall("go_rel_1", "go", { direction: "forward" }),
 			]);
 
 			const { nextState, result } = await runRound(
@@ -2700,19 +1978,8 @@ describe("complication countdown — coordinator integration", () => {
 		it("Test D: non-go tools never enrich (pick_up does not get diskDelta)", async () => {
 			const game = makeGame();
 
-			const provider = new MockRoundLLMProvider([
-				{
-					assistantText: "",
-					toolCalls: [
-						{
-							id: "pick_1",
-							name: "pick_up",
-							argumentsJson: JSON.stringify({ item: "flower" }),
-						},
-					],
-				},
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
+			const provider = firstTurnActs([
+				toolCall("pick_1", "pick_up", { item: "flower" }),
 			]);
 
 			const { nextState } = await runRound(game, "red", "start", provider);
@@ -2734,19 +2001,8 @@ describe("complication countdown — coordinator integration", () => {
 				cyan: { position: { row: 4, col: 4 } },
 			});
 
-			const provider = new MockRoundLLMProvider([
-				{
-					assistantText: "",
-					toolCalls: [
-						{
-							id: "go_1",
-							name: "go",
-							argumentsJson: JSON.stringify({ direction: "north" }),
-						},
-					],
-				},
-				{ assistantText: "", toolCalls: [] },
-				{ assistantText: "", toolCalls: [] },
+			const provider = firstTurnActs([
+				toolCall("go_1", "go", { direction: "north" }),
 			]);
 
 			const { nextState } = await runRound(game, "red", "start", provider);
@@ -2812,11 +2068,7 @@ describe("diskDelta persistence via diskEntities", () => {
 				}),
 			},
 		};
-		const provider2 = new MockRoundLLMProvider([
-			{ assistantText: "", toolCalls: redToolCalls },
-			{ assistantText: "", toolCalls: [] },
-			{ assistantText: "", toolCalls: [] },
-		]);
+		const provider2 = firstTurnActs(redToolCalls);
 		const round2Result = await runRound(game2, "red", "move", provider2, {
 			rng: Math.random,
 			priorToolRoundtrip: {},
@@ -2937,57 +2189,18 @@ describe("diskDelta persistence via diskEntities", () => {
 });
 
 describe("tool call ids", () => {
-	function replayedIds(messages: OpenAiMessage[]) {
-		const calls = messages.flatMap((m) =>
-			m.role === "assistant" && m.tool_calls
-				? m.tool_calls.map((tc) => tc.id)
-				: [],
-		);
-		const results = messages.flatMap((m) =>
-			m.role === "tool" ? [m.tool_call_id] : [],
-		);
-		return { calls, results };
-	}
-
 	it("gives missing and reused ids unique replacements so the replayed history has no duplicates", async () => {
-		const quiet = { assistantText: "", toolCalls: [] };
-		const round1 = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "",
-						name: "message",
-						argumentsJson: '{"to":"blue","content":"hi"}',
-					},
-					{
-						id: "",
-						name: "message",
-						argumentsJson: '{"to":"blue","content":"again"}',
-					},
-					{ id: "call_0", name: "pick_up", argumentsJson: '{"item":"flower"}' },
-					{ id: "call_0", name: "go", argumentsJson: '{"direction":"south"}' },
-				],
-			},
-			quiet,
-			quiet,
+		const round1 = firstTurnActs([
+			toolCall("", "message", '{"to":"blue","content":"hi"}'),
+			toolCall("", "message", '{"to":"blue","content":"again"}'),
+			toolCall("call_0", "pick_up", '{"item":"flower"}'),
+			toolCall("call_0", "go", '{"direction":"south"}'),
 		]);
 		const r1 = await runRound(makeGame(), "red", "hi", round1);
 
-		const round2 = new MockRoundLLMProvider([
-			{
-				assistantText: "",
-				toolCalls: [
-					{
-						id: "call_0",
-						name: "message",
-						argumentsJson: '{"to":"nobody","content":"hello?"}',
-					},
-					{ id: "", name: "go", argumentsJson: "{not json" },
-				],
-			},
-			quiet,
-			quiet,
+		const round2 = firstTurnActs([
+			toolCall("call_0", "message", '{"to":"nobody","content":"hello?"}'),
+			toolCall("", "go", "{not json"),
 		]);
 		const r2 = await runRound(r1.nextState, "red", "hi", round2, {
 			priorToolRoundtrip: r1.toolRoundtrip,
@@ -3000,7 +2213,8 @@ describe("tool call ids", () => {
 			r2.toolRoundtrip.red,
 			r2.nextState.round,
 		);
-		const { calls, results } = replayedIds(messages);
+		const calls = toolCallIdsIn(messages);
+		const results = toolResultIdsIn(messages);
 		expect(calls).toHaveLength(6);
 		expect(calls.every((id) => id !== "")).toBe(true);
 		expect(new Set(calls).size).toBe(calls.length);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type {
 	RawBinding,
 	RawBoundPack,
@@ -191,54 +191,40 @@ function allEntityIds(pack: ContentPack): string[] {
 }
 
 describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
-	it("produces packA and packB with identical entity IDs", async () => {
-		const rng = mulberry32Rng(99);
-		const provider = makeDualMockProvider();
+	let provider: MockContentPackProvider;
+	let packA: ContentPack;
+	let packB: ContentPack;
 
-		const { packA, packB } = await generateDualContentPacks(
-			rng,
+	beforeAll(async () => {
+		provider = makeDualMockProvider();
+		({ packA, packB } = await generateDualContentPacks(
+			mulberry32Rng(99),
 			SETTING_POOL_2,
 			ONE_OBSTACLE_CONFIG,
 			provider,
 			AI_IDS,
-		);
+		));
+	});
 
+	it("produces packA and packB with identical entity IDs", () => {
 		expect(allEntityIds(packA)).toEqual(allEntityIds(packB));
 	});
 
-	it("Pack A and Pack B have different settings", async () => {
-		const rng = mulberry32Rng(99);
-		const provider = makeDualMockProvider();
-
-		const { packA, packB } = await generateDualContentPacks(
-			rng,
-			SETTING_POOL_2,
-			ONE_OBSTACLE_CONFIG,
-			provider,
-			AI_IDS,
-		);
-
+	it("Pack A and Pack B have different settings", () => {
 		expect(packA.setting).not.toBe(packB.setting);
 	});
 
-	it("Pack B entities have the same holder positions as Pack A (placement parity)", async () => {
-		const rng = mulberry32Rng(99);
-		const provider = makeDualMockProvider();
-
-		const { packA, packB } = await generateDualContentPacks(
-			rng,
-			SETTING_POOL_2,
-			ONE_OBSTACLE_CONFIG,
-			provider,
-			AI_IDS,
-		);
-
+	it("Pack B entities have the same holder positions as Pack A (placement parity)", () => {
 		const holderByIdInPackA = new Map<string, unknown>();
 		for (const e of packA.entities) holderByIdInPackA.set(e.id, e.holder);
 
 		for (const e of packB.entities) {
 			expect(e.holder).toEqual(holderByIdInPackA.get(e.id));
 		}
+	});
+
+	it("makes exactly one LLM call for the dual packs", () => {
+		expect(provider.calls).toHaveLength(1);
 	});
 
 	it("keeps only the scheduled obstacles when Pack B returns extras", async () => {
@@ -262,21 +248,6 @@ describe("generateDualContentPacks — entity ID parity (issue #302)", () => {
 
 		expect(obstacles(packB).map((o) => o.id)).toEqual(["obstacle-0"]);
 		expect(allEntityIds(packB)).toEqual(allEntityIds(packA));
-	});
-
-	it("makes exactly one LLM call for the dual packs", async () => {
-		const rng = mulberry32Rng(99);
-		const provider = makeDualMockProvider();
-
-		await generateDualContentPacks(
-			rng,
-			SETTING_POOL_2,
-			ONE_OBSTACLE_CONFIG,
-			provider,
-			AI_IDS,
-		);
-
-		expect(provider.calls).toHaveLength(1);
 	});
 
 	it("throws when settings pool has fewer than 2 entries", async () => {
@@ -345,15 +316,21 @@ describe("generateDualContentPacks — placement constraints", () => {
 		return seen;
 	}
 
-	async function placedPacksFor(seed: number): Promise<ContentPack[]> {
-		const { packA, packB } = await generateDualContentPacks(
-			mulberry32Rng(seed),
-			SETTING_POOL_2,
-			SEVERAL_OBSTACLES_CONFIG,
-			makeDualMockProvider(),
-			AI_IDS,
-		);
-		return [packA, packB];
+	const placedPacksBySeed = new Map<number, Promise<ContentPack[]>>();
+
+	function placedPacksFor(seed: number): Promise<ContentPack[]> {
+		let placed = placedPacksBySeed.get(seed);
+		if (!placed) {
+			placed = generateDualContentPacks(
+				mulberry32Rng(seed),
+				SETTING_POOL_2,
+				SEVERAL_OBSTACLES_CONFIG,
+				makeDualMockProvider(),
+				AI_IDS,
+			).then(({ packA, packB }) => [packA, packB]);
+			placedPacksBySeed.set(seed, placed);
+		}
+		return placed;
 	}
 
 	it.each(SEEDS)("seed %s: obstacles never share a cell", async (seed) => {

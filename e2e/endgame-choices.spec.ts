@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import {
+	ARCHIVE_PREFIX,
 	activeSessionId,
 	COMPLICATION_COUNTDOWN_BEYOND_ANY_SPEC,
 	collectPageErrors,
@@ -7,6 +8,7 @@ import {
 	goToGame,
 	isJsonModeRequest,
 	isRequestForDaemon,
+	listSessionIds,
 	type ParsedBody,
 	parseRequestBody,
 	reachEndgame,
@@ -14,6 +16,7 @@ import {
 	readActiveSessionFiles,
 	readDaemonFile,
 	renderedPlayerLine,
+	requireActiveSessionId,
 	setComplicationCountdown,
 } from "./helpers";
 
@@ -54,57 +57,35 @@ async function reachEndgameAfterFinalRound(
 	return handles;
 }
 
-test("endgame shows choice buttons; Continue hidden without openrouter_key", async ({
+test("game_ended disables the composer, shows endgame choices without Continue, and keeps the session pointer and URL", async ({
 	page,
 }) => {
 	const pageErrors = collectPageErrors(page);
 
-	await reachEndgame(page);
+	const { names } = await goToGame(page, {
+		url: "/?winImmediately=1",
+		sse: ["hello"],
+	});
 
+	const urlBefore = page.url();
+
+	await page.fill("#prompt", `*${names[0]} hello`);
+	await expect(page.locator("#send")).toBeEnabled();
+	await page.click("#send");
+
+	await expect(page.locator("#send")).toBeDisabled({ timeout: 30_000 });
+	await expect(page.locator("#prompt")).toBeDisabled();
+
+	await expect(page.locator("#endgame")).toBeVisible();
 	await expect(page.locator("#endgame-new-daemons-btn")).toBeVisible();
 	await expect(page.locator("#endgame-same-daemons-btn")).toBeVisible();
+	await expect(page.locator("#endgame-continue-btn")).toBeHidden();
 
-	const continueBtn = page.locator("#endgame-continue-btn");
-	await expect(continueBtn).toBeHidden();
-
-	await expectNoPageErrors(page, pageErrors);
-});
-
-test("Continue button visible when openrouter_key is set in localStorage", async ({
-	page,
-}) => {
-	const pageErrors = collectPageErrors(page);
-
-	await page.addInitScript(() => {
-		localStorage.setItem("openrouter_key", "sk-or-test-key");
-	});
-
-	await reachEndgame(page);
-
-	await expect(page.locator("#endgame-continue-btn")).toBeVisible();
-
-	await expectNoPageErrors(page, pageErrors);
-});
-
-test("New Daemons click archives session and transitions to start view", async ({
-	page,
-}) => {
-	const pageErrors = collectPageErrors(page);
-
-	await reachEndgame(page);
-
-	const sessionBefore = await activeSessionId(page);
-	expect(sessionBefore).not.toBeNull();
-
-	await page.locator("#endgame-new-daemons-btn").click();
-
-	await expect(page.locator('main[data-view="start"]')).toBeAttached({
-		timeout: 15_000,
-	});
-
-	const sessionAfter = await activeSessionId(page);
-	expect(sessionAfter).not.toBeNull();
-	expect(sessionAfter).not.toBe(sessionBefore);
+	expect(
+		await activeSessionId(page),
+		"active-session pointer must be kept after game_ended",
+	).not.toBeNull();
+	expect(page.url(), "URL must not change after game_ended").toBe(urlBefore);
 
 	await expectNoPageErrors(page, pageErrors);
 });
@@ -141,6 +122,7 @@ test("Continue leaves the endgame screen and re-enables the prompt", async ({
 	});
 
 	const { ids } = await reachEndgame(page);
+	await expect(page.locator("#endgame-continue-btn")).toBeVisible();
 	await expect(page.locator("#topinfo-left")).toContainText("EPOCH 01");
 	const transcript = page.locator(`[data-transcript="${ids[0]}"]`);
 	await expect(transcript).toContainText(renderedPlayerLine("hello"));
@@ -232,18 +214,23 @@ for (const finalRound of ["quiet", "weather-change"] as const) {
 	});
 }
 
-test("New Daemons hides the endgame on the start screen and in the next game", async ({
+test("New Daemons archives the session, mints a new one, and hides the endgame on the start screen and in the next game", async ({
 	page,
 }) => {
 	const pageErrors = collectPageErrors(page);
 
 	await reachEndgame(page);
+	const sessionBefore = await requireActiveSessionId(page);
 	await page.locator("#endgame-new-daemons-btn").click();
 
 	await expect(page.locator('main[data-view="start"]')).toBeAttached({
 		timeout: 15_000,
 	});
 	await expect(page.locator("#endgame")).toBeHidden();
+	const sessionAfter = await activeSessionId(page);
+	expect(sessionAfter).not.toBeNull();
+	expect(sessionAfter).not.toBe(sessionBefore);
+	expect(await listSessionIds(page, ARCHIVE_PREFIX)).toEqual([sessionBefore]);
 
 	await expect(page.locator("#begin")).toBeEnabled({ timeout: 15_000 });
 	await page.locator("#password").fill("password");

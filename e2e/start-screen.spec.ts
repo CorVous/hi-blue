@@ -6,11 +6,14 @@ import {
 	test,
 } from "@playwright/test";
 import {
+	ACTIVE_SESSION_KEY,
+	activeSessionId,
 	classifyJsonRequest,
 	collectPageErrors,
 	expectNoPageErrors,
 	isJsonModeRequest,
 	parseRequestBody,
+	sessionFileKey,
 	stubChatCompletions,
 	stubNewGameLLM,
 	waitForStartScreenReady,
@@ -25,8 +28,8 @@ async function waitForActiveSession(
 	timeoutMs = 15_000,
 ): Promise<void> {
 	await page.waitForFunction(
-		() => localStorage.getItem("hi-blue:active-session") !== null,
-		undefined,
+		(activeKey) => localStorage.getItem(activeKey) !== null,
+		ACTIVE_SESSION_KEY,
 		{ timeout: timeoutMs },
 	);
 }
@@ -85,7 +88,7 @@ test("password input disables ligatures so masked `***` doesn't shift mid-char",
 	await expectNoPageErrors(page, pageErrors);
 });
 
-test("[ BEGIN ] is enabled once the start screen has booted with the dial-up skipped", async ({
+test("[ BEGIN ] logs in to the game view, and a refresh with the active session stays on it", async ({
 	page,
 }) => {
 	const pageErrors = collectPageErrors(page);
@@ -96,52 +99,15 @@ test("[ BEGIN ] is enabled once the start screen has booted with the dial-up ski
 
 	const beginBtn = await waitForStartScreenReady(page);
 	await expect(beginBtn).toBeEnabled();
-
-	await expectNoPageErrors(page, pageErrors);
-});
-
-test("clicking [ BEGIN ] transitions to the game view and shows panels", async ({
-	page,
-}) => {
-	const pageErrors = collectPageErrors(page);
-
-	await stubNewGameLLM(page, { sse: ["stub reply"] });
-
-	await page.goto("/?skipDialup=1");
-
-	const beginBtn = await waitForStartScreenReady(page);
-
 	await page.locator("#password").fill("password");
 	await beginBtn.click();
 
 	await expect(page.locator('main[data-view="game"]')).toBeAttached({
 		timeout: 10_000,
 	});
-
 	await expect(page.locator("#panels")).toBeVisible();
 	await expect(page.locator("#composer")).toBeVisible();
 	await expect(page.locator("#start-screen")).toBeHidden();
-
-	await waitForActiveSession(page);
-
-	await expectNoPageErrors(page, pageErrors);
-});
-
-test("refreshing on the game view with an active session stays on the game view", async ({
-	page,
-}) => {
-	const pageErrors = collectPageErrors(page);
-
-	await stubNewGameLLM(page, { sse: ["stub reply"] });
-
-	await page.goto("/?skipDialup=1");
-
-	const beginBtn = await waitForStartScreenReady(page);
-	await page.locator("#password").fill("password");
-	await beginBtn.click();
-	await expect(page.locator('main[data-view="game"]')).toBeAttached({
-		timeout: 10_000,
-	});
 
 	await waitForActiveSession(page);
 
@@ -360,11 +326,14 @@ test("refresh during generation re-enters start screen and restarts generation",
 
 	await expect(page.locator("#start-screen")).toBeVisible();
 
-	const engineDat = await page.evaluate(() => {
-		const sessionId = localStorage.getItem("hi-blue:active-session");
-		if (!sessionId) return null;
-		return localStorage.getItem(`hi-blue:sessions/${sessionId}/engine.dat`);
-	});
+	const sessionId = await activeSessionId(page);
+	const engineDat =
+		sessionId === null
+			? null
+			: await page.evaluate(
+					(key) => localStorage.getItem(key),
+					sessionFileKey(sessionId, "engine.dat"),
+				);
 	expect(engineDat).toBeNull();
 
 	await waitForStartScreenReady(page);
@@ -379,10 +348,9 @@ test("empty active-session pointer surfaces the start screen on load", async ({
 
 	await stubNewGameLLM(page, { sse: ["stub reply"] });
 
-	await page.addInitScript(() => {
-		const freshId = "test-empty-session-id";
-		localStorage.setItem("hi-blue:active-session", freshId);
-	});
+	await page.addInitScript((activeKey) => {
+		localStorage.setItem(activeKey, "test-empty-session-id");
+	}, ACTIVE_SESSION_KEY);
 
 	await page.goto("/");
 

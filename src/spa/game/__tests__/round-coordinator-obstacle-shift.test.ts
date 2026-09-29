@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { runRound } from "../round-coordinator";
-import type { WorldEntity } from "../types";
-import {
-	makeSilentProvider,
-	makeTestGame,
-	seededRng,
-	withPackOrderedWorld,
-} from "./fixtures/make-game-state";
+import type { GameState, WorldEntity } from "../types";
+import { makeTestGame, withPackOrderedWorld } from "./fixtures/make-game-state";
+import { runComplicationRound } from "./round-coordinator-harness";
 
 const OBSTACLE: WorldEntity = {
 	id: "wall_ob",
@@ -51,58 +46,28 @@ function makeBaseGame() {
 	);
 }
 
+function fireObstacleShift(game: GameState) {
+	return runComplicationRound(game, [0.5, 0], Math.random);
+}
+
 describe("runRound — obstacle_shift complication (issue #486)", () => {
 	it("moves the obstacle entity from fromCell to toCell in world.entities", async () => {
 		const game = makeBaseGame();
-		const withCountdown = {
-			...game,
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng([0.5, 0], Math.random) },
-		);
+		const { nextState } = await fireObstacleShift(game);
 
 		const obstacleAfter = nextState.world.entities.find(
 			(e) => e.id === "wall_ob",
 		);
-		expect(obstacleAfter).toBeDefined();
-
-		if (obstacleAfter && typeof obstacleAfter.holder === "object") {
-			const obstacleHolder = obstacleAfter.holder as {
-				row: number;
-				col: number;
-			};
-			const origHolder =
-				typeof OBSTACLE.holder === "object"
-					? (OBSTACLE.holder as { row: number; col: number })
-					: { row: 2, col: 2 };
-			const dx = Math.abs(obstacleHolder.row - origHolder.row);
-			const dy = Math.abs(obstacleHolder.col - origHolder.col);
-			expect(dx + dy).toBe(1);
-		} else {
+		const holder = obstacleAfter?.holder;
+		if (typeof holder !== "object") {
 			expect.fail("Obstacle holder is not a GridPosition after shift.");
 		}
+		expect(Math.abs(holder.row - 2) + Math.abs(holder.col - 2)).toBe(1);
 	});
 
 	it("appends witnessed-obstacle-shift entry to a daemon whose Vista contains fromCell", async () => {
 		const game = makeBaseGame();
-		const withCountdown = {
-			...game,
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng([0.5, 0], Math.random) },
-		);
+		const { nextState } = await fireObstacleShift(game);
 
 		const redLog = nextState.conversationLogs.red ?? [];
 		const shiftEntries = redLog.filter(
@@ -125,18 +90,7 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 
 	it("does NOT append witnessed-obstacle-shift entry to a daemon whose Vista does NOT contain fromCell", async () => {
 		const game = makeBaseGame();
-		const withCountdown = {
-			...game,
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng([0.5, 0], Math.random) },
-		);
+		const { nextState } = await fireObstacleShift(game);
 
 		const cyanLog = nextState.conversationLogs.cyan ?? [];
 		const shiftEntries = cyanLog.filter(
@@ -148,23 +102,14 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 
 	it("Vista boundary: a Daemon at offset (2, 0) from the origin witnesses the shift; one at (2, 1) does not", async () => {
 		const game = makeBaseGame();
-		const withCountdown = {
+		const { nextState } = await fireObstacleShift({
 			...game,
 			personaSpatial: {
 				...game.personaSpatial,
 				red: { position: { row: 2, col: 0 } },
 				green: { position: { row: 1, col: 0 } },
 			},
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng([0.5, 0], Math.random) },
-		);
+		});
 
 		expect(
 			(nextState.conversationLogs.red ?? []).filter(
@@ -180,18 +125,7 @@ describe("runRound — obstacle_shift complication (issue #486)", () => {
 
 	it("resets the complication countdown after obstacle_shift fires", async () => {
 		const game = makeBaseGame();
-		const withCountdown = {
-			...game,
-			complicationSchedule: { ...game.complicationSchedule, countdown: 0 },
-		};
-
-		const { nextState } = await runRound(
-			withCountdown,
-			"red",
-			"hi",
-			makeSilentProvider(),
-			{ rng: seededRng([0.5, 0], Math.random) },
-		);
+		const { nextState } = await fireObstacleShift(game);
 
 		expect(nextState.complicationSchedule.countdown).toBeGreaterThan(0);
 	});

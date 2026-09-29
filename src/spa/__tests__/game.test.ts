@@ -12,6 +12,7 @@ import {
 	STATIC_OBJECTIVE_TYPES,
 } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
+import { waitUntilPasses } from "./fixtures/wait-until-passes";
 
 vi.mock("../../content/persona-generator", () => ({
 	generatePersonas: async () => STATIC_PERSONAS,
@@ -106,7 +107,7 @@ function getEl<T extends HTMLElement>(selector: string): T {
 }
 
 async function waitForRoundToSettle(): Promise<void> {
-	await vi.waitFor(() =>
+	await waitUntilPasses(() =>
 		expect(getEl("#stage").hasAttribute("data-round-in-flight")).toBe(false),
 	);
 }
@@ -245,23 +246,27 @@ function makeMessageToolCallFetchMock() {
 		});
 }
 
+async function installSeededLocalStorage(): Promise<LocalStorageStub> {
+	const stub = makeLocalStorageStub();
+	await seedSessionInStub(stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
+	vi.stubGlobal("localStorage", stub);
+	return stub;
+}
+
+afterEach(() => {
+	vi.useRealTimers();
+	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
+	vi.resetModules();
+	document.body.innerHTML = "";
+});
+
 describe("renderGame (game route — three-AI)", () => {
 	let _stub: LocalStorageStub;
 
 	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		_stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
-		vi.stubGlobal("localStorage", _stub);
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
+		_stub = await installSeededLocalStorage();
 	});
 
 	it("after one submit, all three transcript panels have content", async () => {
@@ -285,7 +290,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(redTranscript.textContent?.trim()).toBeTruthy();
 			expect(greenTranscript.textContent?.trim()).toBeTruthy();
 			expect(cyanTranscript.textContent?.trim()).toBeTruthy();
@@ -312,7 +317,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(redTranscript.textContent).toContain("RED_RESPONSE_UNIQUE_TAG");
 			expect(greenTranscript.textContent).toContain(
 				"GREEN_RESPONSE_UNIQUE_TAG",
@@ -353,7 +358,7 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(redBudget?.textContent).toContain("4"));
+		await waitUntilPasses(() => expect(redBudget?.textContent).toContain("4"));
 		expect(greenBudget?.textContent).toContain("4");
 		expect(cyanBudget?.textContent).toContain("4");
 	});
@@ -374,7 +379,7 @@ describe("renderGame (game route — three-AI)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+		await waitUntilPasses(() => expect(mockFetch).toHaveBeenCalledTimes(3));
 	});
 
 	it("shows per-daemon braille spinners during the round, stripped after responses arrive", async () => {
@@ -410,7 +415,7 @@ describe("renderGame (game route — three-AI)", () => {
 		expect(greenTranscript.textContent).toContain("> hello");
 		expect(greenTranscript.textContent).not.toContain("> *Sage hello");
 
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(redPanel.querySelector(".panel-spinner")).toBeNull(),
 		);
 		expect(greenPanel.querySelector(".panel-spinner")).toBeNull();
@@ -457,7 +462,7 @@ describe("renderGame (game route — three-AI)", () => {
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(greenTranscript.textContent).toContain(
 				"GREEN_RESPONSE_UNIQUE_TAG",
 			),
@@ -488,7 +493,7 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
 
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			const occurrences =
 				(greenTranscript.textContent ?? "").split("> hello").length - 1;
 			expect(occurrences).toBe(1);
@@ -521,7 +526,7 @@ describe("renderGame (game route — three-AI)", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		const panelsEl = document.querySelector<HTMLElement>("#panels");
-		await vi.waitFor(() => expect(panelsEl?.hidden).toBe(true));
+		await waitUntilPasses(() => expect(panelsEl?.hidden).toBe(true));
 
 		const composerEl = document.querySelector<HTMLElement>("#composer");
 		expect(composerEl?.hidden).toBe(true);
@@ -569,7 +574,7 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 
 		const endgameEl2 = getEl<HTMLElement>("#endgame");
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(endgameEl2.hasAttribute("hidden")).toBe(false),
 		);
 
@@ -608,7 +613,7 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 
 		const endgameEl = getEl<HTMLElement>("#endgame");
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(endgameEl.hasAttribute("hidden")).toBe(false),
 		);
 
@@ -651,7 +656,7 @@ describe("renderGame (game route — three-AI)", () => {
 		);
 
 		const endgameEl = getEl<HTMLElement>("#endgame");
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(endgameEl.hasAttribute("hidden")).toBe(false),
 		);
 
@@ -668,7 +673,7 @@ describe("renderGame (game route — three-AI)", () => {
 		diagnosticsSummaryInput.value = "curious";
 		submitDiagnosticsBtn.click();
 
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(mockFetch.mock.calls.length).toBe(callCountBeforeDiagnostics + 1),
 		);
 		const [diagnosticsUrl, diagnosticsOptions] = mockFetch.mock.calls[
@@ -689,16 +694,7 @@ describe("renderGame (game route — three-AI)", () => {
 
 describe("renderGame — localStorage persistence", () => {
 	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
 	});
 
 	it("state is saved to localStorage after a successful round", async () => {
@@ -719,7 +715,7 @@ describe("renderGame — localStorage persistence", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		const engineKey = await vi.waitFor(() => {
+		const engineKey = await waitUntilPasses(() => {
 			const key = Object.keys(stub._store).find((k) =>
 				k.endsWith("/engine.dat"),
 			);
@@ -748,7 +744,7 @@ describe("renderGame — localStorage persistence", () => {
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(stub.setItem).toHaveBeenCalled();
 			const key = Object.keys(stub._store).find((k) =>
 				k.endsWith("/engine.dat"),
@@ -756,7 +752,7 @@ describe("renderGame — localStorage persistence", () => {
 			expect(key).toBeDefined();
 		});
 
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			const keys = Object.keys(stub._store).filter(
 				(k) => k.endsWith(".txt") && !k.endsWith("whispers.txt"),
 			);
@@ -813,7 +809,7 @@ describe("renderGame — localStorage persistence", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		const sendBtn = getEl<HTMLButtonElement>("#send");
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			promptInput.value = "*Sage hi";
 			promptInput.dispatchEvent(new Event("input"));
 			expect(sendBtn.disabled).toBe(false);
@@ -879,7 +875,7 @@ describe("renderGame — localStorage persistence", () => {
 		form1.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			const daemonKeys = Object.keys(stub._store).filter(
 				(k) => k.endsWith(".txt") && !k.endsWith("whispers.txt"),
 			);
@@ -923,7 +919,7 @@ describe("renderGame — localStorage persistence", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(
 				document.querySelector<HTMLElement>('[data-transcript="red"]')
 					?.textContent ?? "",
@@ -961,16 +957,7 @@ describe("renderGame — localStorage persistence", () => {
 
 describe("renderGame — a round still in flight when the player loads another session", () => {
 	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
 	});
 
 	function makeHeldMessageToolCallFetchMock() {
@@ -1005,7 +992,7 @@ describe("renderGame — a round still in flight when the player loads another s
 		getEl<HTMLFormElement>("#composer").dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+		await waitUntilPasses(() => expect(fetchMock).toHaveBeenCalled());
 
 		const { buildSessionFromAssets } = await import("../game/bootstrap.js");
 		storage.setActiveSessionId("0xB000");
@@ -1061,19 +1048,8 @@ describe("renderGame — a round still in flight when the player loads another s
 
 describe("renderGame — chat_lockout event", () => {
 	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
-		vi.stubGlobal("localStorage", _stub);
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
+		await installSeededLocalStorage();
 	});
 
 	it("chat_lockout silently locks the panel without appending a transcript message", async () => {
@@ -1117,13 +1093,13 @@ describe("renderGame — chat_lockout event", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const sendBtn = getEl<HTMLButtonElement>("#send");
 
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitUntilPasses(() => expect(promptInput.value).toBe("*Sage "));
 		await waitForRoundToSettle();
 
 		const redPanel = document.querySelector<HTMLElement>(
 			'.ai-panel[data-ai="red"]',
 		);
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(redPanel?.classList.contains("panel--locked")).toBe(true);
 		});
 
@@ -1137,19 +1113,8 @@ describe("renderGame — chat_lockout event", () => {
 
 describe("renderGame — mention-based addressing", () => {
 	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
-		vi.stubGlobal("localStorage", _stub);
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
+		await installSeededLocalStorage();
 	});
 
 	it("empty input on initial load leaves Send disabled", async () => {
@@ -1205,7 +1170,7 @@ describe("renderGame — mention-based addressing", () => {
 		const redTranscript = getEl<HTMLElement>('[data-transcript="red"]');
 		const cyanTranscript = getEl<HTMLElement>('[data-transcript="cyan"]');
 
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(greenTranscript.textContent).toContain("> hi"),
 		);
 		expect(greenTranscript.textContent).not.toContain("> *Sage hi");
@@ -1254,7 +1219,7 @@ describe("renderGame — mention-based addressing", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitUntilPasses(() => expect(promptInput.value).toBe("*Sage "));
 		await waitForRoundToSettle();
 
 		promptInput.value = "*Sage hi";
@@ -1265,19 +1230,8 @@ describe("renderGame — mention-based addressing", () => {
 
 describe("renderGame — panel-click addressee", () => {
 	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
-		vi.stubGlobal("localStorage", _stub);
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
+		await installSeededLocalStorage();
 	});
 
 	it("empty input + click red panel → '*Ember ', Send stays disabled (no body)", async () => {
@@ -1379,7 +1333,7 @@ describe("renderGame — panel-click addressee", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			const panel = document.querySelector('.ai-panel[data-ai="red"]');
 			expect(panel?.classList.contains("panel--locked")).toBe(true);
 		});
@@ -1409,19 +1363,8 @@ describe("renderGame — panel-click addressee", () => {
 
 describe("renderGame — addressee persistence after send", () => {
 	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
-		vi.stubGlobal("localStorage", _stub);
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
+		await installSeededLocalStorage();
 	});
 
 	it("first-load: input empty and Send disabled (#107 preserved)", async () => {
@@ -1454,7 +1397,7 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitUntilPasses(() => expect(promptInput.value).toBe("*Sage "));
 		await waitForRoundToSettle();
 		expect(promptInput.selectionStart).toBe(6);
 		expect(promptInput.selectionEnd).toBe(6);
@@ -1492,7 +1435,7 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+		await waitUntilPasses(() => expect(mockFetch).toHaveBeenCalledTimes(1));
 
 		await renderGame(root);
 		promptInput.value = "*Sage again";
@@ -1530,7 +1473,7 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			promptInput.value = "*Sage how are you";
 			promptInput.dispatchEvent(new Event("input"));
 			expect(sendBtn.disabled).toBe(false);
@@ -1560,7 +1503,7 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitUntilPasses(() => expect(promptInput.value).toBe("*Sage "));
 		await waitForRoundToSettle();
 
 		promptInput.value = "*Sage how are you";
@@ -1568,7 +1511,7 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitUntilPasses(() => expect(promptInput.value).toBe("*Sage "));
 		await waitForRoundToSettle();
 
 		const greenTranscript = getEl<HTMLElement>('[data-transcript="green"]');
@@ -1593,7 +1536,7 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => expect(promptInput.value).toBe("*Sage "));
+		await waitUntilPasses(() => expect(promptInput.value).toBe("*Sage "));
 		await waitForRoundToSettle();
 	});
 
@@ -1637,7 +1580,7 @@ describe("renderGame — addressee persistence after send", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(promptInput.value).toBe("*Sage ");
 			expect(sendBtn.disabled).toBe(true);
 		});
@@ -1646,19 +1589,8 @@ describe("renderGame — addressee persistence after send", () => {
 
 describe("visual feedback for active addressee", () => {
 	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
-		vi.stubGlobal("localStorage", _stub);
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
+		await installSeededLocalStorage();
 	});
 
 	it("empty input → neutral state: no composer-border-*, no panel--addressed, no mention-highlight", async () => {
@@ -1851,7 +1783,7 @@ describe("visual feedback for active addressee", () => {
 		);
 
 		const greenPanelLock = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(greenPanelLock.classList.contains("panel--locked")).toBe(true),
 		);
 
@@ -1873,19 +1805,8 @@ describe("visual feedback for active addressee", () => {
 
 describe("renderGame — chat lockout visual affordances (panel muting + inline error)", () => {
 	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		const _stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
-		vi.stubGlobal("localStorage", _stub);
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
+		await installSeededLocalStorage();
 	});
 
 	async function setupLockoutMock(
@@ -1929,7 +1850,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		const redPanel = getEl<HTMLElement>('.ai-panel[data-ai="red"]');
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(redPanel.classList.contains("panel--locked")).toBe(true);
 			expect(redPanel.getAttribute("aria-disabled")).toBe("true");
 		});
@@ -1959,7 +1880,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		const lockoutError = getEl<HTMLOutputElement>("#lockout-error");
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(lockoutError.hasAttribute("hidden")).toBe(false),
 		);
 		promptInput.value = "*Sage hi";
@@ -2027,7 +1948,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		);
 
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(greenPanel.classList.contains("panel--locked")).toBe(true),
 		);
 
@@ -2037,7 +1958,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(greenPanel.classList.contains("panel--locked")).toBe(false),
 		);
 
@@ -2070,7 +1991,7 @@ describe("renderGame — chat lockout visual affordances (panel muting + inline 
 		);
 
 		const greenPanel = getEl<HTMLElement>('.ai-panel[data-ai="green"]');
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(greenPanel.classList.contains("panel--locked")).toBe(true),
 		);
 
@@ -2086,19 +2007,8 @@ describe("renderGame — round error reporting (issue #231)", () => {
 	let _stub: LocalStorageStub;
 
 	beforeEach(async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
-		_stub = makeLocalStorageStub();
-		await seedSessionInStub(_stub, { objectiveTypes: STATIC_OBJECTIVE_TYPES });
-		vi.stubGlobal("localStorage", _stub);
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
+		_stub = await installSeededLocalStorage();
 	});
 
 	it("surfaces #round-error and flips topinfo to 'connection unstable' on a 502 round; clears both on the next successful round", async () => {
@@ -2129,7 +2039,7 @@ describe("renderGame — round error reporting (issue #231)", () => {
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
 		const roundError = getEl<HTMLOutputElement>("#round-error");
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(roundError.hasAttribute("hidden")).toBe(false);
 			expect(roundError.textContent?.trim()).toBeTruthy();
 		});
@@ -2149,7 +2059,7 @@ describe("renderGame — round error reporting (issue #231)", () => {
 		form.dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(roundError.hasAttribute("hidden")).toBe(true);
 			expect(topinfoRight.textContent).toContain("connection stable");
 		});
@@ -2160,16 +2070,7 @@ describe("renderGame — round error reporting (issue #231)", () => {
 });
 
 describe("renderGame — version-mismatch session with pending bootstrap (regression)", () => {
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("redirects to #/sessions and does not overwrite the old session when a bootstrap is pending", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.resetModules();
@@ -2246,8 +2147,6 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 	});
 
 	it("redirects to #/sessions and clears pending bootstrap when session is broken", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.resetModules();
@@ -2300,8 +2199,6 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 	});
 
 	it("preserves the seeded session bytes when the active session is version-mismatched", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.resetModules();
@@ -2375,23 +2272,8 @@ describe("renderGame — version-mismatch session with pending bootstrap (regres
 });
 
 describe("renderBootstrapLoadingFlow — happy path", () => {
-	beforeEach(() => {
-		vi.restoreAllMocks();
-		vi.resetModules();
-		vi.useRealTimers();
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("settles content packs before timeout results in no stuck bounce", async () => {
 		vi.useFakeTimers();
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
@@ -2439,23 +2321,10 @@ describe("renderBootstrapLoadingFlow — happy path", () => {
 });
 
 describe("renderBootstrapLoadingFlow — timeout", () => {
-	beforeEach(() => {
-		vi.restoreAllMocks();
-		vi.resetModules();
-		vi.useRealTimers();
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
+	const FAST_BOOTSTRAP_TIMEOUT_MS = 1_000;
 
 	it("shows #bootstrap-recovery with stuck copy on bootstrap timeout", async () => {
 		vi.useFakeTimers();
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
@@ -2463,6 +2332,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 				await importOriginal<typeof import("../game/bootstrap.js")>();
 			return {
 				...actual,
+				BOOTSTRAP_LOADING_TIMEOUT_MS: FAST_BOOTSTRAP_TIMEOUT_MS,
 				generateNewGameAssetsSplit: () => ({
 					personasPromise: Promise.resolve(STATIC_PERSONAS),
 					contentPacksPromise: new Promise(() => {}),
@@ -2484,7 +2354,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
-		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+		await vi.advanceTimersByTimeAsync(FAST_BOOTSTRAP_TIMEOUT_MS + 1);
 		await vi.runAllTimersAsync();
 
 		await renderPromise;
@@ -2499,8 +2369,6 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 
 	it("aborts the stalled bootstrap and marks it failed when the timeout fires", async () => {
 		vi.useFakeTimers();
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		let bootstrapSignal: AbortSignal | undefined;
@@ -2509,6 +2377,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 				await importOriginal<typeof import("../game/bootstrap.js")>();
 			return {
 				...actual,
+				BOOTSTRAP_LOADING_TIMEOUT_MS: FAST_BOOTSTRAP_TIMEOUT_MS,
 				generateNewGameAssetsSplit: (opts?: { signal?: AbortSignal }) => {
 					bootstrapSignal = opts?.signal;
 					return {
@@ -2534,7 +2403,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
-		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+		await vi.advanceTimersByTimeAsync(FAST_BOOTSTRAP_TIMEOUT_MS + 1);
 		await renderPromise;
 
 		expect(bootstrapSignal?.aborted).toBe(true);
@@ -2546,8 +2415,6 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 	});
 
 	it("names the upstream error in the recovery copy", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
@@ -2594,8 +2461,6 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 
 	it("hides #bootstrap-recovery when bootstrap promise resolves after timeout has fired", async () => {
 		vi.useFakeTimers();
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		let resolveContentPacks: (value: {
@@ -2616,6 +2481,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 				await importOriginal<typeof import("../game/bootstrap.js")>();
 			return {
 				...actual,
+				BOOTSTRAP_LOADING_TIMEOUT_MS: FAST_BOOTSTRAP_TIMEOUT_MS,
 				generateNewGameAssetsSplit: () => ({
 					personasPromise: Promise.resolve(STATIC_PERSONAS),
 					contentPacksPromise: lateContentPacksPromise,
@@ -2637,7 +2503,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
-		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
+		await vi.advanceTimersByTimeAsync(FAST_BOOTSTRAP_TIMEOUT_MS + 1);
 		await vi.runAllTimersAsync();
 		await renderPromise;
 
@@ -2676,11 +2542,6 @@ describe("renderBootstrapLoadingFlow — re-entry and a moved active pointer", (
 	let resolveContentPacks: (value: ContentPacks) => void = () => undefined;
 
 	beforeEach(() => {
-		vi.restoreAllMocks();
-		vi.resetModules();
-		vi.useRealTimers();
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		const heldContentPacks = new Promise<ContentPacks>((resolve) => {
 			resolveContentPacks = resolve;
@@ -2700,10 +2561,6 @@ describe("renderBootstrapLoadingFlow — re-entry and a moved active pointer", (
 
 	afterEach(() => {
 		vi.doUnmock("../game/bootstrap.js");
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
 	});
 
 	function releaseContentPacks(): void {
@@ -2784,22 +2641,7 @@ describe("renderBootstrapLoadingFlow — re-entry and a moved active pointer", (
 });
 
 describe("renderBootstrapLoadingFlow — promise propagation", () => {
-	beforeEach(() => {
-		vi.restoreAllMocks();
-		vi.resetModules();
-		vi.useRealTimers();
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
-	});
-
 	it("shows #bootstrap-recovery instead of bouncing when contentPacksPromise rejects with generic error after personas resolve", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
@@ -2839,8 +2681,6 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 	});
 
 	it("shows #bootstrap-recovery when personasPromise rejects immediately (no personas cached for regen)", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
@@ -2882,8 +2722,6 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 	});
 
 	it("shows #cap-hit panel when personasPromise rejects with CapHitError (stays at #/game)", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
@@ -2927,8 +2765,6 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 	});
 
 	it("shows #bootstrap-recovery when contentPacksPromise rejects with UpstreamErrorBodyError", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		vi.doMock("../game/bootstrap.js", async (importOriginal) => {
@@ -2968,8 +2804,6 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 	});
 
 	it("disables the visible regenerate button while regenerating and re-enables it after a failed attempt", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		let rejectRegeneratedPacks: (err: unknown) => void = () => undefined;
@@ -3020,7 +2854,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 
 		rejectRegeneratedPacks(new Error("regenerated packs failed"));
 
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(recoveryEl.hasAttribute("hidden")).toBe(false);
 		});
 		expect(getEl<HTMLButtonElement>("#bootstrap-recovery-regen")).toBe(
@@ -3030,8 +2864,6 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 	});
 
 	it("leaves the regenerate button disabled when regeneration hits the cost cap", async () => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 
 		let rejectRegeneratedPacksWithCapHit: () => void = () => undefined;
@@ -3086,7 +2918,7 @@ describe("renderBootstrapLoadingFlow — promise propagation", () => {
 		rejectRegeneratedPacksWithCapHit();
 
 		const capHitPanel = getEl<HTMLElement>("#cap-hit");
-		await vi.waitFor(() => {
+		await waitUntilPasses(() => {
 			expect(capHitPanel.hasAttribute("hidden")).toBe(false);
 		});
 		expect(
@@ -3137,24 +2969,18 @@ describe("renderGame — endgame outcome and final round (issue #576)", () => {
 		getEl<HTMLFormElement>("#composer").dispatchEvent(
 			new Event("submit", { bubbles: true, cancelable: true }),
 		);
-		await vi.waitFor(() =>
+		await waitUntilPasses(() =>
 			expect(getEl<HTMLElement>("#endgame").hasAttribute("hidden")).toBe(false),
 		);
 	}
 
 	beforeEach(() => {
-		vi.stubGlobal("__WORKER_BASE_URL__", "http://localhost:8787");
-		vi.stubGlobal("__DEV__", true);
 		document.body.innerHTML = INDEX_BODY_HTML;
 		vi.spyOn(Math, "random").mockReturnValue(IDENTITY_SHUFFLE_RANDOM);
 	});
 
 	afterEach(() => {
 		setSearch("");
-		vi.restoreAllMocks();
-		vi.unstubAllGlobals();
-		vi.resetModules();
-		document.body.innerHTML = "";
 	});
 
 	it("endgameSubtitle maps each outcome to its line", async () => {

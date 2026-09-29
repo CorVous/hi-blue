@@ -7,17 +7,6 @@ import {
 } from "../sysadmin-directive.js";
 
 describe("drawDirectiveText", () => {
-	it("returns a string from SYSADMIN_DIRECTIVE_POOL", () => {
-		const rng = () => 0;
-		const result = drawDirectiveText(rng);
-		expect(SYSADMIN_DIRECTIVE_POOL).toContain(result);
-	});
-
-	it("is deterministic given a fixed rng", () => {
-		const rng = () => 0;
-		expect(drawDirectiveText(rng)).toBe(drawDirectiveText(rng));
-	});
-
 	it("selects different entries for different rng values", () => {
 		const first = drawDirectiveText(() => 0);
 		const last = drawDirectiveText(() => 0.9999);

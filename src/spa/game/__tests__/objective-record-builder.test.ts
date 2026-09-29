@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildObjectiveRecords } from "../objective-record-builder.js";
-import type { ContentPack, WorldEntity } from "../types.js";
+import type { ContentPack, ObjectiveType, WorldEntity } from "../types.js";
 
 function makePack(overrides?: Partial<ContentPack>): ContentPack {
 	return {
@@ -149,8 +149,8 @@ describe("buildObjectiveRecords — convergence type", () => {
 	});
 });
 
-describe("buildObjectiveRecords — all satisfactionState are pending", () => {
-	it("all objectives start with satisfactionState: pending", () => {
+describe("buildObjectiveRecords — mixed types", () => {
+	it("assigns sequential ids obj-0, obj-1, obj-2 in order, all pending", () => {
 		const pack = makePack({
 			entities: [
 				...makeCarryEntities(0),
@@ -162,52 +162,21 @@ describe("buildObjectiveRecords — all satisfactionState are pending", () => {
 			["carry", "use_space", "convergence"],
 			pack,
 		);
+		expect(objectives.map((o) => o.id)).toEqual(["obj-0", "obj-1", "obj-2"]);
 		for (const obj of objectives) {
-			expect(obj?.satisfactionState).toBe("pending");
+			expect(obj.satisfactionState).toBe("pending");
 		}
 	});
 });
 
-describe("buildObjectiveRecords — sequential ids", () => {
-	it("assigns ids obj-0, obj-1, obj-2 in order", () => {
-		const pack = makePack({
-			entities: [
-				...makeCarryEntities(0),
-				makeUseSpaceEntity(1),
-				makeConvergenceEntity(2),
-			],
-		});
-		const objectives = buildObjectiveRecords(
-			["carry", "use_space", "convergence"],
-			pack,
-		);
-		expect(objectives[0]?.id).toBe("obj-0");
-		expect(objectives[1]?.id).toBe("obj-1");
-		expect(objectives[2]?.id).toBe("obj-2");
-	});
-});
-
 describe("buildObjectiveRecords — missing entity throws", () => {
-	it("throws if carry object not found in pack", () => {
-		const pack = makePack({});
-		expect(() => buildObjectiveRecords(["carry"], pack)).toThrow(RangeError);
-	});
-
-	it("throws if use_space space not found in pack", () => {
-		const pack = makePack({});
-		expect(() => buildObjectiveRecords(["use_space"], pack)).toThrow(
-			RangeError,
-		);
-	});
-
-	it("throws if use_item item not found in pack", () => {
-		const pack = makePack({});
-		expect(() => buildObjectiveRecords(["use_item"], pack)).toThrow(RangeError);
-	});
-
-	it("throws if convergence space not found in pack", () => {
-		const pack = makePack({});
-		expect(() => buildObjectiveRecords(["convergence"], pack)).toThrow(
+	it.each<ObjectiveType>([
+		"carry",
+		"use_space",
+		"use_item",
+		"convergence",
+	])("throws if the %s target is not found in pack", (type) => {
+		expect(() => buildObjectiveRecords([type], makePack({}))).toThrow(
 			RangeError,
 		);
 	});

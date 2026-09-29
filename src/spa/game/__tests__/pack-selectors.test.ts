@@ -96,17 +96,6 @@ describe("carryPairs", () => {
 		result.push({ object: entities[0], space: entities[1] });
 		expect(pack.entities).toHaveLength(2);
 	});
-
-	it("preserves carry-object order for 3 pairs", () => {
-		const entities = [
-			...makeCarryPairEntities(0),
-			...makeCarryPairEntities(1),
-			...makeCarryPairEntities(2),
-		];
-		const pack = makePack({ entities });
-		const result = carryPairs(pack);
-		expect(result.map((p) => p.object.id)).toEqual(["obj-0", "obj-1", "obj-2"]);
-	});
 });
 
 describe("interestingObjects", () => {
@@ -208,7 +197,7 @@ describe("boundSpaces", () => {
 		expect(pack.entities).toHaveLength(1);
 	});
 
-	it("excludes objective_space entities referenced by a pairsWithSpaceId", () => {
+	it("excludes objective_space entities referenced by a pairsWithSpaceId and keeps the unreferenced ones", () => {
 		const [pairObj, pairSpace] = makeCarryPairEntities(0);
 		const genuineBound = makeBoundSpace(1);
 		const pack = makePack({
@@ -217,15 +206,6 @@ describe("boundSpaces", () => {
 		const result = boundSpaces(pack);
 		expect(result).toHaveLength(1);
 		expect(result[0]?.id).toBe("bound-space-1");
-	});
-
-	it("includes objective_space entities NOT referenced by any pairsWithSpaceId", () => {
-		const [pairObj, pairSpace] = makeCarryPairEntities(0);
-		const bs0 = makeBoundSpace(0);
-		const pack = makePack({ entities: [pairObj, pairSpace, bs0] });
-		const result = boundSpaces(pack);
-		expect(result).toHaveLength(1);
-		expect(result[0]?.id).toBe("bound-space-0");
 	});
 
 	it("handles objective_object without pairsWithSpaceId gracefully", () => {

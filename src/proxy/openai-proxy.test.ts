@@ -11,6 +11,11 @@ import { globalKey, perIpKey } from "./rate-guard";
 
 const ENDPOINT = "https://example.com/v1/chat/completions";
 
+const JSON_HEADERS = { "Content-Type": "application/json" };
+const SSE_HEADERS = { "Content-Type": "text/event-stream" };
+
+const USER_HI = [{ role: "user", content: "hi" }];
+
 async function waitForCounter(
 	kvNs: KVNamespace,
 	key: string,
@@ -34,16 +39,76 @@ const VALID_BODY = JSON.stringify({
 	messages: [{ role: "user", content: "Hello" }],
 });
 
+function postChat(
+	body: unknown,
+	headers: Record<string, string> = {},
+): Promise<Response> {
+	return SELF.fetch(ENDPOINT, {
+		method: "POST",
+		headers: { ...JSON_HEADERS, ...headers },
+		body: typeof body === "string" ? body : JSON.stringify(body),
+	});
+}
+
+function postChatFrom(ip: string, body: unknown): Promise<Response> {
+	return postChat(body, { "CF-Connecting-IP": ip });
+}
+
 function makeUpstreamMock(
 	body: BodyInit,
 	status = 200,
-	headers: Record<string, string> = { "Content-Type": "text/event-stream" },
+	headers: Record<string, string> = SSE_HEADERS,
 ): typeof fetch {
 	return vi
 		.fn()
 		.mockImplementation(() =>
 			Promise.resolve(new Response(body, { status, headers })),
 		);
+}
+
+function stubUpstream(
+	body: BodyInit,
+	status = 200,
+	headers: Record<string, string> = SSE_HEADERS,
+): void {
+	vi.stubGlobal("fetch", makeUpstreamMock(body, status, headers));
+}
+
+interface CapturedUpstreamRequest {
+	url?: string;
+	headers?: Record<string, string>;
+	body?: Record<string, unknown>;
+}
+
+function captureUpstreamRequest(
+	responseBody = "{}",
+	responseHeaders: Record<string, string> = JSON_HEADERS,
+): CapturedUpstreamRequest {
+	const captured: CapturedUpstreamRequest = {};
+	vi.stubGlobal(
+		"fetch",
+		vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
+			captured.url = url;
+			captured.headers = init.headers as Record<string, string>;
+			captured.body = JSON.parse(init.body as string) as Record<
+				string,
+				unknown
+			>;
+			return new Response(responseBody, {
+				status: 200,
+				headers: responseHeaders,
+			});
+		}),
+	);
+	return captured;
+}
+
+async function forwardedBodyFor(
+	body: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+	const captured = captureUpstreamRequest();
+	await postChat(body);
+	return captured.body;
 }
 
 const ONE_MICRO_USD_PER_TOKEN = {
@@ -65,13 +130,9 @@ afterEach(async () => {
 describe("POST /v1/chat/completions — streaming pass-through", () => {
 	it("returns 200 with text/event-stream when upstream does", async () => {
 		const stream = "data: {}\n\ndata: [DONE]\n\n";
-		vi.stubGlobal("fetch", makeUpstreamMock(stream));
+		stubUpstream(stream);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: VALID_BODY,
-		});
+		const resp = await postChat(VALID_BODY);
 
 		expect(resp.status).toBe(200);
 		expect(resp.headers.get("Content-Type")).toContain("text/event-stream");
@@ -81,116 +142,29 @@ describe("POST /v1/chat/completions — streaming pass-through", () => {
 });
 
 describe("POST /v1/chat/completions — model pinning", () => {
-	it("pins model to PINNED_MODEL even when caller sends gpt-4o", async () => {
-		let capturedBody: Record<string, unknown> | undefined;
-		const mockFetch = vi
-			.fn()
-			.mockImplementation(async (_url: string, init: RequestInit) => {
-				capturedBody = JSON.parse(init.body as string) as Record<
-					string,
-					unknown
-				>;
-				return new Response("{}", {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				});
-			});
-		vi.stubGlobal("fetch", mockFetch);
+	it.each([
+		["even when caller sends gpt-4o", { model: "gpt-4o", messages: USER_HI }],
+		["when caller omits model", { messages: USER_HI }],
+	])("pins model to PINNED_MODEL %s", async (_case, body) => {
+		const forwarded = await forwardedBodyFor(body);
 
-		await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				model: "gpt-4o",
-				messages: [{ role: "user", content: "hi" }],
-			}),
-		});
-
-		expect(capturedBody?.model).toBe(PINNED_MODEL);
+		expect(forwarded?.model).toBe(PINNED_MODEL);
 	});
 
-	it("pins model to PINNED_MODEL when caller omits model", async () => {
-		let capturedBody: Record<string, unknown> | undefined;
-		const mockFetch = vi
-			.fn()
-			.mockImplementation(async (_url: string, init: RequestInit) => {
-				capturedBody = JSON.parse(init.body as string) as Record<
-					string,
-					unknown
-				>;
-				return new Response("{}", {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				});
-			});
-		vi.stubGlobal("fetch", mockFetch);
-
-		await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-		});
-
-		expect(capturedBody?.model).toBe(PINNED_MODEL);
-	});
 	it("pins provider routing even when caller asks for another provider", async () => {
-		let capturedBody: Record<string, unknown> | undefined;
-		const mockFetch = vi
-			.fn()
-			.mockImplementation(async (_url: string, init: RequestInit) => {
-				capturedBody = JSON.parse(init.body as string) as Record<
-					string,
-					unknown
-				>;
-				return new Response("{}", {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				});
-			});
-		vi.stubGlobal("fetch", mockFetch);
-
-		await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				provider: { order: ["some-cheap-host"], allow_fallbacks: true },
-			}),
+		const forwarded = await forwardedBodyFor({
+			messages: USER_HI,
+			provider: { order: ["some-cheap-host"], allow_fallbacks: true },
 		});
 
-		expect(capturedBody?.provider).toEqual(PINNED_PROVIDER_ROUTING);
+		expect(forwarded?.provider).toEqual(PINNED_PROVIDER_ROUTING);
 	});
 });
 
 describe("POST /v1/chat/completions — forwarded body fields", () => {
-	async function forwardedBodyFor(
-		body: Record<string, unknown>,
-	): Promise<Record<string, unknown> | undefined> {
-		let capturedBody: Record<string, unknown> | undefined;
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
-				capturedBody = JSON.parse(init.body as string) as Record<
-					string,
-					unknown
-				>;
-				return new Response("{}", {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				});
-			}),
-		);
-		await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(body),
-		});
-		return capturedBody;
-	}
-
 	it("forwards every field the SPA sends", async () => {
 		const spaFields = {
-			messages: [{ role: "user", content: "hi" }],
+			messages: USER_HI,
 			stream: false,
 			usage: { include: true },
 			tools: [{ type: "function", function: { name: "message" } }],
@@ -215,7 +189,7 @@ describe("POST /v1/chat/completions — forwarded body fields", () => {
 		};
 
 		const forwarded = await forwardedBodyFor({
-			messages: [{ role: "user", content: "hi" }],
+			messages: USER_HI,
 			...sampling,
 		});
 
@@ -224,7 +198,7 @@ describe("POST /v1/chat/completions — forwarded body fields", () => {
 
 	it("drops fields outside the allow-list", async () => {
 		const forwarded = await forwardedBodyFor({
-			messages: [{ role: "user", content: "hi" }],
+			messages: USER_HI,
 			models: ["openai/gpt-4o", "anthropic/claude-opus"],
 			transforms: ["middle-out"],
 			plugins: [{ id: "web" }],
@@ -240,91 +214,33 @@ describe("POST /v1/chat/completions — forwarded body fields", () => {
 	});
 });
 
-describe("POST /v1/chat/completions — auth header forwarding", () => {
+describe("POST /v1/chat/completions — upstream request", () => {
 	it("forwards Authorization: Bearer <secret> to OpenRouter", async () => {
-		let capturedHeaders: Record<string, string> | undefined;
-		const mockFetch = vi
-			.fn()
-			.mockImplementation(async (_url: string, init: RequestInit) => {
-				capturedHeaders = init.headers as Record<string, string>;
-				return new Response("{}", {
-					status: 200,
-					headers: { "Content-Type": "application/json" },
-				});
-			});
-		vi.stubGlobal("fetch", mockFetch);
+		const captured = captureUpstreamRequest();
 
-		await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: VALID_BODY,
-		});
+		await postChat(VALID_BODY);
 
-		expect(capturedHeaders?.Authorization).toBe("Bearer test-openrouter-key");
+		expect(captured.headers?.Authorization).toBe("Bearer test-openrouter-key");
 	});
-});
 
-describe("POST /v1/chat/completions — upstream URL", () => {
 	it("forwards POST to the correct OpenRouter URL", async () => {
-		let capturedUrl: string | undefined;
-		const mockFetch = vi.fn().mockImplementation(async (url: string) => {
-			capturedUrl = url;
-			return new Response("{}", {
-				status: 200,
-				headers: { "Content-Type": "application/json" },
-			});
-		});
-		vi.stubGlobal("fetch", mockFetch);
+		const captured = captureUpstreamRequest();
 
-		await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: VALID_BODY,
-		});
+		await postChat(VALID_BODY);
 
-		expect(capturedUrl).toBe(OPENROUTER_URL);
+		expect(captured.url).toBe(OPENROUTER_URL);
 	});
 });
 
 describe("POST /v1/chat/completions — input validation", () => {
-	it("returns 400 invalid_request_error for invalid JSON body", async () => {
-		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
+	it.each([
+		["invalid JSON body", "not-json"],
+		["missing messages array", { model: "gpt-4o" }],
+		["empty messages array", { messages: [] }],
+	])("returns 400 invalid_request_error for %s", async (_case, body) => {
+		stubUpstream("{}");
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: "not-json",
-		});
-
-		expect(resp.status).toBe(400);
-		const json = (await resp.json()) as {
-			error: { type: string; message: string };
-		};
-		expect(json.error.type).toBe("invalid_request_error");
-	});
-
-	it("returns 400 invalid_request_error for missing messages array", async () => {
-		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
-
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ model: "gpt-4o" }),
-		});
-
-		expect(resp.status).toBe(400);
-		const json = (await resp.json()) as { error: { type: string } };
-		expect(json.error.type).toBe("invalid_request_error");
-	});
-
-	it("returns 400 invalid_request_error for empty messages array", async () => {
-		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
-
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ messages: [] }),
-		});
+		const resp = await postChat(body);
 
 		expect(resp.status).toBe(400);
 		const json = (await resp.json()) as { error: { type: string } };
@@ -334,18 +250,11 @@ describe("POST /v1/chat/completions — input validation", () => {
 
 describe("POST /v1/chat/completions — upstream errors", () => {
 	it("returns 502 upstream_error when upstream returns 5xx", async () => {
-		vi.stubGlobal(
-			"fetch",
-			makeUpstreamMock("Internal Server Error", 500, {
-				"Content-Type": "text/plain",
-			}),
-		);
-
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: VALID_BODY,
+		stubUpstream("Internal Server Error", 500, {
+			"Content-Type": "text/plain",
 		});
+
+		const resp = await postChat(VALID_BODY);
 
 		expect(resp.status).toBe(502);
 		const json = (await resp.json()) as { error: { type: string } };
@@ -359,11 +268,7 @@ describe("POST /v1/chat/completions — upstream errors", () => {
 			vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED 10.1.2.3:443")),
 		);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: VALID_BODY,
-		});
+		const resp = await postChat(VALID_BODY);
 
 		expect(resp.status).toBe(502);
 		const json = (await resp.json()) as {
@@ -377,18 +282,9 @@ describe("POST /v1/chat/completions — upstream errors", () => {
 		const upstreamBody = JSON.stringify({
 			error: { message: "context too long", code: 400 },
 		});
-		vi.stubGlobal(
-			"fetch",
-			makeUpstreamMock(upstreamBody, 400, {
-				"Content-Type": "application/json",
-			}),
-		);
+		stubUpstream(upstreamBody, 400, JSON_HEADERS);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: VALID_BODY,
-		});
+		const resp = await postChat(VALID_BODY);
 
 		expect(resp.status).toBe(400);
 		expect(resp.headers.get("Content-Type")).toBe("application/json");
@@ -399,19 +295,9 @@ describe("POST /v1/chat/completions — upstream errors", () => {
 		const upstreamBody = JSON.stringify({
 			error: { message: "Provider rate limited", code: 429 },
 		});
-		vi.stubGlobal(
-			"fetch",
-			makeUpstreamMock(upstreamBody, 429, {
-				"Content-Type": "application/json",
-				"Retry-After": "7",
-			}),
-		);
+		stubUpstream(upstreamBody, 429, { ...JSON_HEADERS, "Retry-After": "7" });
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: VALID_BODY,
-		});
+		const resp = await postChat(VALID_BODY);
 
 		expect(resp.status).toBe(429);
 		expect(resp.headers.get("Retry-After")).toBe("7");
@@ -419,7 +305,7 @@ describe("POST /v1/chat/completions — upstream errors", () => {
 	});
 });
 
-describe("POST /v1/chat/completions — stream flag validation", () => {
+describe("POST /v1/chat/completions — stream flag", () => {
 	it.each([
 		["string", "true"],
 		["number", 1],
@@ -429,50 +315,24 @@ describe("POST /v1/chat/completions — stream flag validation", () => {
 		const mockFetch = vi.fn();
 		vi.stubGlobal("fetch", mockFetch);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream,
-			}),
-		});
+		const resp = await postChat({ messages: USER_HI, stream });
 
 		expect(resp.status).toBe(400);
 		const json = (await resp.json()) as { error: { type: string } };
 		expect(json.error.type).toBe("invalid_request_error");
 		expect(mockFetch).not.toHaveBeenCalled();
 	});
-});
 
-describe("POST /v1/chat/completions — stream flag passthrough", () => {
-	it("preserves stream:true in the outbound body", async () => {
-		let capturedBody: Record<string, unknown> | undefined;
-		const mockFetch = vi
-			.fn()
-			.mockImplementation(async (_url: string, init: RequestInit) => {
-				capturedBody = JSON.parse(init.body as string) as Record<
-					string,
-					unknown
-				>;
-				return new Response("data: [DONE]\n\n", {
-					status: 200,
-					headers: { "Content-Type": "text/event-stream" },
-				});
-			});
-		vi.stubGlobal("fetch", mockFetch);
+	it("preserves stream:true and forces stream_options.include_usage in the outbound body", async () => {
+		const captured = captureUpstreamRequest("data: [DONE]\n\n", SSE_HEADERS);
 
-		await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				model: "gpt-4o",
-				messages: [{ role: "user", content: "hi" }],
-				stream: true,
-			}),
-		});
+		await postChat({ model: "gpt-4o", messages: USER_HI, stream: true });
 
-		expect(capturedBody?.stream).toBe(true);
+		expect(captured.body?.stream).toBe(true);
+		expect(
+			(captured.body?.stream_options as Record<string, unknown> | undefined)
+				?.include_usage,
+		).toBe(true);
 	});
 });
 
@@ -484,39 +344,42 @@ const VITEST_CONFIG_PER_IP_CAP_MICRO_USD = 20_000;
 const VITEST_CONFIG_GLOBAL_CAP_MICRO_USD = 1_000_000;
 const VITEST_CONFIG_PRE_CHARGE_MICRO_USD = 4_000;
 
-describe("cost-guard integration — POST /v1/chat/completions", () => {
-	beforeEach(async () => {
-		const ns = kv();
-		const listed = await ns.list();
-		await Promise.all(listed.keys.map((k) => ns.delete(k.name)));
-	});
+function seedOnePastPreChargeHeadroom(key: string, capMicroUsd: number) {
+	return kv().put(
+		key,
+		String(capMicroUsd - VITEST_CONFIG_PRE_CHARGE_MICRO_USD + 1),
+		{ expirationTtl: 25 * 3600 },
+	);
+}
 
+async function countersFor(ip: string): Promise<[number, number]> {
+	const now = Date.now();
+	const [ipVal, gVal] = await Promise.all([
+		kv().get(perIpKey(ip, now)),
+		kv().get(globalKey(now)),
+	]);
+	return [Number(ipVal), Number(gVal)];
+}
+
+async function waitForCounters(ip: string, expected: string): Promise<void> {
+	const now = Date.now();
+	await Promise.all([
+		waitForCounter(kv(), perIpKey(ip, now), expected),
+		waitForCounter(kv(), globalKey(now), expected),
+	]);
+}
+
+describe("cost-guard integration — POST /v1/chat/completions", () => {
 	it("per-IP cap-hit returns 429 with error.code === 'per-ip-daily', upstream not called", async () => {
 		const ip = "5.5.5.5";
-		const ipK = perIpKey(ip, Date.now());
-		await kv().put(
-			ipK,
-			String(
-				VITEST_CONFIG_PER_IP_CAP_MICRO_USD -
-					VITEST_CONFIG_PRE_CHARGE_MICRO_USD +
-					1,
-			),
-			{
-				expirationTtl: 25 * 3600,
-			},
+		await seedOnePastPreChargeHeadroom(
+			perIpKey(ip, Date.now()),
+			VITEST_CONFIG_PER_IP_CAP_MICRO_USD,
 		);
-
 		const mockFetch = vi.fn();
 		vi.stubGlobal("fetch", mockFetch);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI });
 
 		expect(resp.status).toBe(429);
 		const body = (await resp.json()) as {
@@ -528,29 +391,13 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 	});
 
 	it("global cap-hit returns 429 with error.code === 'global-daily'", async () => {
-		const gK = globalKey(Date.now());
-		await kv().put(
-			gK,
-			String(
-				VITEST_CONFIG_GLOBAL_CAP_MICRO_USD -
-					VITEST_CONFIG_PRE_CHARGE_MICRO_USD +
-					1,
-			),
-			{
-				expirationTtl: 25 * 3600,
-			},
+		await seedOnePastPreChargeHeadroom(
+			globalKey(Date.now()),
+			VITEST_CONFIG_GLOBAL_CAP_MICRO_USD,
 		);
-
 		vi.stubGlobal("fetch", vi.fn());
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": "6.6.6.6",
-			},
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-		});
+		const resp = await postChatFrom("6.6.6.6", { messages: USER_HI });
 
 		expect(resp.status).toBe(429);
 		const body = (await resp.json()) as {
@@ -561,195 +408,71 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 
 	it("happy path streaming: upstream usage 500/1000 → counters reconcile to 1500 micro-USD", async () => {
 		const ip = "7.7.7.7";
-		const ssePayload =
-			'data: {"usage":{"prompt_tokens":500,"completion_tokens":1000}}\n\ndata: [DONE]\n\n';
-
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response(ssePayload, {
-						status: 200,
-						headers: { "Content-Type": "text/event-stream" },
-					}),
-				),
-			),
+		stubUpstream(
+			'data: {"usage":{"prompt_tokens":500,"completion_tokens":1000}}\n\ndata: [DONE]\n\n',
 		);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: true,
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: true });
 
 		expect(resp.status).toBe(200);
 		await resp.text();
-
-		const now = Date.now();
-		await Promise.all([
-			waitForCounter(kv(), perIpKey(ip, now), "1500"),
-			waitForCounter(kv(), globalKey(now), "1500"),
-		]);
-
-		const [ipVal, gVal] = await Promise.all([
-			kv().get(perIpKey(ip, now)),
-			kv().get(globalKey(now)),
-		]);
-
-		expect(Number(ipVal)).toBe(1500);
-		expect(Number(gVal)).toBe(1500);
+		await waitForCounters(ip, "1500");
 	});
 
 	it("over-charge is billed: upstream usage 3000/6000 → counters rise to the actual 9000", async () => {
 		const ip = "8.8.8.8";
-		const ssePayload =
-			'data: {"usage":{"prompt_tokens":3000,"completion_tokens":6000}}\n\ndata: [DONE]\n\n';
-
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response(ssePayload, {
-						status: 200,
-						headers: { "Content-Type": "text/event-stream" },
-					}),
-				),
-			),
+		stubUpstream(
+			'data: {"usage":{"prompt_tokens":3000,"completion_tokens":6000}}\n\ndata: [DONE]\n\n',
 		);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: true,
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: true });
 
 		await resp.text();
-
-		const now = Date.now();
-		await Promise.all([
-			waitForCounter(kv(), perIpKey(ip, now), "9000"),
-			waitForCounter(kv(), globalKey(now), "9000"),
-		]);
+		await waitForCounters(ip, "9000");
 	});
 
 	it("upstream 5xx returns 502 to client and counters return to 0", async () => {
 		const ip = "9.9.9.9";
-
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response("Internal Server Error", {
-						status: 500,
-						headers: { "Content-Type": "text/plain" },
-					}),
-				),
-			),
-		);
-
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		stubUpstream("Internal Server Error", 500, {
+			"Content-Type": "text/plain",
 		});
 
-		expect(resp.status).toBe(502);
+		const resp = await postChatFrom(ip, { messages: USER_HI });
 
-		const now = Date.now();
-		const [ipVal, gVal] = await Promise.all([
-			kv().get(perIpKey(ip, now)),
-			kv().get(globalKey(now)),
-		]);
-		expect(Number(ipVal)).toBe(0);
-		expect(Number(gVal)).toBe(0);
+		expect(resp.status).toBe(502);
+		expect(await countersFor(ip)).toEqual([0, 0]);
 	});
 
 	it("upstream 4xx is passed through and counters return to 0", async () => {
 		const ip = "9.9.9.10";
+		stubUpstream('{"error":{"message":"rate limited"}}', 429, JSON_HEADERS);
 
-		vi.stubGlobal(
-			"fetch",
-			makeUpstreamMock('{"error":{"message":"rate limited"}}', 429, {
-				"Content-Type": "application/json",
-			}),
-		);
-
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI });
 
 		expect(resp.status).toBe(429);
-
-		const now = Date.now();
-		const [ipVal, gVal] = await Promise.all([
-			kv().get(perIpKey(ip, now)),
-			kv().get(globalKey(now)),
-		]);
-		expect(Number(ipVal)).toBe(0);
-		expect(Number(gVal)).toBe(0);
+		expect(await countersFor(ip)).toEqual([0, 0]);
 	});
 
 	it("non-boolean stream is rejected before any pre-charge", async () => {
 		const ip = "9.9.9.11";
 		vi.stubGlobal("fetch", vi.fn());
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: "true",
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: "true" });
 
 		expect(resp.status).toBe(400);
 		expect(await kv().get(perIpKey(ip, Date.now()))).toBeNull();
 	});
 
 	it("IPv6 clients in the same /64 share one per-IP counter", async () => {
-		const now = Date.now();
-		await kv().put(
-			perIpKey("2001:db8:1:2::1", now),
-			String(
-				VITEST_CONFIG_PER_IP_CAP_MICRO_USD -
-					VITEST_CONFIG_PRE_CHARGE_MICRO_USD +
-					1,
-			),
-			{ expirationTtl: 25 * 3600 },
+		await seedOnePastPreChargeHeadroom(
+			perIpKey("2001:db8:1:2::1", Date.now()),
+			VITEST_CONFIG_PER_IP_CAP_MICRO_USD,
 		);
 		const mockFetch = vi.fn();
 		vi.stubGlobal("fetch", mockFetch);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": "2001:db8:1:2:aaaa:bbbb:cccc:dddd",
-			},
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+		const resp = await postChatFrom("2001:db8:1:2:aaaa:bbbb:cccc:dddd", {
+			messages: USER_HI,
 		});
 
 		expect(resp.status).toBe(429);
@@ -759,74 +482,28 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 	it("upstream fetch throws returns 502 and counters return to 0", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const ip = "10.0.0.1";
-
 		vi.stubGlobal(
 			"fetch",
 			vi.fn().mockRejectedValue(new Error("Network error")),
 		);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI });
 
 		expect(resp.status).toBe(502);
-
-		const now = Date.now();
-		const [ipVal, gVal] = await Promise.all([
-			kv().get(perIpKey(ip, now)),
-			kv().get(globalKey(now)),
-		]);
-		expect(Number(ipVal)).toBe(0);
-		expect(Number(gVal)).toBe(0);
+		expect(await countersFor(ip)).toEqual([0, 0]);
 	});
 
 	it("multi-IP isolation: IP A capped does not affect IP B", async () => {
 		const ipA = "11.0.0.1";
 		const ipB = "11.0.0.2";
-		await kv().put(
+		await seedOnePastPreChargeHeadroom(
 			perIpKey(ipA, Date.now()),
-			String(
-				VITEST_CONFIG_PER_IP_CAP_MICRO_USD -
-					VITEST_CONFIG_PRE_CHARGE_MICRO_USD +
-					1,
-			),
-			{ expirationTtl: 25 * 3600 },
+			VITEST_CONFIG_PER_IP_CAP_MICRO_USD,
 		);
+		stubUpstream("{}", 200, JSON_HEADERS);
 
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response("{}", {
-						status: 200,
-						headers: { "Content-Type": "application/json" },
-					}),
-				),
-			),
-		);
-
-		const respA = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ipA,
-			},
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-		});
-
-		const respB = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ipB,
-			},
-			body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-		});
+		const respA = await postChatFrom(ipA, { messages: USER_HI });
+		const respB = await postChatFrom(ipB, { messages: USER_HI });
 
 		expect(respA.status).toBe(429);
 		expect(respB.status).toBe(200);
@@ -834,43 +511,16 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 
 	it("non-streaming JSON response: reconcile from prompt_tokens + completion_tokens", async () => {
 		const ip = "12.0.0.1";
-		const jsonBody = JSON.stringify({
-			usage: { prompt_tokens: 300, completion_tokens: 500 },
-		});
-
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response(jsonBody, {
-						status: 200,
-						headers: { "Content-Type": "application/json" },
-					}),
-				),
-			),
+		stubUpstream(
+			JSON.stringify({ usage: { prompt_tokens: 300, completion_tokens: 500 } }),
+			200,
+			JSON_HEADERS,
 		);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: false,
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: false });
 
 		expect(resp.status).toBe(200);
-
-		const now = Date.now();
-		const [ipVal, gVal] = await Promise.all([
-			kv().get(perIpKey(ip, now)),
-			kv().get(globalKey(now)),
-		]);
-		expect(Number(ipVal)).toBe(800);
-		expect(Number(gVal)).toBe(800);
+		expect(await countersFor(ip)).toEqual([800, 800]);
 	});
 
 	it.each([
@@ -878,153 +528,35 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 		["42", "16.0.0.2"],
 		['"text"', "16.0.0.3"],
 	])("non-streaming JSON body %s is relayed with a full refund", async (body, ip) => {
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response(body, {
-						status: 200,
-						headers: { "Content-Type": "application/json" },
-					}),
-				),
-			),
-		);
+		stubUpstream(body, 200, JSON_HEADERS);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: false,
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: false });
 
 		expect(resp.status).toBe(200);
 		expect(await resp.text()).toBe(body);
-
-		const now = Date.now();
-		const [ipVal, gVal] = await Promise.all([
-			kv().get(perIpKey(ip, now)),
-			kv().get(globalKey(now)),
-		]);
-		expect(Number(ipVal)).toBe(0);
-		expect(Number(gVal)).toBe(0);
+		expect(await countersFor(ip)).toEqual([0, 0]);
 	});
 
 	it("streaming data: null line does not break usage reconciliation", async () => {
 		const ip = "16.0.0.4";
 		const ssePayload =
 			'data: null\n\ndata: {"usage":{"prompt_tokens":200,"completion_tokens":300}}\n\ndata: [DONE]\n\n';
+		stubUpstream(ssePayload);
 
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response(ssePayload, {
-						status: 200,
-						headers: { "Content-Type": "text/event-stream" },
-					}),
-				),
-			),
-		);
-
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: true,
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: true });
 
 		expect(await resp.text()).toBe(ssePayload);
-
-		const now = Date.now();
-		await Promise.all([
-			waitForCounter(kv(), perIpKey(ip, now), "500"),
-			waitForCounter(kv(), globalKey(now), "500"),
-		]);
+		await waitForCounters(ip, "500");
 	});
 
 	it("streaming with no usage chunk results in full refund (counters at 0)", async () => {
 		const ip = "13.0.0.1";
-		const ssePayload = "data: {}\n\ndata: [DONE]\n\n";
+		stubUpstream("data: {}\n\ndata: [DONE]\n\n");
 
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response(ssePayload, {
-						status: 200,
-						headers: { "Content-Type": "text/event-stream" },
-					}),
-				),
-			),
-		);
-
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: true,
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: true });
 
 		await resp.text();
-
-		const now = Date.now();
-		await Promise.all([
-			waitForCounter(kv(), perIpKey(ip, now), "0"),
-			waitForCounter(kv(), globalKey(now), "0"),
-		]);
-
-		const [ipVal, gVal] = await Promise.all([
-			kv().get(perIpKey(ip, now)),
-			kv().get(globalKey(now)),
-		]);
-		expect(Number(ipVal)).toBe(0);
-		expect(Number(gVal)).toBe(0);
-	});
-
-	it("outbound body has stream_options.include_usage === true when stream:true", async () => {
-		let capturedBody: Record<string, unknown> | undefined;
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
-				capturedBody = JSON.parse(init.body as string) as Record<
-					string,
-					unknown
-				>;
-				return new Response("data: [DONE]\n\n", {
-					status: 200,
-					headers: { "Content-Type": "text/event-stream" },
-				});
-			}),
-		);
-
-		await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: true,
-			}),
-		});
-
-		expect(
-			(capturedBody?.stream_options as Record<string, unknown> | undefined)
-				?.include_usage,
-		).toBe(true);
+		await waitForCounters(ip, "0");
 	});
 
 	it("differentiated pricing: prompt vs completion priced separately", async () => {
@@ -1032,38 +564,16 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 			promptMicroUsdPerToken: 2,
 			completionMicroUsdPerToken: 5,
 		});
-
 		const ip = "15.0.0.1";
-		const jsonBody = JSON.stringify({
-			usage: { prompt_tokens: 100, completion_tokens: 200 },
-		});
-
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response(jsonBody, {
-						status: 200,
-						headers: { "Content-Type": "application/json" },
-					}),
-				),
-			),
+		stubUpstream(
+			JSON.stringify({ usage: { prompt_tokens: 100, completion_tokens: 200 } }),
+			200,
+			JSON_HEADERS,
 		);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: false,
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: false });
 
 		expect(resp.status).toBe(200);
-
 		const ipVal = await kv().get(perIpKey(ip, Date.now()));
 		expect(Number(ipVal)).toBe(1200);
 	});
@@ -1071,51 +581,29 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 	it("stream failure mid-flight before usage: the pre-charge is kept (ctx.waitUntil fix)", async () => {
 		const ip = "14.0.0.1";
 		const seeded = 7_000;
-		const now = Date.now();
-		await kv().put(perIpKey(ip, now), String(seeded), {
+		await kv().put(perIpKey(ip, Date.now()), String(seeded), {
 			expirationTtl: 25 * 3600,
 		});
-
-		const erroringStream = new ReadableStream({
-			start(controller) {
-				controller.error(new Error("upstream disconnected mid-stream"));
-			},
-		});
-
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response(erroringStream, {
-						status: 200,
-						headers: { "Content-Type": "text/event-stream" },
-					}),
-				),
-			),
+		stubUpstream(
+			new ReadableStream({
+				start(controller) {
+					controller.error(new Error("upstream disconnected mid-stream"));
+				},
+			}),
 		);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: true,
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: true });
 
 		await resp.text().catch(() => undefined);
 
-		const ipKey766 = perIpKey(ip, Date.now());
+		const ipKey = perIpKey(ip, Date.now());
 		await waitForCounter(
 			kv(),
-			ipKey766,
+			ipKey,
 			String(seeded + VITEST_CONFIG_PRE_CHARGE_MICRO_USD),
 		);
 		await new Promise((r) => setTimeout(r, 50));
-		expect(Number(await kv().get(ipKey766))).toBe(
+		expect(Number(await kv().get(ipKey))).toBe(
 			seeded + VITEST_CONFIG_PRE_CHARGE_MICRO_USD,
 		);
 	});
@@ -1126,166 +614,70 @@ describe("cost-guard integration — POST /v1/chat/completions", () => {
 			'data: {"usage":{"prompt_tokens":300,"completion_tokens":200}}\n\n',
 		);
 		let pulls = 0;
-		const streamThatDiesAfterUsage = new ReadableStream<Uint8Array>({
-			pull(controller) {
-				pulls += 1;
-				if (pulls === 1) {
-					controller.enqueue(usageChunk);
-					return;
-				}
-				controller.error(new Error("client went away"));
-			},
-		});
-
-		vi.stubGlobal(
-			"fetch",
-			vi.fn().mockImplementation(() =>
-				Promise.resolve(
-					new Response(streamThatDiesAfterUsage, {
-						status: 200,
-						headers: { "Content-Type": "text/event-stream" },
-					}),
-				),
-			),
+		stubUpstream(
+			new ReadableStream<Uint8Array>({
+				pull(controller) {
+					pulls += 1;
+					if (pulls === 1) {
+						controller.enqueue(usageChunk);
+						return;
+					}
+					controller.error(new Error("client went away"));
+				},
+			}),
 		);
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"CF-Connecting-IP": ip,
-			},
-			body: JSON.stringify({
-				messages: [{ role: "user", content: "hi" }],
-				stream: true,
-			}),
-		});
+		const resp = await postChatFrom(ip, { messages: USER_HI, stream: true });
 
 		await resp.text().catch(() => undefined);
-
-		const now = Date.now();
-		await Promise.all([
-			waitForCounter(kv(), perIpKey(ip, now), "500"),
-			waitForCounter(kv(), globalKey(now), "500"),
-		]);
+		await waitForCounters(ip, "500");
 	});
 
 	describe("prompt-cache discount: upstream usage.cost is authoritative over token-count pricing", () => {
 		it("streaming: prefers upstream usage.cost over local recompute", async () => {
 			const ip = "11.0.0.1";
-			const ssePayload =
-				'data: {"usage":{"prompt_tokens":500,"completion_tokens":1000,"cost":0.000200,"prompt_tokens_details":{"cached_tokens":480}}}\n\ndata: [DONE]\n\n';
-
-			vi.stubGlobal(
-				"fetch",
-				vi.fn().mockImplementation(() =>
-					Promise.resolve(
-						new Response(ssePayload, {
-							status: 200,
-							headers: { "Content-Type": "text/event-stream" },
-						}),
-					),
-				),
+			stubUpstream(
+				'data: {"usage":{"prompt_tokens":500,"completion_tokens":1000,"cost":0.000200,"prompt_tokens_details":{"cached_tokens":480}}}\n\ndata: [DONE]\n\n',
 			);
 
-			const resp = await SELF.fetch(ENDPOINT, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"CF-Connecting-IP": ip,
-				},
-				body: JSON.stringify({
-					messages: [{ role: "user", content: "hi" }],
-					stream: true,
-				}),
-			});
+			const resp = await postChatFrom(ip, { messages: USER_HI, stream: true });
 
 			expect(resp.status).toBe(200);
 			await resp.text();
-
-			const ipKey812 = perIpKey(ip, Date.now());
-			await waitForCounter(kv(), ipKey812, "200");
-
-			const ipVal = await kv().get(ipKey812);
-			expect(Number(ipVal)).toBe(200);
+			await waitForCounter(kv(), perIpKey(ip, Date.now()), "200");
 		});
 
 		it("non-streaming: prefers upstream usage.cost over local recompute", async () => {
 			const ip = "11.0.0.2";
-			const responseBody = JSON.stringify({
-				choices: [{ message: { content: "ok" } }],
-				usage: {
-					prompt_tokens: 300,
-					completion_tokens: 500,
-					cost: 0.00015,
-					prompt_tokens_details: { cached_tokens: 250 },
-				},
-			});
-
-			vi.stubGlobal(
-				"fetch",
-				vi.fn().mockImplementation(() =>
-					Promise.resolve(
-						new Response(responseBody, {
-							status: 200,
-							headers: { "Content-Type": "application/json" },
-						}),
-					),
-				),
+			stubUpstream(
+				JSON.stringify({
+					choices: [{ message: { content: "ok" } }],
+					usage: {
+						prompt_tokens: 300,
+						completion_tokens: 500,
+						cost: 0.00015,
+						prompt_tokens_details: { cached_tokens: 250 },
+					},
+				}),
+				200,
+				JSON_HEADERS,
 			);
 
-			await SELF.fetch(ENDPOINT, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"CF-Connecting-IP": ip,
-				},
-				body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
-			});
+			await postChatFrom(ip, { messages: USER_HI });
 
-			const ipKey851 = perIpKey(ip, Date.now());
-			await waitForCounter(kv(), ipKey851, "150");
-
-			const ipVal = await kv().get(ipKey851);
-			expect(Number(ipVal)).toBe(150);
+			await waitForCounter(kv(), perIpKey(ip, Date.now()), "150");
 		});
 
 		it("falls back to local price recompute when upstream cost is absent", async () => {
 			const ip = "11.0.0.3";
-			const ssePayload =
-				'data: {"usage":{"prompt_tokens":500,"completion_tokens":1000,"prompt_tokens_details":{"cached_tokens":400}}}\n\ndata: [DONE]\n\n';
-
-			vi.stubGlobal(
-				"fetch",
-				vi.fn().mockImplementation(() =>
-					Promise.resolve(
-						new Response(ssePayload, {
-							status: 200,
-							headers: { "Content-Type": "text/event-stream" },
-						}),
-					),
-				),
+			stubUpstream(
+				'data: {"usage":{"prompt_tokens":500,"completion_tokens":1000,"prompt_tokens_details":{"cached_tokens":400}}}\n\ndata: [DONE]\n\n',
 			);
 
-			const resp = await SELF.fetch(ENDPOINT, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"CF-Connecting-IP": ip,
-				},
-				body: JSON.stringify({
-					messages: [{ role: "user", content: "hi" }],
-					stream: true,
-				}),
-			});
+			const resp = await postChatFrom(ip, { messages: USER_HI, stream: true });
 
 			await resp.text();
-
-			const ipKey888 = perIpKey(ip, Date.now());
-			await waitForCounter(kv(), ipKey888, "1500");
-
-			const ipVal = await kv().get(ipKey888);
-			expect(Number(ipVal)).toBe(1500);
+			await waitForCounter(kv(), perIpKey(ip, Date.now()), "1500");
 		});
 	});
 });
@@ -1313,16 +705,9 @@ describe("/v1/chat/completions — CORS wiring (exhaustive cases in cors.test.ts
 	});
 
 	it("POST adds ACAO + Vary: Origin for an allow-listed origin", async () => {
-		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
+		stubUpstream("{}");
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Origin: "https://app.example",
-			},
-			body: VALID_BODY,
-		});
+		const resp = await postChat(VALID_BODY, { Origin: "https://app.example" });
 
 		expect(resp.headers.get("Access-Control-Allow-Origin")).toBe(
 			"https://app.example",
@@ -1331,16 +716,9 @@ describe("/v1/chat/completions — CORS wiring (exhaustive cases in cors.test.ts
 	});
 
 	it("POST does NOT add ACAO for an unlisted origin", async () => {
-		vi.stubGlobal("fetch", makeUpstreamMock("{}"));
+		stubUpstream("{}");
 
-		const resp = await SELF.fetch(ENDPOINT, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				Origin: "https://evil.com",
-			},
-			body: VALID_BODY,
-		});
+		const resp = await postChat(VALID_BODY, { Origin: "https://evil.com" });
 
 		expect(resp.headers.get("Access-Control-Allow-Origin")).toBeNull();
 	});

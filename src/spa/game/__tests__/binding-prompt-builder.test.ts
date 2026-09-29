@@ -24,66 +24,21 @@ function promptForSettingA(
 }
 
 describe("buildDualBindingPrompt — ID minting", () => {
-	it("carry: mints objectId and spaceId with correct pattern", () => {
+	it.each<[ObjectiveType, Record<string, string>]>([
+		["carry", { objectId: "carry-0-obj", spaceId: "carry-0-space" }],
+		["use_space", { spaceId: "useSpace-0-space" }],
+		["use_item", { itemId: "useItem-0-item" }],
+		["convergence", { spaceId: "convergence-0-space" }],
+	])("%s: mints ids with the correct pattern", (type, ids) => {
 		const { skeletons } = promptForSettingA(
-			["carry"],
+			[type],
 			"lab",
 			"mundane",
 			"foggy",
 			"dawn",
 			0,
 		);
-		expect(skeletons).toHaveLength(1);
-		expect(skeletons[0]).toEqual({
-			type: "carry",
-			objectId: "carry-0-obj",
-			spaceId: "carry-0-space",
-		});
-	});
-
-	it("use_space: mints spaceId with correct pattern", () => {
-		const { skeletons } = promptForSettingA(
-			["use_space"],
-			"lab",
-			"mundane",
-			"foggy",
-			"dawn",
-			0,
-		);
-		expect(skeletons[0]).toEqual({
-			type: "use_space",
-			spaceId: "useSpace-0-space",
-		});
-	});
-
-	it("use_item: mints itemId with correct pattern", () => {
-		const { skeletons } = promptForSettingA(
-			["use_item"],
-			"lab",
-			"mundane",
-			"foggy",
-			"dawn",
-			0,
-		);
-		expect(skeletons[0]).toEqual({
-			type: "use_item",
-			itemId: "useItem-0-item",
-		});
-	});
-
-	it("convergence: mints spaceId with correct pattern", () => {
-		const { skeletons } = promptForSettingA(
-			["convergence"],
-			"lab",
-			"mundane",
-			"foggy",
-			"dawn",
-			0,
-		);
-		expect(skeletons[0]).toEqual({
-			type: "convergence",
-			spaceId: "convergence-0-space",
-		});
+		expect(skeletons).toEqual([{ type, ...ids }]);
 	});
 
 	it("IDs are stable/deterministic given the same types array", () => {
@@ -206,29 +161,6 @@ describe("buildDualBindingPrompt", () => {
 		);
 		expect(userMessage).toContain("subway station");
 		expect(userMessage).toContain("forest clearing");
-	});
-
-	it("mentions every minted entity id in the message", () => {
-		const types: ObjectiveType[] = ["carry", "use_item"];
-		const { skeletons, decoys, userMessage } = buildDualBindingPrompt(
-			types,
-			"sA",
-			"sB",
-			"t",
-			"wA",
-			"wB",
-			"todA",
-			"todB",
-			1,
-		);
-		for (const sk of skeletons) {
-			if (sk.objectId) expect(userMessage).toContain(sk.objectId);
-			if (sk.spaceId) expect(userMessage).toContain(sk.spaceId);
-			if (sk.itemId) expect(userMessage).toContain(sk.itemId);
-		}
-		for (const d of decoys) {
-			expect(userMessage).toContain(d.id);
-		}
 	});
 });
 

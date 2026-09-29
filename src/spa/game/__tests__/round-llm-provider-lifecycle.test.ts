@@ -1,58 +1,31 @@
 import { describe, expect, it } from "vitest";
+import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
+import { makeTestGame, ROW_AI_STARTS } from "./fixtures/make-game-state";
 
-describe("MockRoundLLMProvider — onLifecycle callback", () => {
-	it("fires started → first-token → completed in order when result resolves", async () => {
-		const provider = new MockRoundLLMProvider(["hello world"]);
+describe("runRound — onLifecycle forwarding", () => {
+	it("tags started → first-token → completed with each Daemon's id, in initiative order", async () => {
 		const events: string[] = [];
 
-		const result = await provider.streamRound(
-			[],
-			[],
-			undefined,
-			undefined,
-			(event) => {
-				events.push(event.phase);
+		await runRound(
+			makeTestGame({ pack: { aiStarts: ROW_AI_STARTS } }),
+			"red",
+			"hi",
+			new MockRoundLLMProvider([{ assistantText: "", toolCalls: [] }]),
+			{
+				initiative: ["cyan", "red", "green"],
+				onLifecycle: (event) => {
+					events.push(`${event.phase}:${event.daemonId}`);
+				},
 			},
 		);
 
-		expect(events).toEqual(["started", "first-token", "completed"]);
-		expect(result.assistantText).toBe("hello world");
-	});
-
-	it("forwards daemonId on every phase", async () => {
-		const provider = new MockRoundLLMProvider(["test"]);
-		const events: Array<string> = [];
-
-		await provider.streamRound([], [], undefined, "daemon-123", (event) => {
-			events.push(
-				event.daemonId ? `${event.phase}:${event.daemonId}` : event.phase,
-			);
-		});
-
-		expect(events).toEqual([
-			"started:daemon-123",
-			"first-token:daemon-123",
-			"completed:daemon-123",
-		]);
-	});
-
-	it("omits daemonId when not passed", async () => {
-		const provider = new MockRoundLLMProvider(["test"]);
-		const events: Array<string> = [];
-
-		await provider.streamRound([], [], undefined, undefined, (event) => {
-			events.push(event.phase);
-		});
-
-		expect(events).toEqual(["started", "first-token", "completed"]);
-	});
-
-	it("does not call onLifecycle when callback is absent", async () => {
-		const provider = new MockRoundLLMProvider(["hello"]);
-
-		const result = await provider.streamRound([], []);
-
-		expect(result.assistantText).toBe("hello");
+		expect(events).toEqual(
+			["cyan", "red", "green"].flatMap((id) => [
+				`started:${id}`,
+				`first-token:${id}`,
+				`completed:${id}`,
+			]),
+		);
 	});
 });
