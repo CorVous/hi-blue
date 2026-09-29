@@ -106,16 +106,6 @@ const USE_TELL_KEYWORDS: readonly string[] = [
 	...USE_ITEM_EXTRA_TELL_KEYWORDS,
 ];
 
-export function examineMentionsUseTell(examineDescription: string): boolean {
-	const tokens = examineDescription.toLowerCase().match(/[a-z]+/g) ?? [];
-	if (tokens.length === 0) return false;
-	const tokenSet = new Set(tokens);
-	for (const kw of USE_TELL_KEYWORDS) {
-		if (tokenSet.has(kw)) return true;
-	}
-	return false;
-}
-
 export function findMatchedUseTellKeywords(
 	examineDescription: string,
 ): string[] {
@@ -151,13 +141,13 @@ export const USE_CUE_KEYWORD_HINTS: readonly string[] = [
 ];
 
 export type RetryUnit =
-	| { kind: "objective-pair"; phaseIndex: number; pairId: string }
-	| { kind: "obstacle"; phaseIndex: number; entityId: string }
-	| { kind: "carry-binding"; phaseIndex: number; bindingId: string }
-	| { kind: "use-space-binding"; phaseIndex: number; bindingId: string }
-	| { kind: "use-item-binding"; phaseIndex: number; bindingId: string }
-	| { kind: "convergence-binding"; phaseIndex: number; bindingId: string }
-	| { kind: "decoy"; phaseIndex: number; decoyId: string };
+	| { kind: "objective-pair"; pairId: string }
+	| { kind: "obstacle"; entityId: string }
+	| { kind: "carry-binding"; bindingId: string }
+	| { kind: "use-space-binding"; bindingId: string }
+	| { kind: "use-item-binding"; bindingId: string }
+	| { kind: "convergence-binding"; bindingId: string }
+	| { kind: "decoy"; decoyId: string };
 
 type ValidationRule =
 	| "verb-of-activation"

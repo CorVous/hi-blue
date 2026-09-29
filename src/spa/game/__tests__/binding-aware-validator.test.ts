@@ -468,3 +468,61 @@ describe("validateBoundDualContentPack", () => {
 		expect(result.ok).toBe(false);
 	});
 });
+
+describe("validateBoundDualContentPack — retry unit binding ids", () => {
+	it("names the retry unit after the binding index, not the phase", () => {
+		const schedule = makeSchedule({
+			skeletons: [
+				...makeCarrySchedule(0).skeletons,
+				...makeUseSpaceSchedule(1).skeletons,
+			],
+		});
+		const carry = makeGoodCarryPack(0).pack;
+		const useSpace = makeGoodUseSpacePack(1).pack;
+		const pack = {
+			...carry,
+			bindings: [...carry.bindings, ...useSpace.bindings],
+		};
+		delete (pack.bindings[1]?.space as Record<string, unknown>).name;
+		const result = validateAsBothPacks({ pack }, schedule);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const units = result.errors.map((e) => e.retryUnit);
+			expect(units).toContainEqual(
+				expect.objectContaining({
+					kind: "use-space-binding",
+					bindingId: "useSpace-1",
+				}),
+			);
+			expect(units).not.toContainEqual(
+				expect.objectContaining({ bindingId: "useSpace-0" }),
+			);
+		}
+	});
+
+	it("gives two carry bindings distinct retry units", () => {
+		const schedule = makeSchedule({
+			skeletons: [
+				...makeCarrySchedule(0).skeletons,
+				...makeCarrySchedule(1).skeletons,
+			],
+		});
+		const pack = {
+			...makeGoodCarryPack(0).pack,
+			bindings: [
+				...makeGoodCarryPack(0).pack.bindings,
+				...makeGoodCarryPack(1).pack.bindings,
+			],
+		};
+		delete (pack.bindings[1]?.object as Record<string, unknown>).name;
+		const result = validateAsBothPacks({ pack }, schedule);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			const bindingIds = result.errors.map(
+				(e) => (e.retryUnit as { bindingId?: string }).bindingId,
+			);
+			expect(bindingIds).toContain("carry-1");
+			expect(bindingIds).not.toContain("carry-0");
+		}
+	});
+});

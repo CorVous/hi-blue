@@ -130,7 +130,7 @@ therefore needs a clue in its `examineDescription`:
   failing that any non-stopword space-name token of four or more characters,
   #382) has been deleted. If enforcement is added later (#346), it can be
   recovered from the repository history.
-- **Use-Space and Use-Item.** `examineMentionsUseTell` matches whole words from
+- **Use-Space and Use-Item.** `findMatchedUseTellKeywords` matches whole words from
   `USE_TELL_KEYWORDS`, so "use" does not match inside "fuse". The list joins the
   Use-Space cue set (#335) and the extra Use-Item cues (#334: crank, handle, flip,
   twist, wind). Keep it in sync with the cue lists written out in the system
@@ -140,8 +140,9 @@ therefore needs a clue in its `examineDescription`:
   ordinary objects: in the 2026-09-28 content-pack eval, 3 of 10 packs failed
   their first attempt on a decoy `verb-of-activation`, and 0 of 10 once the list
   was written out. `USE_CUE_KEYWORD_HINTS` is the short subset quoted back in corrective
-  feedback. `findMatchedUseTellKeywords` names the exact word that broke a
-  decoy, so the model does not have to guess it from the prompt.
+  feedback. The validator treats any match as a use-cue; for a decoy it also
+  quotes the matched words back, so the model does not have to guess which one
+  broke the rule.
 - **Convergence (#336).** The tell is enforced by the prompt only. The prompts
   require the space to hint that shared occupancy matters, but no keyword
   validator checks it. A curated list (meet, gather, together…) was rejected. It
@@ -171,7 +172,10 @@ proposed. Retry units now only group the corrective feedback. The ADR also chose
 a fresh call over continuing the conversation; the code now continues the
 conversation. `RetryUnit` still lists `objective-pair`, which dates from the
 pre-binding validator. `objective-pair` with an empty `pairId` marks errors that
-belong to the whole pack.
+belong to the whole pack. A binding's retry unit is named after its binding
+index (`carry-0`, `useSpace-1`, …), the same `id` the prompt asks the model to
+echo on the binding, so two bindings never share one feedback group. Retry
+units carry no phase index: there is one phase, so it was always 0.
 
 ### Attempt log (`content-pack-attempts.ts`)
 

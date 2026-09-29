@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { examineMentionsUseTell } from "../content-pack-validation.js";
+import { findMatchedUseTellKeywords } from "../content-pack-validation.js";
+
+function examineMentionsUseTell(examineDescription: string): boolean {
+	return findMatchedUseTellKeywords(examineDescription).length > 0;
+}
 
 describe("examineMentionsUseTell", () => {
 	it("matches a verb-of-activation like 'press'", () => {

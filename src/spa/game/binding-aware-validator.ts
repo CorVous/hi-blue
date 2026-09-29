@@ -4,7 +4,6 @@ import type {
 	ValidationResult,
 } from "./content-pack-validation.js";
 import {
-	examineMentionsUseTell,
 	findMatchedUseTellKeywords,
 	USE_CUE_KEYWORD_HINTS,
 } from "./content-pack-validation.js";
@@ -232,14 +231,13 @@ function checkWrongId(
 function validateCarryBinding(
 	binding: RawBinding,
 	sk: BindingSkeleton,
-	phaseIndex: number,
+	bindingIndex: number,
 	warnings: ValidationError[],
 	errors: ValidationError[],
 ): void {
 	const bindingRetryUnit = {
 		kind: "carry-binding" as const,
-		phaseIndex,
-		bindingId: `carry-${phaseIndex}`,
+		bindingId: `carry-${bindingIndex}`,
 	};
 
 	const obj = binding.object;
@@ -299,7 +297,7 @@ function validateCarryBinding(
 			typeof space.examineDescription === "string" &&
 			space.examineDescription.length > 0
 		) {
-			if (examineMentionsUseTell(space.examineDescription)) {
+			if (findMatchedUseTellKeywords(space.examineDescription).length > 0) {
 				warnings.push({
 					entityId: spaceId,
 					field: "examineDescription",
@@ -315,13 +313,12 @@ function validateCarryBinding(
 function validateUseSpaceBinding(
 	binding: RawBinding,
 	sk: BindingSkeleton,
-	phaseIndex: number,
+	bindingIndex: number,
 	errors: ValidationError[],
 ): void {
 	const bindingRetryUnit = {
 		kind: "use-space-binding" as const,
-		phaseIndex,
-		bindingId: `useSpace-${phaseIndex}`,
+		bindingId: `useSpace-${bindingIndex}`,
 	};
 
 	const space = binding.space;
@@ -350,7 +347,7 @@ function validateUseSpaceBinding(
 		typeof space.examineDescription === "string" &&
 		space.examineDescription.length > 0
 	) {
-		if (!examineMentionsUseTell(space.examineDescription)) {
+		if (findMatchedUseTellKeywords(space.examineDescription).length === 0) {
 			errors.push({
 				entityId: spaceId,
 				field: "examineDescription",
@@ -365,13 +362,12 @@ function validateUseSpaceBinding(
 function validateUseItemBinding(
 	binding: RawBinding,
 	sk: BindingSkeleton,
-	phaseIndex: number,
+	bindingIndex: number,
 	errors: ValidationError[],
 ): void {
 	const bindingRetryUnit = {
 		kind: "use-item-binding" as const,
-		phaseIndex,
-		bindingId: `useItem-${phaseIndex}`,
+		bindingId: `useItem-${bindingIndex}`,
 	};
 
 	const item = binding.item;
@@ -397,7 +393,7 @@ function validateUseItemBinding(
 		typeof item.examineDescription === "string" &&
 		item.examineDescription.length > 0
 	) {
-		if (!examineMentionsUseTell(item.examineDescription)) {
+		if (findMatchedUseTellKeywords(item.examineDescription).length === 0) {
 			errors.push({
 				entityId: itemId,
 				field: "examineDescription",
@@ -412,14 +408,13 @@ function validateUseItemBinding(
 function validateConvergenceBinding(
 	binding: RawBinding,
 	sk: BindingSkeleton,
-	phaseIndex: number,
+	bindingIndex: number,
 	warnings: ValidationError[],
 	errors: ValidationError[],
 ): void {
 	const bindingRetryUnit = {
 		kind: "convergence-binding" as const,
-		phaseIndex,
-		bindingId: `convergence-${phaseIndex}`,
+		bindingId: `convergence-${bindingIndex}`,
 	};
 
 	const space = binding.space;
@@ -448,7 +443,7 @@ function validateConvergenceBinding(
 		typeof space.examineDescription === "string" &&
 		space.examineDescription.length > 0
 	) {
-		if (examineMentionsUseTell(space.examineDescription)) {
+		if (findMatchedUseTellKeywords(space.examineDescription).length > 0) {
 			warnings.push({
 				entityId: spaceId,
 				field: "examineDescription",
@@ -463,12 +458,10 @@ function validateConvergenceBinding(
 function validateDecoy(
 	decoy: RawDecoy,
 	expectedId: string,
-	phaseIndex: number,
 	errors: ValidationError[],
 ): void {
 	const retryUnit = {
 		kind: "decoy" as const,
-		phaseIndex,
 		decoyId: expectedId,
 	};
 
@@ -527,12 +520,10 @@ function validateDecoy(
 function validateObstacle(
 	obstacle: RawObstacle,
 	expectedId: string,
-	phaseIndex: number,
 	errors: ValidationError[],
 ): void {
 	const retryUnit = {
 		kind: "obstacle" as const,
-		phaseIndex,
 		entityId: expectedId,
 	};
 
@@ -576,7 +567,6 @@ function validateObstacle(
 function validateBoundPack(
 	pack: RawBoundPack,
 	schedule: ValidationSchedule,
-	phaseIndex: number,
 	errors: ValidationError[],
 	warnings: ValidationError[],
 ): void {
@@ -591,24 +581,24 @@ function validateBoundPack(
 				entityId: "",
 				field: "bindings",
 				rule: "missing-field",
-				message: `Phase ${phaseIndex}: binding ${i} is missing`,
-				retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+				message: `binding ${i} is missing`,
+				retryUnit: { kind: "objective-pair", pairId: "" },
 			});
 			continue;
 		}
 
 		switch (sk.type) {
 			case "carry":
-				validateCarryBinding(binding, sk, phaseIndex, warnings, errors);
+				validateCarryBinding(binding, sk, i, warnings, errors);
 				break;
 			case "use_space":
-				validateUseSpaceBinding(binding, sk, phaseIndex, errors);
+				validateUseSpaceBinding(binding, sk, i, errors);
 				break;
 			case "use_item":
-				validateUseItemBinding(binding, sk, phaseIndex, errors);
+				validateUseItemBinding(binding, sk, i, errors);
 				break;
 			case "convergence":
-				validateConvergenceBinding(binding, sk, phaseIndex, warnings, errors);
+				validateConvergenceBinding(binding, sk, i, warnings, errors);
 				break;
 		}
 	}
@@ -618,8 +608,8 @@ function validateBoundPack(
 			entityId: "",
 			field: "decoys",
 			rule: "wrong-count",
-			message: `Phase ${phaseIndex}: expected ${schedule.decoys.length} decoys, got ${decoys.length}`,
-			retryUnit: { kind: "objective-pair", phaseIndex, pairId: "" },
+			message: `expected ${schedule.decoys.length} decoys, got ${decoys.length}`,
+			retryUnit: { kind: "objective-pair", pairId: "" },
 		});
 	} else {
 		for (const [i, expectedDecoy] of schedule.decoys.entries()) {
@@ -629,12 +619,12 @@ function validateBoundPack(
 					entityId: expectedDecoy.id,
 					field: "decoys",
 					rule: "missing-field",
-					message: `Phase ${phaseIndex}: decoy ${i} is missing`,
-					retryUnit: { kind: "decoy", phaseIndex, decoyId: expectedDecoy.id },
+					message: `decoy ${i} is missing`,
+					retryUnit: { kind: "decoy", decoyId: expectedDecoy.id },
 				});
 				continue;
 			}
-			validateDecoy(decoy, expectedDecoy.id, phaseIndex, errors);
+			validateDecoy(decoy, expectedDecoy.id, errors);
 		}
 	}
 
@@ -646,12 +636,12 @@ function validateBoundPack(
 				entityId: expectedId,
 				field: "obstacles",
 				rule: "missing-field",
-				message: `Phase ${phaseIndex}: obstacle ${i} (id="${expectedId}") is missing`,
-				retryUnit: { kind: "obstacle", phaseIndex, entityId: expectedId },
+				message: `obstacle ${i} (id="${expectedId}") is missing`,
+				retryUnit: { kind: "obstacle", entityId: expectedId },
 			});
 			continue;
 		}
-		validateObstacle(obstacle, expectedId, phaseIndex, errors);
+		validateObstacle(obstacle, expectedId, errors);
 	}
 }
 
@@ -668,7 +658,7 @@ export function validateBoundDualContentPack(
 			field: "<root>",
 			rule: "structural",
 			message: "Response is not an object",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+			retryUnit: { kind: "objective-pair", pairId: "" },
 		});
 		return { ok: false, errors };
 	}
@@ -684,7 +674,7 @@ export function validateBoundDualContentPack(
 			field: "phases",
 			rule: "missing-field",
 			message: "Response missing 'phases' array",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+			retryUnit: { kind: "objective-pair", pairId: "" },
 		});
 		return { ok: false, errors };
 	}
@@ -696,7 +686,7 @@ export function validateBoundDualContentPack(
 			field: "phases[0]",
 			rule: "structural",
 			message: "Phase 0 is missing",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+			retryUnit: { kind: "objective-pair", pairId: "" },
 		});
 		return { ok: false, errors };
 	}
@@ -710,10 +700,10 @@ export function validateBoundDualContentPack(
 			field: "packA",
 			rule: "missing-field",
 			message: "Phase 0 missing packA",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+			retryUnit: { kind: "objective-pair", pairId: "" },
 		});
 	} else {
-		validateBoundPack(packA, schedule, 0, errors, warnings);
+		validateBoundPack(packA, schedule, errors, warnings);
 	}
 
 	if (!packB || typeof packB !== "object") {
@@ -722,10 +712,10 @@ export function validateBoundDualContentPack(
 			field: "packB",
 			rule: "missing-field",
 			message: "Phase 0 missing packB",
-			retryUnit: { kind: "objective-pair", phaseIndex: 0, pairId: "" },
+			retryUnit: { kind: "objective-pair", pairId: "" },
 		});
 	} else {
-		validateBoundPack(packB, schedule, 0, errors, warnings);
+		validateBoundPack(packB, schedule, errors, warnings);
 	}
 
 	return errors.length === 0
