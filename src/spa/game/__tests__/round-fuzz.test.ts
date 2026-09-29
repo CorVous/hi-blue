@@ -313,6 +313,8 @@ function worldViolations(state: GameState): string[] {
 			!(entity.holder in state.personas)
 		) {
 			violations.push(`${entity.id} held by ${entity.holder}`);
+		} else if (state.exhausted.has(entity.holder)) {
+			violations.push(`${entity.id} held by exhausted ${entity.holder}`);
 		}
 	}
 	const ids = state.world.entities.map((e) => e.id);
