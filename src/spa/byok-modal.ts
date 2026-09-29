@@ -117,6 +117,9 @@ export function formatRelativeTime(iso: string, nowMs: number): string {
 	return `${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
 }
 
+let keyAwaitingUnverifiedSave: string | null = null;
+let validationInFlight = false;
+
 function getEl<T extends HTMLElement>(id: string): T | null {
 	return document.getElementById(id) as T | null;
 }
@@ -152,6 +155,7 @@ function renderModalState(): void {
 	const meta = readMeta();
 
 	statusEl.textContent = "";
+	keyAwaitingUnverifiedSave = null;
 
 	if (key) {
 		if (meta?.validatedAt) {
@@ -173,14 +177,35 @@ function renderModalState(): void {
 	} else {
 		modeLine.textContent =
 			"Currently using the free tier (limited daily messages)";
-		keyInput.value = "";
-		keyInput.removeAttribute("readonly");
+		showKeyEntryControls(keyInput);
+	}
+}
 
-		if (validateSaveBtn) validateSaveBtn.hidden = false;
-		if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
-		if (revalidateBtn) revalidateBtn.hidden = true;
-		if (replaceBtn) replaceBtn.hidden = true;
-		if (clearBtn) clearBtn.hidden = true;
+function showKeyEntryControls(keyInput: HTMLInputElement): void {
+	keyInput.value = "";
+	keyInput.removeAttribute("readonly");
+
+	const validateSaveBtn = getEl("byok-validate-save");
+	const saveUnverifiedBtn = getEl("byok-save-unverified");
+	const revalidateBtn = getEl("byok-revalidate");
+	const replaceBtn = getEl("byok-replace");
+	const clearBtn = getEl("byok-clear");
+	if (validateSaveBtn) validateSaveBtn.hidden = false;
+	if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
+	if (revalidateBtn) revalidateBtn.hidden = true;
+	if (replaceBtn) replaceBtn.hidden = true;
+	if (clearBtn) clearBtn.hidden = true;
+}
+
+async function runExclusiveValidation(
+	validation: () => Promise<void>,
+): Promise<void> {
+	if (validationInFlight) return;
+	validationInFlight = true;
+	try {
+		await validation();
+	} finally {
+		validationInFlight = false;
 	}
 }
 
@@ -210,32 +235,35 @@ export function initByokModal(): void {
 
 	const validateSaveBtn = getEl("byok-validate-save");
 	if (validateSaveBtn) {
-		validateSaveBtn.addEventListener("click", async () => {
-			const keyInput = getEl<HTMLInputElement>("byok-key-input");
-			const statusEl = getEl("byok-status");
-			const saveUnverifiedBtn = getEl("byok-save-unverified");
-			if (!keyInput || !statusEl) return;
+		validateSaveBtn.addEventListener("click", () =>
+			runExclusiveValidation(async () => {
+				const keyInput = getEl<HTMLInputElement>("byok-key-input");
+				const statusEl = getEl("byok-status");
+				const saveUnverifiedBtn = getEl("byok-save-unverified");
+				if (!keyInput || !statusEl) return;
 
-			const key = keyInput.value.trim();
-			if (!key) {
-				statusEl.textContent = "Please enter an API key.";
-				return;
-			}
+				const key = keyInput.value.trim();
+				if (!key) {
+					statusEl.textContent = "Please enter an API key.";
+					return;
+				}
 
-			statusEl.textContent = "Validating…";
-			if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
+				statusEl.textContent = "Validating…";
+				keyAwaitingUnverifiedSave = null;
+				if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
 
-			const result = await validateOpenRouterKey(key);
-			handleValidationResult({ result, key, statusEl, saveUnverifiedBtn });
-		});
+				const result = await validateOpenRouterKey(key);
+				handleValidationResult({ result, key, statusEl, saveUnverifiedBtn });
+			}),
+		);
 	}
 
 	const saveUnverifiedBtn = getEl("byok-save-unverified");
 	if (saveUnverifiedBtn) {
 		saveUnverifiedBtn.addEventListener("click", () => {
-			const keyInput = getEl<HTMLInputElement>("byok-key-input");
-			if (!keyInput) return;
-			const key = keyInput.value.trim();
+			const key = keyAwaitingUnverifiedSave;
+			if (!key) return;
+			keyAwaitingUnverifiedSave = null;
 			const keySuffix = key.slice(-4);
 			writeKeyAndMeta(key, {
 				validatedAt: "",
@@ -249,54 +277,34 @@ export function initByokModal(): void {
 
 	const revalidateBtn = getEl("byok-revalidate");
 	if (revalidateBtn) {
-		revalidateBtn.addEventListener("click", async () => {
-			const statusEl = getEl("byok-status");
-			const saveUnverifiedBtn = getEl("byok-save-unverified");
-			const storedKey = readKey();
-			if (!statusEl || !storedKey) return;
+		revalidateBtn.addEventListener("click", () =>
+			runExclusiveValidation(async () => {
+				const statusEl = getEl("byok-status");
+				const saveUnverifiedBtn = getEl("byok-save-unverified");
+				const storedKey = readKey();
+				if (!statusEl || !storedKey) return;
 
-			statusEl.textContent = "Validating…";
-			const result = await validateOpenRouterKey(storedKey);
-			if (result.kind === "validated") {
-				const meta = readMeta();
-				writeKeyAndMeta(storedKey, {
-					validatedAt: new Date().toISOString(),
-					status: "validated",
-					keySuffix: meta?.keySuffix ?? storedKey.slice(-4),
-				});
-				renderModalState();
-				statusEl.textContent = "Key validated.";
-			} else {
+				statusEl.textContent = "Validating…";
+				keyAwaitingUnverifiedSave = null;
+				const result = await validateOpenRouterKey(storedKey);
 				handleValidationResult({
 					result,
 					key: storedKey,
 					statusEl,
 					saveUnverifiedBtn,
 				});
-			}
-		});
+			}),
+		);
 	}
 
 	const replaceBtn = getEl("byok-replace");
 	if (replaceBtn) {
 		replaceBtn.addEventListener("click", () => {
 			const keyInput = getEl<HTMLInputElement>("byok-key-input");
-			const validateSaveBtn = getEl("byok-validate-save");
-			const saveUnverifiedBtn = getEl("byok-save-unverified");
-			const revalidateBtn2 = getEl("byok-revalidate");
-			const replaceBtn2 = getEl("byok-replace");
-			const clearBtn = getEl("byok-clear");
 			if (!keyInput) return;
-
-			keyInput.value = "";
-			keyInput.removeAttribute("readonly");
+			keyAwaitingUnverifiedSave = null;
+			showKeyEntryControls(keyInput);
 			keyInput.focus();
-
-			if (validateSaveBtn) validateSaveBtn.hidden = false;
-			if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = true;
-			if (revalidateBtn2) revalidateBtn2.hidden = true;
-			if (replaceBtn2) replaceBtn2.hidden = true;
-			if (clearBtn) clearBtn.hidden = true;
 		});
 	}
 
@@ -340,6 +348,7 @@ function handleValidationResult({
 		const statusStr =
 			result.status !== null ? String(result.status) : "unknown";
 		statusEl.textContent = `Couldn't reach OpenRouter to verify (got ${statusStr}). Save anyway?`;
+		keyAwaitingUnverifiedSave = key;
 		if (saveUnverifiedBtn) saveUnverifiedBtn.hidden = false;
 	} else if (result.kind === "rejected-other") {
 		statusEl.textContent = `OpenRouter rejected the validation (status ${result.status}). Check the key and try again.`;

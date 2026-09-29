@@ -69,7 +69,14 @@ re-render is a call to `renderApp` from a view.
 - **Validation** calls OpenRouter's `/api/v1/auth/key`.
   - 401 and 402 are rejections.
   - Other 4xx responses are `rejected-other`.
-  - 5xx responses and network failures offer "save unverified".
+  - 5xx responses and network failures offer "save unverified". It saves
+    the key that failed to validate (`keyAwaitingUnverifiedSave`), never the
+    input's text: after Re-validate the input only shows the masked
+    `sk-or-v1-••••<suffix>`, and after Validate & save the player may have
+    edited it since.
+  - Only one validation runs at a time (`runExclusiveValidation`). A second
+    click on Validate & save or Re-validate while a request is out is
+    ignored, so one key is not checked, and written, twice.
   - A 200 response that reports `usage >= limit` is treated as a 402.
   - A 200 response whose body cannot be parsed counts as validated
     (`readAuthKeyInfoOrNull` returns `null`). The endpoint has already

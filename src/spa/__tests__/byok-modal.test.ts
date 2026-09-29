@@ -461,6 +461,85 @@ describe("openByokModal UI", () => {
 		expect(getEl("byok-status").textContent).toBe("Key validated.");
 	});
 
+	it("Save unverified after a failed Re-validate keeps the stored key, not the masked display text", async () => {
+		store.openrouter_key = "sk-or-v1-storedkey9876";
+		store.openrouter_key_meta = JSON.stringify({
+			validatedAt: "",
+			status: "unverified",
+			keySuffix: "9876",
+		});
+
+		openByokModal();
+		initByokModal();
+		expect(getEl<HTMLInputElement>("byok-key-input").value).toContain("••••");
+
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 503 }));
+		getEl("byok-revalidate").click();
+		await vi.waitFor(() => {
+			expect(getEl("byok-save-unverified").hidden).toBe(false);
+		});
+
+		getEl("byok-save-unverified").click();
+
+		expect(store.openrouter_key).toBe("sk-or-v1-storedkey9876");
+		// biome-ignore lint/style/noNonNullAssertion: test assertion
+		const meta = JSON.parse(store.openrouter_key_meta!);
+		expect(meta.keySuffix).toBe("9876");
+		expect(meta.status).toBe("unverified");
+	});
+
+	it("Save unverified saves the key that failed validation even if the input changed since", async () => {
+		openByokModal();
+		initByokModal();
+
+		const keyInput = getEl<HTMLInputElement>("byok-key-input");
+		keyInput.value = "sk-or-v1-validatedkey";
+
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 502 }));
+		getEl("byok-validate-save").click();
+		await vi.waitFor(() => {
+			expect(getEl("byok-save-unverified").hidden).toBe(false);
+		});
+
+		keyInput.value = "sk-or-v1-editedafter";
+		getEl("byok-save-unverified").click();
+
+		expect(store.openrouter_key).toBe("sk-or-v1-validatedkey");
+	});
+
+	it("a second Validate & save click while one is in flight does not validate again", async () => {
+		openByokModal();
+		initByokModal();
+
+		getEl<HTMLInputElement>("byok-key-input").value = "sk-or-v1-somekey";
+
+		let respond: (value: { status: number }) => void = () => undefined;
+		const fetchMock = vi.fn(
+			() =>
+				new Promise<{ status: number }>((resolve) => {
+					respond = resolve;
+				}),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		getEl("byok-validate-save").click();
+		getEl("byok-validate-save").click();
+		getEl("byok-revalidate").click();
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		respond({ status: 401 });
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toContain("didn't authenticate");
+		});
+
+		getEl("byok-validate-save").click();
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		respond({ status: 401 });
+		await vi.waitFor(() => {
+			expect(getEl("byok-status").textContent).toContain("didn't authenticate");
+		});
+	});
+
 	it("Clear key removes both localStorage entries with no confirm prompt", async () => {
 		store.openrouter_key = "sk-or-v1-somekey";
 		store.openrouter_key_meta = JSON.stringify({
