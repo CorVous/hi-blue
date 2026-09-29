@@ -110,10 +110,11 @@ export function makeTestGame(options: TestGameOptions = {}): GameState {
 		wallName: "wall",
 		...options.pack,
 	});
-	return startGame(options.personas ?? TEST_PERSONAS, pack, {
+	const game = startGame(options.personas ?? TEST_PERSONAS, pack, {
 		budgetPerAi: options.budgetPerAi ?? 5,
 		...(options.rng ? { rng: options.rng } : {}),
 	});
+	return { ...game, contentPacksA: [pack], contentPacksB: [pack] };
 }
 
 export function withPackOrderedWorld(game: GameState): GameState {

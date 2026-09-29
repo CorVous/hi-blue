@@ -251,6 +251,18 @@ describe("Setting Shift exclusion", () => {
 		expect(result?.fired.kind).not.toBe("setting_shift");
 	});
 
+	it("excludes setting_shift when the game has no B pack", () => {
+		const game = makePhase({
+			complicationSchedule: { countdown: 0, settingShiftFired: false },
+			contentPacksB: [],
+		});
+		const result = tickComplication(
+			game,
+			seededRng([POOL_PICK.lastKind, 0.0, 0.0, 0.5]),
+		);
+		expect(result?.fired.kind).toBe("chat_lockout");
+	});
+
 	it("sets settingShiftFired=true in returned game state when setting_shift fires", () => {
 		const game = makePhase({
 			complicationSchedule: { countdown: 0, settingShiftFired: false },

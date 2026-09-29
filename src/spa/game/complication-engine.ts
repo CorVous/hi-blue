@@ -140,7 +140,7 @@ function availableComplicationTypes(
 
 	pool.push("chat_lockout");
 
-	if (!complicationSchedule.settingShiftFired) {
+	if (!complicationSchedule.settingShiftFired && phase.contentPacksB[0]) {
 		pool.push("setting_shift");
 	}
 
