@@ -189,11 +189,14 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `endgame-current-behaviour` | `game_ended` disables the composer, shows the choices, and keeps the URL. The active-session pointer survives until the player chooses. | #80, #101, #307 |
 | `endgame-outcome` | The endgame subtitle follows the outcome (win or budget exhausted), topinfo shows the final turn, the final round's Daemon lines appear on the endgame screen, and the finished round is saved so a reload reopens the endgame. The budget ending is reached by lowering every saved budget and reloading. Re-entering the endgame by toggling the picker must not stack button handlers: one click downloads once and starts one content-pack request. | #576 |
 | `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. After each choice (Same Daemons, Continue, and New Daemons followed by a new login) `#endgame` is hidden and `#prompt` is enabled again. | #307 |
+| `endgame-choice-safety` | Same Daemons and Continue leave a session the player loaded while the new room was generating untouched: no pointer move, no overwrite, no archive. When archiving the finished game fails, New Daemons and Same Daemons keep it, say why in `#endgame-choice-status` and re-enable the button. | |
+| `round-session-switch` | A round still running when the player loads another session paints nothing into it and is saved under its own session; a round whose session was removed meanwhile is dropped without a warning. | |
+| `bootstrap-session-switch` | A loading flow that timed out and was abandoned does not take over the start screen when its bootstrap later succeeds, and a new game starts at epoch 01 after a later-epoch session was open. | |
 | `round-reentry` | Opening and closing the session picker while a round is in flight keeps Send disabled, a forced submit starts no second round, and the held round still completes with one request per Daemon. | |
 | `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. The start screen's "broken" banner is hidden once the next login reaches the game. | #380 |
 | `bootstrap-failure-bounce` | A content-pack failure after CONNECT, whether a network abort or an HTTP 200 with an error body, shows `#bootstrap-recovery` inside the game view instead of bouncing to start. | #380 |
 | `start-screen` | Start-screen boot, login, restore on refresh, cap-hit (and a provider 429 that is not one), refresh during generation, and an empty active pointer. | ADR 0011 |
-| `sessions-picker` | Picker rows for ok, broken and version-mismatch saves; load, dup and rm; the sessions icon; sticky routing; archived-build links. | ADR 0011 |
+| `sessions-picker` | Picker rows for ok, broken and version-mismatch saves; load, dup and rm; the sessions icon; sticky routing; archived-build links; Escape closes the picker even while the hidden `#prompt` holds focus, but not from a visible text field. | ADR 0011 |
 | `persistence-reload` | Transcripts and budgets survive a reload, and a live-schema session round-trips position, inventory, content state, conversation and perception changes. | #173, #214 |
 | `witnessed-event-reload` | A live `go` produces a witnessed-event entry that survives reloads and appears in the witness's turns but never the actor's. | #196, #195, PRD #157, ADR 0015 |
 | `whisper-tampering` | Each Daemon's `<aiId>.txt` is the only source of its message history, and an entry injected into one Daemon's file appears in no other Daemon's prompt. | #213 |
@@ -230,6 +233,14 @@ specs that assert on generation failure check `#cap-hit` themselves.
   game view is attached. That way the loading-flow catch in `game.ts`, which
   shows the recovery UI, handles it, and not the start screen's catch, which
   bounces to start with `reason=broken`.
+- **endgame-choice-safety and bootstrap-session-switch.** What they guard is
+  that nothing happens when a held generation is finally released, and there
+  is no event for "nothing happened". They wait for the released response
+  and then a fixed settle delay before asserting on storage and the view.
+  The failed-archive tests make `archiveSession` throw by writing the
+  session's `saving` marker, the same state an interrupted save leaves.
+- **bootstrap-session-switch.** The loading timeout is 300 s, so the spec
+  installs Playwright's clock before navigation and fast-forwards past it.
 - **start-screen.**
   - The mobile media query's `#panels.row { display: grid }` outranked
     `[hidden]` and leaked the chat panels onto the start screen.
