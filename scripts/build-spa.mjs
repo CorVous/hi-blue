@@ -11,7 +11,10 @@ const root = path.resolve(__dirname, "..");
 const LOCAL_WORKER_BASE_URL = "http://localhost:8787";
 const WORKER_BASE_URL = process.env.WORKER_BASE_URL || LOCAL_WORKER_BASE_URL;
 const IS_DEV_BUILD = WORKER_BASE_URL === LOCAL_WORKER_BASE_URL;
-const ASSETS_DIR = path.join(root, "dist", "assets");
+const DIST_DIR = process.env.SPA_DIST_DIR
+	? path.resolve(process.env.SPA_DIST_DIR)
+	: path.join(root, "dist");
+const ASSETS_DIR = path.join(DIST_DIR, "assets");
 const watchMode = process.argv.includes("--watch");
 
 const COMMIT_SHA = (() => {
@@ -127,7 +130,7 @@ const wireHashedAssetsIntoIndexHtmlPlugin = {
 				const html = src
 					.replace("./assets/index.css", `./assets/${cssName}`)
 					.replace("./assets/index.js", `./assets/${jsName}`);
-				await fs.writeFile(path.join(root, "dist/index.html"), html);
+				await fs.writeFile(path.join(DIST_DIR, "index.html"), html);
 			} catch (err) {
 				reportTemplateFailure("failed:", err);
 			}

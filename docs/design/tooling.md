@@ -153,10 +153,17 @@ no comments; the reasons live in these design docs, the ADRs and
   tag that is an ancestor of HEAD.
 - **Version list.** A one-shot build then runs `generate-version-list.mjs`. A
   failure there is logged as a warning and does not fail the build.
+- **`SPA_DIST_DIR`** moves the output (assets, `index.html` and the version
+  list) out of `dist/`. Only `scripts/__tests__/build-spa.test.ts` sets it,
+  to a temporary directory. The test used to build into `dist/`, and
+  `deleteStaleHashedAssets` empties `dist/assets/` before esbuild writes the
+  new bundles, so a `pnpm test` run alongside the Playwright server (which
+  serves `dist/`) made page loads fail with a 500 on the bundle and specs
+  time out on a page that never started.
 
 ## `generate-version-list.mjs`
 
-Writes `dist/v/index.html`, a page listing every `v*` tag from highest to
+Writes `dist/v/index.html` (`$SPA_DIST_DIR/v/index.html` when that is set), a page listing every `v*` tag from highest to
 lowest (`sort -V | tac`) with its commit date and a Beta badge for `-beta` tags.
 Errors are logged and swallowed so the SPA build never fails because of this
 page (ADR 0012 covers the versioned URLs it links to).
