@@ -47,6 +47,11 @@ re-render is a call to `renderApp` from a view.
   opened the picker without clicking elsewhere, or the browser does not move
   focus to the icon button). A plain "focus is in an input" check then
   swallowed every Escape until the player clicked somewhere.
+- **`main.ts` catches what a render rejects with** (`renderAppLoggingFailures`)
+  and logs it. The start view's promise rejects when generation fails, after
+  it has already painted `#cap-hit` or the retryable error; without the catch
+  every such failure surfaced as an unhandled rejection. The catch only logs,
+  so it never hides the UI a view chose to show.
 
 ## BBS chrome (`bbs-chrome.ts`)
 
@@ -96,6 +101,13 @@ re-render is a call to `renderApp` from a view.
 - **Target resolution.** When a non-empty key is stored, requests go directly
   to OpenRouter. Otherwise they go to the Worker proxy. If localStorage
   cannot be read, the SPA behaves as if no key were stored.
+- **Storage can refuse the key.** `writeKeyAndMeta` and `clearKey` return
+  `false` instead of throwing when localStorage is blocked or full (private
+  mode, a quota). The modal then says it could not store (or clear) the key
+  and keeps the dialog open. Before, the throw escaped the click handler and
+  the status line stayed on "Validating…" forever. A write that fails half way
+  (key written, meta refused) removes the key again, so the SPA never runs on
+  a key the modal says it did not save.
 - **Key storage.** `openrouter-key.ts` owns the storage key
   (`OPENROUTER_KEY_STORAGE_KEY`) and `readStoredByokKey`, which returns
   `null` when localStorage cannot be read. The modal, `llm-client.ts` and
@@ -129,6 +141,23 @@ re-render is a call to `renderApp` from a view.
   cost the same as what the evals measured (ADR 0017).
 - A 200 response whose body contains an `error` object throws
   `UpstreamErrorBodyError`.
+- **One request path.** `streamCompletion` and `chatCompletionJson` share
+  `completionRequestBody` (model, provider, messages, usage, reasoning) and
+  `postCompletion` (target, fetch, error mapping). Both take an optional
+  `AbortSignal` and hand it to `fetch`, which also cancels reading the body.
+  The bootstrap uses it to abort stalled generation calls.
+- **Errors (`llm-errors.ts`).** A non-2xx response becomes `CapHitError` when
+  the body is the proxy's own cap, and otherwise `HttpStatusError` with the
+  `status`, the OpenRouter `error.message` (`upstreamMessage`, `null` when the
+  body has none) and `Retry-After` in seconds (a number or an HTTP date). The
+  message used to be only `HTTP <status>: <statusText>`, so a 401 or 402 gave
+  the player no hint of the cause. `isRetryPointless` is true for the cap and
+  for 400, 401, 402 and 403: a bad request, a missing or wrong key and an empty
+  account fail the same way on every retry, and retrying them only delayed the
+  error by the backoff. `upstreamMessageOf` gives the text the views show
+  (`HTTP 402: Insufficient credits`, or an error body's message). The error
+  classes live in their own module so `streaming.ts` can throw them without
+  importing `llm-client.ts`, which imports it. `llm-client.ts` re-exports them.
 
 ## SSE parsing (`streaming.ts`)
 
@@ -153,9 +182,17 @@ re-render is a call to `renderApp` from a view.
   `prompt_tokens_details.cached_tokens`, falling back to the Anthropic-style
   `cache_read_input_tokens`. It is left undefined when the provider does not
   report caching.
-- Malformed JSON chunks are dropped. The same `try` block wraps the callbacks,
-  so an exception thrown by `onDelta` or another callback while it handles a
-  chunk is dropped too.
+- **Errors inside a 200 stream.** OpenRouter reports a failure that happens
+  after the stream has started (the provider disconnects, a moderation stop)
+  as a chunk with an `error` object and `finish_reason: "error"`, because the
+  status line has already gone out. Such a chunk throws
+  `UpstreamErrorBodyError`, so the round fails and shows `#round-error`
+  instead of committing whatever half-reply arrived. The check runs outside
+  the `try` that swallows malformed chunks; inside it, the throw was dropped
+  like a parse error.
+- Malformed JSON chunks are dropped. A separate `try` block wraps the
+  callbacks, so an exception thrown by `onDelta` or another callback while it
+  handles a chunk is dropped too.
 
 ## Build-time globals (`env.d.ts`, `test-setup.ts`)
 

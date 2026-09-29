@@ -191,11 +191,12 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `endgame-choices` | The end-game choice screen: New Daemons archives the session and the dispatcher mints a new one; Continue appears only when `openrouter_key` is set. After each choice (Same Daemons, Continue, and New Daemons followed by a new login) `#endgame` is hidden and `#prompt` is enabled again. | #307 |
 | `endgame-choice-safety` | Same Daemons and Continue leave a session the player loaded while the new room was generating untouched: no pointer move, no overwrite, no archive. When archiving the finished game fails, New Daemons and Same Daemons keep it, say why in `#endgame-choice-status` and re-enable the button. When the final save is torn (its `saving` marker is left), both go ahead without archiving and drop the torn session; Same Daemons shows the note before the new room is generated. | |
 | `round-session-switch` | A round still running when the player loads another session paints nothing into it and is saved under its own session; a round whose session was removed meanwhile is dropped without a warning. | |
-| `bootstrap-session-switch` | A loading flow that timed out and was abandoned does not take over the start screen when its bootstrap later succeeds, and a new game starts at epoch 01 after a later-epoch session was open. | |
+| `bootstrap-session-switch` | The loading timeout aborts the held content-pack request; a loading flow that timed out and was abandoned does not take over the start screen when its held response is later released, and a new game starts at epoch 01 after a later-epoch session was open. | |
 | `round-reentry` | Opening and closing the session picker while a round is in flight keeps Send disabled, a forced submit starts no second round, and the held round still completes with one request per Daemon. | |
 | `bootstrap-recovery` | The regenerate path re-runs content-pack generation without re-resolving personas, and abandon returns to start with `data-reason="broken"`. The visible `#bootstrap-recovery-regen` is disabled while a regeneration is in flight and enabled again after a retryable failure. The start screen's "broken" banner is hidden once the next login reaches the game. | #380 |
-| `bootstrap-failure-bounce` | A content-pack failure after CONNECT, whether a network abort or an HTTP 200 with an error body, shows `#bootstrap-recovery` inside the game view instead of bouncing to start. | #380 |
-| `start-screen` | Start-screen boot, login, restore on refresh, cap-hit (and a provider 429 that is not one), refresh during generation, and an empty active pointer. | ADR 0011 |
+| `bootstrap-failure-bounce` | A content-pack failure after CONNECT, whether a network abort or an HTTP 200 with an error body, shows `#bootstrap-recovery` inside the game view instead of bouncing to start. A 402 is not retried, and the recovery copy names the upstream message. | #380 |
+| `start-screen` | Start-screen boot, login, restore on refresh, cap-hit (and a provider 429 that is not one), a non-cap failure that shows the retryable `#start-bootstrap-error` whose retry recovers, refresh during generation, and an empty active pointer. | ADR 0011 |
+| `stream-error` | An `error` chunk inside a 200 SSE stream fails the round and shows `#round-error` with the upstream message. | |
 | `sessions-picker` | Picker rows for ok, broken and version-mismatch saves; load, dup and rm; the sessions icon; sticky routing; archived-build links; Escape closes the picker even while the hidden `#prompt` holds focus, but not from a visible text field. | ADR 0011 |
 | `persistence-reload` | Transcripts and budgets survive a reload, and a live-schema session round-trips position, inventory, content state, conversation and perception changes. | #173, #214 |
 | `witnessed-event-reload` | A live `go` produces a witnessed-event entry that survives reloads and appears in the witness's turns but never the actor's. | #196, #195, PRD #157, ADR 0015 |
@@ -203,7 +204,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `dev-inspector` | The dev world map in a real browser: a 5×5 room-only board, markers that carry identity only, the focus Vista tint, and narrow viewports; and daemon footers that are filled as soon as a restored session renders. | #540, ADR 0015 |
 | `mobile-overflow` | The app shell does not overflow horizontally at phone widths. | #554 |
 | `responsive-bento` | The ≤720px bento layout, strip-card previews, and the mobile header. | |
-| `byok-validation` | A key validation whose `/api/v1/auth/key` request never answers: a second click says "Validation in progress…" and sends nothing, the request is aborted after 15 s (fast-forwarded with `page.clock`) and offers Save unverified, and the button validates again afterwards. | |
+| `byok-validation` | A key validation whose `/api/v1/auth/key` request never answers: a second click says "Validation in progress…" and sends nothing, the request is aborted after 15 s (fast-forwarded with `page.clock`) and offers Save unverified, and the button validates again afterwards. A validated key the browser refuses to store says so and keeps the dialog open. | |
 
 ### Notes on individual specs
 
@@ -242,13 +243,21 @@ specs that assert on generation failure check `#cap-hit` themselves.
   the session's `saving` marker, the same state an interrupted save leaves.
 - **bootstrap-session-switch.** The loading timeout is 300 s, so the spec
   installs Playwright's clock before navigation and fast-forwards past it.
+  The timeout aborts the held request (counted through `requestfailed`), so
+  the response released afterwards goes to the new start screen's bootstrap;
+  the old flow can no longer succeed late, and the spec still checks that
+  nothing of it reaches the new session.
 - **start-screen.**
   - The mobile media query's `#panels.row { display: grid }` outranked
     `[hidden]` and leaked the chat panels onto the start screen.
   - JetBrains Mono ligates `**` and `***`, which misaligns a masked password,
     hence `font-variant-ligatures: none`.
-  - The SPA deliberately re-throws `CapHitError` after showing `#cap-hit`, for
-    dev-console diagnostics, so the cap-hit spec filters that one error out.
+  - The start view's promise still rejects with `CapHitError` after showing
+    `#cap-hit`. `main.ts` now catches and logs it, so it no longer arrives as
+    a `pageerror`; the cap-hit spec's filter for it is left as a guard.
+  - The non-cap failure spec answers persona synthesis with a 401, which is
+    not retried, so exactly one synthesis request precedes the error and the
+    retry click sends the second.
   - The cap-hit stub sends the proxy's exact cap body (`rate_limit_exceeded`,
     `per-ip-daily`); a bare 429 is not a cap hit. A companion spec sends a
     provider-style 429 once and checks that generation retries and

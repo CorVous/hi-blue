@@ -64,11 +64,23 @@ it hides the other routes' screens and shows or hides the global chrome
   still typing from an earlier render kept writing into `#dial` over the new
   one.
 - **Reusing the bootstrap.** If the player returns to the start screen,
-  `getPendingBootstrap()` gives back the bootstrap already in progress, so
-  generation does not restart.
-- **Generation failure.** A failure is shown here (`#cap-hit`) only while the
-  start screen is still visible. Once the player has moved to `#/game`, the
-  game route's loading flow handles it.
+  `startBootstrap` gives back the bootstrap already in progress, so generation
+  does not restart. A bootstrap that failed is not reused: the start screen
+  starts a fresh one. It used to reuse the failed entry, so every later
+  CONNECT went straight to the game route's recovery banner.
+- **Generation failure.** A failure is shown here only while the start screen
+  is still visible, and only for the bootstrap that is still current (an
+  abandoned one is aborted, and its rejection must not paint anything). Once
+  the player has moved to `#/game`, the game route's loading flow handles it.
+  - `CapHitError` shows `#cap-hit` and hides the start screen, as before.
+  - Anything else shows `#start-bootstrap-error` under the login form, with the
+    upstream message when there is one (`HTTP 401: …`) and a `[ retry ]`
+    button that starts a new bootstrap. Every failure used to show the "AIs
+    are sleeping" cap screen, which told a player with a network blip or a bad
+    key to come back tomorrow.
+  - CONNECT with a failed bootstrap also starts a new one before routing to
+    the game, so the loading screen shows a fresh attempt.
+  - The returned promise still rejects; `main.ts` logs it.
 - **Skipped animation.** `renderDialTranscriptHtml()` includes the `.ok` /
   `.hot` status spans as markup, so it is assigned with `innerHTML`. As plain
   text the tags would show literally and the dial would lose its colours. The
@@ -203,9 +215,12 @@ it hides the other routes' screens and shows or hides the global chrome
   (`removeAllPanelSpinners`) before the session is handed over.
 - **Timeout.** `BOOTSTRAP_LOADING_TIMEOUT_MS` (300 s) allows for a slow first
   persona-synthesis call (about 95 s observed on a cold start), its one
-  retry after failure, and a parallel outer retry of the content packs.
-- **A success that arrives after the timeout.** When the timeout fires, the
-  bootstrap promise keeps running. If it later succeeds,
+  retry after failure, and a parallel outer retry of the content packs. When
+  it fires, `failPendingBootstrap` aborts the stalled requests and marks the
+  entry `failed`, so they stop costing money and regenerate starts fresh.
+- **A success that arrives after the timeout.** The timeout aborts the
+  bootstrap, but a provider that ignores the signal (a mock, or a response
+  already fully read) can still resolve. If it later succeeds,
   `dismissStaleBootstrapRecovery` hides the recovery banner and replaces its
   buttons with clones that have no listeners. Otherwise the banner would sit
   on top of the working game, and its regenerate or abandon buttons could
@@ -241,7 +256,10 @@ it hides the other routes' screens and shows or hides the global chrome
   session restored on this page, so topinfo showed that session's epoch for
   the new game.
 - **Recovery.** A timeout shows "stuck" copy and any other failure shows
-  "broken" copy. Regenerate calls `restartContentPacks()`, which keeps the
+  "broken" copy (`paintRecoveryCopy`). When the error carries an upstream
+  message (`HttpStatusError`, `UpstreamErrorBodyError`) the copy names it,
+  for example `HTTP 402: Insufficient credits`, instead of calling the world
+  malformed. A failed regenerate repaints the copy for its own error. Regenerate calls `restartContentPacks()`, which keeps the
   cached personas. If the recovery DOM is missing, the flow clears the
   session and sends the player to the start route with reason `broken`.
 - `dropListenersByCloning` (in `dom.ts`, shared with the sessions picker's
@@ -408,7 +426,9 @@ it hides the other routes' screens and shows or hides the global chrome
   upstream 502/503/504, a dropped network connection, a malformed response)
   used to stop the round with no sign in the UI. They now show `#round-error`
   and set the topinfo pip to `connection unstable`. Both clear when the next
-  round starts.
+  round starts. When the error carries an upstream message, `#round-error`
+  includes it. An error chunk inside a 200 stream counts (see `streaming.ts`
+  in spa-shell.md).
 
 ## `sessions.ts`: the session picker
 

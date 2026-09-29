@@ -8,7 +8,12 @@ rules and tradeoffs the code cannot state by itself.
 
 ## Routing (`worker.ts`)
 
-- `OPTIONS` and `POST` on `/v1/chat/completions` are the API. `/diagnostics`
+- `OPTIONS` and `POST` on `/v1/chat/completions` are the API. The allow-list
+  is parsed once per request on that path.
+- An exception escaping `handleChatCompletions` (a KV outage in the cost
+  guard, say) becomes a 502 `upstream_error` that still goes through
+  `withCorsHeaders`. Uncaught, the runtime answered a bare 500 with no CORS
+  headers, which the browser reports as an opaque network error. `/diagnostics`
   takes the endgame "Save the AIs to USB" report (#19). Every other request
   goes to the `ASSETS` binding.
 - There is no Worker-level 404. Unmatched paths go to `env.ASSETS.fetch` so the
@@ -63,8 +68,9 @@ rules and tradeoffs the code cannot state by itself.
 
 - `build.command` runs `pnpm build` before Wrangler bundles the Worker, on
   every `wrangler dev` and `wrangler deploy`, so `dist/` always exists when
-  the assets binding loads. `watch_dir: src/spa` re-runs it when SPA sources
-  change during `wrangler dev`.
+  the assets binding loads. `watch_dir: src` re-runs it when any source the
+  bundle imports changes during `wrangler dev`. The SPA also imports
+  `src/model.ts` and `src/content/`, which `src/spa` did not cover.
 - `assets.run_worker_first: true` makes the fetch handler run for every
   request: it serves the API routes itself and delegates the rest to the
   `ASSETS` binding. Running first is what lets `withAssetCacheHeaders` attach
@@ -111,6 +117,22 @@ does not; see "Streaming settlement" below.
   (`parseCapHitFromResponse`), so a passed-through provider 429 is an
   ordinary, retryable failure rather than the cap-hit screen.
 
+- **Forwarded fields are an allow-list** (`FORWARDED_BODY_FIELDS`). The proxy
+  pays for every request, so it sends OpenRouter only what the SPA uses and
+  the standard sampling knobs, and drops anything else (OpenRouter's
+  `models` fallback list, `transforms`, `plugins` such as web search), which
+  could otherwise route to a pricier model or add paid features on the
+  proxy's key. `model` and `provider` are then overwritten with the pinned
+  values. The list:
+  - sent by the SPA (`llm-client.ts`): `messages`, `stream`,
+    `stream_options`, `usage`, `tools`, `tool_choice`,
+    `parallel_tool_calls`, `reasoning`, `response_format`;
+  - standard sampling: `temperature`, `top_p`, `top_k`, `min_p`,
+    `max_tokens`, `max_completion_tokens`, `stop`, `seed`,
+    `frequency_penalty`, `presence_penalty`, `repetition_penalty`.
+
+  A new field the SPA starts sending must be added here, or the proxy drops it
+  silently while the BYOK path keeps it.
 - **Pricing lookup runs in parallel.** `getModelPricing` starts right after
   the pre-charge, alongside the upstream call, so reconciliation adds no
   latency. It is memoised per isolate, so after the first request it

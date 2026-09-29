@@ -30,11 +30,16 @@ Three interfaces isolate every LLM call so tests and evals never touch the netwo
   both the browser and the server-side proxy can import it without pulling in
   browser globals.
 - Both JSON-mode providers (content packs, synthesis) read `content` and fall back
-  to `reasoning` when `content` is empty. GLM-4.7, the model pinned before
+  to `reasoning` when `content` is empty. They share that step and the
+  `JSON.parse` in `parseJsonCompletion` (`json-completion.ts`), each passing
+  its own label and error class. GLM-4.7, the model pinned before
   DeepSeek V4.1 Flash, sometimes returned its whole answer in the reasoning
   channel, and the fallback costs nothing to keep.
 - `CapHitError` (the spend cap, HTTP 429) is never retried by any provider. It
-  surfaces straight away so the UI can show the cap screen. Only the proxy's
+  surfaces straight away so the UI can show the cap screen. The same holds for
+  an `HttpStatusError` with status 400, 401, 402 or 403 (`isRetryPointless`):
+  a retry cannot fix a bad request, a bad key or an empty account, and each
+  retry only added its backoff before the player saw the error. Only the proxy's
   own cap response (`type: rate_limit_exceeded`, `code` of `per-ip-daily` or
   `global-daily`) becomes a `CapHitError`. Any other 429, such as a provider
   rate limit the proxy passes through or one OpenRouter returns on the BYOK
@@ -59,7 +64,14 @@ Three interfaces isolate every LLM call so tests and evals never touch the netwo
   per-daemon footer status indicator. `first-token` fires only once a text
   delta arrives, so a stream that errors before its first chunk goes straight
   from `started` to `errored`.
-- Persona synthesis (`BrowserSynthesisProvider`) retries a failed call once.
+- Both JSON-mode providers take an optional `signal` at construction and pass
+  it to every call. Once it is aborted they stop: no retry, and a backoff in
+  progress ends at once (`sleepUnlessAborted`).
+- Persona synthesis (`BrowserSynthesisProvider`) retries a failed call once,
+  after `SYNTHESIS_RETRY_BACKOFF_MS` (1 s). It retried at once before, which
+  sent the retry into the same provider rate limit or outage. A
+  `Retry-After` longer than the default is honoured, capped at 10 s
+  (`retryDelayMs`) so a large value cannot stall the loading screen.
   Every persona must come back with a blurb that is not empty or whitespace
   only, and with exactly `VOICE_EXAMPLES_PER_PERSONA` voice lines, and the ids
   must match the input exactly (none missing, none extra). An empty blurb would
@@ -169,9 +181,11 @@ Each generation makes up to `OUTER_ATTEMPT_BUDGET` (3) attempts.
   without the label the same mistake in A and B collapsed into one bullet and
   the model could not tell which pack to fix. The model is asked to repair the
   JSON in place and keep the ids and any fields that passed.
-- **Hard error** (empty response, JSON parse failure, network). The provider
-  waits `BACKOFF_MS_BEFORE_RETRY[attempt]` and retries from a clean conversation:
-  the previous output and the feedback are both dropped.
+- **Hard error** (empty response, JSON parse failure, network, a retryable
+  HTTP status). The provider waits `BACKOFF_MS_BEFORE_RETRY[attempt]` (or a
+  longer `Retry-After`, capped at 10 s) and retries from a clean conversation:
+  the previous output and the feedback are both dropped. The cap, 400, 401, 402,
+  403 and an aborted signal are rethrown at once.
 - If the last attempt fails, its error is rethrown. If every attempt fails
   validation, the provider throws `ContentPackError("…exhausted retry budget")`.
 
@@ -226,7 +240,12 @@ player clicks BEGIN.
   see the rejection.
 - `generateContentPacksOnlySplit` (#380) regenerates only the packs and reuses
   the resolved personas. Its `personasPromise` resolves immediately, so code
-  that chains on it works unchanged.
+  that chains on it works unchanged. It never rejects, so it needs no
+  `suppressUnhandledRejection`. Both split functions run the packs through the
+  same `generateContentPacks` helper.
+- `BootstrapOpts.signal` (and the `signal` option of
+  `generateContentPacksOnlySplit`) is handed to the default browser providers,
+  so aborting it cancels the in-flight request and any pending retry.
 - `buildSameDaemonsSession` implements the end-game "Same Daemons, New Room" and
   "Continue" choices (#307).
 - `BootstrapOpts`:
@@ -255,6 +274,24 @@ session can be built or saved until the content packs arrive.
   only when no personas are cached.
 - `clearPendingBootstrap` runs once the game view has built and saved the
   session. After that, entering the game view takes the normal restore path.
+- **Each bootstrap owns an `AbortController`.** `startBootstrap` and
+  `restartContentPacks` pass its signal down, and installing a new entry
+  aborts the one it replaces. `clearPendingBootstrap` aborts the current one
+  (a no-op once it has succeeded), which covers abandon and a bootstrap
+  discarded because the session filled up meanwhile.
+  `failPendingBootstrap(entry, reason)` marks the entry `failed` and aborts it
+  with that reason; the game view calls it when the loading timeout fires.
+  The timeout used to leave the calls running, and the entry kept its
+  `pending` status, so a regenerate after a timeout during persona synthesis
+  (`restartContentPacks` falls back to `startBootstrap`) got the same stalled
+  entry back instead of a fresh one.
+- **Call meta for the current entry only.** A persona failure also rejects the
+  content packs (they wait for the persona ids), and both handlers used to
+  record a retry, so the dev strip counted one failure twice. `markFailed`
+  records the first failure only. An entry that is no longer current (cleared,
+  aborted, replaced) no longer writes `PendingCallMeta` when it settles, so a
+  bootstrap the player left behind cannot overwrite the strip of the one on
+  screen.
 - `PendingCallMeta` (call name, start time, retry count out of
   `PENDING_CALL_RETRY_MAX`, last error) is what the dev inspector's pending strip
   displays.
