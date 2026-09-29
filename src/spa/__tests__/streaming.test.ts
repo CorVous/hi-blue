@@ -381,4 +381,85 @@ describe("parseSSEStream — tool_call delta assembly", () => {
 		expect(calls).toHaveLength(1);
 		expect(calls[0]?.name).toBe("put_down");
 	});
+
+	it("parses a final event that ends without a blank line when the stream closes", async () => {
+		const deltas: string[] = [];
+		await parseSSEStream(
+			makeSSEStream([
+				`data: ${JSON.stringify({ choices: [{ delta: { content: "first" } }] })}\n\n`,
+				`data: ${JSON.stringify({ choices: [{ delta: { content: "last" } }] })}`,
+			]),
+			(text) => deltas.push(text),
+		);
+
+		expect(deltas).toEqual(["first", "last"]);
+	});
+
+	it("flushes accumulated tool calls when the stream closes without [DONE] or a finish_reason", async () => {
+		const toolCalls: ToolCallResult[] = [];
+		await parseSSEStream(
+			makeSSEStream([
+				`data: ${JSON.stringify({
+					choices: [
+						{
+							delta: {
+								tool_calls: [
+									{
+										index: 0,
+										id: "call_1",
+										function: { name: "message", arguments: '{"to":' },
+									},
+								],
+							},
+						},
+					],
+				})}\n\n`,
+				`data: ${JSON.stringify({
+					choices: [
+						{
+							delta: {
+								tool_calls: [{ index: 0, function: { arguments: '"blue"}' } }],
+							},
+						},
+					],
+				})}\n\n`,
+			]),
+			() => {},
+			undefined,
+			(call) => toolCalls.push(call),
+		);
+
+		expect(toolCalls).toEqual([
+			{ id: "call_1", name: "message", argumentsJson: '{"to":"blue"}' },
+		]);
+	});
+
+	it("splits events delimited by CRLF, including a CR and LF that arrive in separate chunks", async () => {
+		const first = `data: ${JSON.stringify({ choices: [{ delta: { content: "crlf" } }] })}`;
+		const second = `data: ${JSON.stringify({ choices: [{ delta: { content: "split" } }] })}`;
+		const deltas: string[] = [];
+		await parseSSEStream(
+			makeSSEStream([
+				`${first}\r\n\r`,
+				`\n${second}\r\n\r\n`,
+				"data: [DONE]\r\n\r\n",
+			]),
+			(text) => deltas.push(text),
+		);
+
+		expect(deltas).toEqual(["crlf", "split"]);
+	});
+
+	it("splits events delimited by bare CR", async () => {
+		const deltas: string[] = [];
+		await parseSSEStream(
+			makeSSEStream([
+				`data: ${JSON.stringify({ choices: [{ delta: { content: "cr" } }] })}\r\r`,
+				"data: [DONE]\r\r",
+			]),
+			(text) => deltas.push(text),
+		);
+
+		expect(deltas).toEqual(["cr"]);
+	});
 });

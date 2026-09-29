@@ -115,11 +115,19 @@ re-render is a call to `renderApp` from a view.
 
 ## SSE parsing (`streaming.ts`)
 
-- Events are split on blank lines. The unfinished trailing event stays in the
-  buffer until the next read.
+- Line endings are normalised (`\r\n` and a bare `\r` become `\n`) before
+  events are split on blank lines, since SSE allows all three. A `\r` at the
+  very end of a read is held back until the next read, because it may be the
+  first half of a `\r\n` pair split across chunks. The unfinished trailing
+  event stays in the buffer until the next read.
+- When the stream closes, the buffer is parsed as a final event even though
+  no blank line ended it, and any tool calls still accumulated are flushed.
+  An upstream that closes without `[DONE]` or a `tool_calls` finish reason
+  would otherwise lose its last chunk and its tool calls.
 - Tool calls accumulate by `index`. The id and name arrive in the first
   fragment, and later fragments append to the arguments. The accumulated
-  calls are flushed on `finish_reason: "tool_calls"` or `[DONE]`.
+  calls are flushed on `finish_reason: "tool_calls"`, `[DONE]` or the end of
+  the stream.
 - **Usage.** OpenRouter's final chunk has empty `choices` and a populated
   `usage` (`usageFromChunk`). `cached_tokens` is read from the OpenAI-style
   `prompt_tokens_details.cached_tokens`, falling back to the Anthropic-style

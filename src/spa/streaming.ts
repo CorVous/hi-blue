@@ -13,6 +13,7 @@ export interface UsageInfo {
 }
 
 const SSE_EVENT_DELIMITER = "\n\n";
+const LINE_BREAK_PATTERN = /\r\n?/g;
 
 // biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
 function usageFromChunk(chunk: any): UsageInfo | undefined {
@@ -78,80 +79,100 @@ export async function parseSSEStream(
 		toolCallAccumulator.clear();
 	}
 
+	function handleEvent(event: string): boolean {
+		for (const line of event.split("\n")) {
+			if (!line.startsWith("data:")) continue;
+			const data = line.slice("data:".length).trim();
+			if (data === "[DONE]") {
+				flushToolCalls();
+				return true;
+			}
+			try {
+				// biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
+				const parsed: any = JSON.parse(data);
+				const content = parsed?.choices?.[0]?.delta?.content;
+				if (typeof content === "string" && content.length > 0) {
+					onDelta(content);
+				}
+				const reasoning = parsed?.choices?.[0]?.delta?.reasoning;
+				if (typeof reasoning === "string" && reasoning.length > 0) {
+					onReasoning?.(reasoning);
+				}
+
+				const toolCallDeltas = parsed?.choices?.[0]?.delta?.tool_calls;
+				if (Array.isArray(toolCallDeltas)) {
+					for (const delta of toolCallDeltas) {
+						if (typeof delta?.index !== "number") continue;
+						const idx: number = delta.index;
+						const accumulated = toolCallAccumulator.get(idx);
+						if (!accumulated) {
+							toolCallAccumulator.set(idx, {
+								id: typeof delta.id === "string" ? delta.id : "",
+								name:
+									typeof delta.function?.name === "string"
+										? delta.function.name
+										: "",
+								argumentsJson:
+									typeof delta.function?.arguments === "string"
+										? delta.function.arguments
+										: "",
+							});
+						} else {
+							if (typeof delta.function?.arguments === "string") {
+								accumulated.argumentsJson += delta.function.arguments;
+							}
+							if (typeof delta.id === "string" && delta.id) {
+								accumulated.id = delta.id;
+							}
+							if (
+								typeof delta.function?.name === "string" &&
+								delta.function.name
+							) {
+								accumulated.name = delta.function.name;
+							}
+						}
+					}
+				}
+
+				const finishReason = parsed?.choices?.[0]?.finish_reason;
+				if (finishReason === "tool_calls") {
+					flushToolCalls();
+				}
+
+				const usage = usageFromChunk(parsed);
+				if (usage) onUsage?.(usage);
+			} catch {}
+		}
+		return false;
+	}
+
+	function takeCompleteEvents(streamEnded: boolean): string[] {
+		const holdBackCarriageReturn = !streamEnded && buffer.endsWith("\r");
+		const settled = holdBackCarriageReturn ? buffer.slice(0, -1) : buffer;
+		const events = settled
+			.replace(LINE_BREAK_PATTERN, "\n")
+			.split(SSE_EVENT_DELIMITER);
+		const unfinishedTrailingEvent = streamEnded ? "" : (events.pop() ?? "");
+		buffer = holdBackCarriageReturn
+			? `${unfinishedTrailingEvent}\r`
+			: unfinishedTrailingEvent;
+		return events;
+	}
+
 	try {
 		while (true) {
 			const { done, value } = await reader.read();
-			if (done) break;
-			buffer += decoder.decode(value, { stream: true });
-
-			const events = buffer.split(SSE_EVENT_DELIMITER);
-			const unfinishedTrailingEvent = events.pop() ?? "";
-			buffer = unfinishedTrailingEvent;
-
-			for (const event of events) {
-				for (const line of event.split("\n")) {
-					if (!line.startsWith("data:")) continue;
-					const data = line.slice("data:".length).trim();
-					if (data === "[DONE]") {
-						flushToolCalls();
-						return;
-					}
-					try {
-						// biome-ignore lint/suspicious/noExplicitAny: SSE JSON shape is dynamic
-						const parsed: any = JSON.parse(data);
-						const content = parsed?.choices?.[0]?.delta?.content;
-						if (typeof content === "string" && content.length > 0) {
-							onDelta(content);
-						}
-						const reasoning = parsed?.choices?.[0]?.delta?.reasoning;
-						if (typeof reasoning === "string" && reasoning.length > 0) {
-							onReasoning?.(reasoning);
-						}
-
-						const toolCallDeltas = parsed?.choices?.[0]?.delta?.tool_calls;
-						if (Array.isArray(toolCallDeltas)) {
-							for (const delta of toolCallDeltas) {
-								if (typeof delta?.index !== "number") continue;
-								const idx: number = delta.index;
-								const accumulated = toolCallAccumulator.get(idx);
-								if (!accumulated) {
-									toolCallAccumulator.set(idx, {
-										id: typeof delta.id === "string" ? delta.id : "",
-										name:
-											typeof delta.function?.name === "string"
-												? delta.function.name
-												: "",
-										argumentsJson:
-											typeof delta.function?.arguments === "string"
-												? delta.function.arguments
-												: "",
-									});
-								} else {
-									if (typeof delta.function?.arguments === "string") {
-										accumulated.argumentsJson += delta.function.arguments;
-									}
-									if (typeof delta.id === "string" && delta.id) {
-										accumulated.id = delta.id;
-									}
-									if (
-										typeof delta.function?.name === "string" &&
-										delta.function.name
-									) {
-										accumulated.name = delta.function.name;
-									}
-								}
-							}
-						}
-
-						const finishReason = parsed?.choices?.[0]?.finish_reason;
-						if (finishReason === "tool_calls") {
-							flushToolCalls();
-						}
-
-						const usage = usageFromChunk(parsed);
-						if (usage) onUsage?.(usage);
-					} catch {}
-				}
+			if (done) {
+				buffer += decoder.decode();
+			} else {
+				buffer += decoder.decode(value, { stream: true });
+			}
+			for (const event of takeCompleteEvents(done)) {
+				if (handleEvent(event)) return;
+			}
+			if (done) {
+				flushToolCalls();
+				return;
 			}
 		}
 	} finally {
