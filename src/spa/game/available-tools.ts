@@ -118,22 +118,41 @@ function isTargetable(entity: WorldEntity): boolean {
 	);
 }
 
+function handleKey(handle: string): string {
+	return handle.trim().toLowerCase();
+}
+
 export function targetHandles(entities: WorldEntity[]): Map<string, string> {
 	const targetable = entities.filter(isTargetable);
 	const nameCounts = new Map<string, number>();
 	for (const e of targetable) {
-		nameCounts.set(e.name, (nameCounts.get(e.name) ?? 0) + 1);
+		const name = e.name.trim();
+		nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
 	}
-	const seen = new Map<string, number>();
+	const isShared = (name: string): boolean => (nameCounts.get(name) ?? 0) > 1;
+	const taken = new Set(
+		targetable
+			.map((e) => e.name.trim())
+			.filter((name) => !isShared(name))
+			.map(handleKey),
+	);
+	const lastOrdinal = new Map<string, number>();
 	const handles = new Map<string, string>();
 	for (const e of targetable) {
-		if ((nameCounts.get(e.name) ?? 0) < 2) {
-			handles.set(e.id, e.name);
+		const name = e.name.trim();
+		if (!isShared(name)) {
+			handles.set(e.id, name);
 			continue;
 		}
-		const ordinal = (seen.get(e.name) ?? 0) + 1;
-		seen.set(e.name, ordinal);
-		handles.set(e.id, `${e.name} #${ordinal}`);
+		let ordinal = lastOrdinal.get(name) ?? 0;
+		let handle: string;
+		do {
+			ordinal++;
+			handle = `${name} #${ordinal}`;
+		} while (taken.has(handleKey(handle)));
+		lastOrdinal.set(name, ordinal);
+		taken.add(handleKey(handle));
+		handles.set(e.id, handle);
 	}
 	return handles;
 }
@@ -142,7 +161,7 @@ export function entityHandle(
 	entities: WorldEntity[],
 	entity: WorldEntity,
 ): string {
-	return targetHandles(entities).get(entity.id) ?? entity.name;
+	return targetHandles(entities).get(entity.id) ?? entity.name.trim();
 }
 
 export function toolTargetCandidates(
@@ -187,8 +206,13 @@ function findByHandle(
 ): WorldEntity | undefined {
 	const exact = candidates.find((e) => handles.get(e.id) === handle);
 	if (exact) return exact;
-	const folded = handle.trim().toLowerCase();
-	return candidates.find((e) => handles.get(e.id)?.toLowerCase() === folded);
+	const folded = handleKey(handle);
+	return candidates.find((e) => {
+		const candidateHandle = handles.get(e.id);
+		return (
+			candidateHandle !== undefined && handleKey(candidateHandle) === folded
+		);
+	});
 }
 
 export function resolveToolTarget(
@@ -208,7 +232,7 @@ export function resolveToolTarget(
 
 function handlesOf(game: GameState, targets: WorldEntity[]): string[] {
 	const handles = targetHandles(game.world.entities);
-	return targets.map((e) => handles.get(e.id) ?? e.name);
+	return targets.map((e) => handles.get(e.id) ?? e.name.trim());
 }
 
 export function availableTools(

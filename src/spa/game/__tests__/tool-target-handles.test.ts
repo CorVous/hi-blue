@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availableTools } from "../available-tools.js";
+import { availableTools, targetHandles } from "../available-tools.js";
 import { dispatchAiTurn, validateToolCall } from "../dispatcher.js";
 import { appendLogEntry } from "../engine.js";
 import { buildOpenAiMessages } from "../openai-message-builder.js";
@@ -233,5 +233,104 @@ describe("tool targets that share a name", () => {
 		}).game;
 		expect(itemEnum(after, "put_down")).toEqual([firstHandle]);
 		expect(itemEnum(after, "pick_up")).toEqual([before[1]]);
+	});
+});
+
+describe("tool targets resolve exactly once", () => {
+	it("does not re-resolve an id that is another entity's name", () => {
+		const game = makeGame([
+			makeEntity("key", "interesting_object", RED_CELL, { name: "brass key" }),
+			makeEntity(
+				"b1",
+				"interesting_object",
+				{ row: 4, col: 4 },
+				{ name: "key" },
+			),
+		]);
+		const result = dispatchAiTurn(game, {
+			aiId: "red",
+			toolCall: { name: "pick_up", args: { item: "brass key" } },
+		});
+		expect(result.records[0]?.kind).toBe("tool_success");
+		expect(result.records[0]?.description).toContain("picked up the brass key");
+		const holderOf = (id: string) =>
+			result.game.world.entities.find((e) => e.id === id)?.holder;
+		expect(holderOf("key")).toBe("red");
+		expect(holderOf("b1")).toEqual({ row: 4, col: 4 });
+	});
+});
+
+describe("tool targets with stray whitespace in their names", () => {
+	it("offers and resolves a trimmed handle", () => {
+		const game = makeGame([
+			makeEntity("lamp-1", "interesting_object", RED_CELL, { name: "lamp " }),
+		]);
+		expect(itemEnum(game, "pick_up")).toEqual(["lamp"]);
+		for (const handle of ["lamp", " Lamp", "lamp "]) {
+			const result = dispatchAiTurn(game, {
+				aiId: "red",
+				toolCall: { name: "pick_up", args: { item: handle } },
+			});
+			expect(result.records[0]?.kind).toBe("tool_success");
+			expect(
+				result.game.world.entities.find((e) => e.id === "lamp-1")?.holder,
+			).toBe("red");
+		}
+	});
+});
+
+describe("ordinal handles never collide with an existing name", () => {
+	it("skips an ordinal another entity already uses as its name", () => {
+		const game = makeGame([
+			makeEntity("lamp-a", "interesting_object", RED_CELL, { name: "lamp" }),
+			makeEntity("lamp-b", "interesting_object", RED_CELL, { name: "lamp" }),
+			makeEntity("lamp-c", "interesting_object", RED_CELL, {
+				name: "lamp #1",
+			}),
+		]);
+		const handles = targetHandles(game.world.entities);
+		expect(handles.get("lamp-c")).toBe("lamp #1");
+		expect(handles.get("lamp-a")).toBe("lamp #2");
+		expect(handles.get("lamp-b")).toBe("lamp #3");
+		expect(new Set(itemEnum(game, "pick_up")).size).toBe(3);
+		const result = dispatchAiTurn(game, {
+			aiId: "red",
+			toolCall: { name: "pick_up", args: { item: "lamp #1" } },
+		});
+		expect(result.game.world.entities.find((e) => e.holder === "red")?.id).toBe(
+			"lamp-c",
+		);
+	});
+});
+
+describe("rejections name a held-fast item's space by its handle", () => {
+	it("uses the space's handle when two spaces share a name", () => {
+		const game = makeGame([
+			makeEntity("flashlight", "objective_object", NORTH_OF_RED, {
+				name: "yellow flashlight",
+				pairsWithSpaceId: "mount-b",
+			}),
+			makeEntity(
+				"mount-a",
+				"objective_space",
+				{ row: 4, col: 0 },
+				{
+					name: "wall mount",
+				},
+			),
+			makeEntity("mount-b", "objective_space", NORTH_OF_RED, {
+				name: "wall mount",
+			}),
+		]);
+		const mountHandle = targetHandles(game.world.entities).get("mount-b");
+		expect(mountHandle).toMatch(/^wall mount #\d$/);
+		for (const tool of ["pick_up", "use"] as const) {
+			const validation = validateToolCall(game, "red", {
+				name: tool,
+				args: { item: "yellow flashlight" },
+			});
+			expect(validation.valid).toBe(false);
+			expect(validation.reason).toContain(`set into the ${mountHandle} and`);
+		}
 	});
 });

@@ -90,9 +90,20 @@ export function validateToolCall(
 	aiId: AiId,
 	rawCall: ToolCall,
 ): ValidationResult {
-	if (disabledToolsFor(game.activeComplications, aiId).has(rawCall.name))
-		return { valid: false, reason: disabledToolReason(rawCall.name) };
-	const call = resolveToolCall(game, aiId, rawCall);
+	return validateResolvedToolCall(
+		game,
+		aiId,
+		resolveToolCall(game, aiId, rawCall),
+	);
+}
+
+function validateResolvedToolCall(
+	game: GameState,
+	aiId: AiId,
+	call: ToolCall,
+): ValidationResult {
+	if (disabledToolsFor(game.activeComplications, aiId).has(call.name))
+		return { valid: false, reason: disabledToolReason(call.name) };
 	const label = targetLabel(game, call.args.item);
 	const { world } = game;
 	const actorSpatial = game.personaSpatial[aiId];
@@ -123,7 +134,7 @@ export function validateToolCall(
 			if (holdingSpace)
 				return {
 					valid: false,
-					reason: `"${label}" is set into the ${holdingSpace.name} and will not come loose`,
+					reason: `"${label}" is set into the ${entityHandle(world.entities, holdingSpace)} and will not come loose`,
 				};
 			return { valid: true };
 		}
@@ -182,7 +193,7 @@ export function validateToolCall(
 					if (holdingSpace) {
 						return {
 							valid: false,
-							reason: `"${label}" is set into the ${holdingSpace.name} and will not come loose`,
+							reason: `"${label}" is set into the ${entityHandle(world.entities, holdingSpace)} and will not come loose`,
 						};
 					}
 					if (withinInteractionRange(actorSpatial.position, itemPos)) {
@@ -229,7 +240,18 @@ export function executeToolCall(
 	aiId: AiId,
 	rawCall: ToolCall,
 ): GameState {
-	const call = resolveToolCall(game, aiId, rawCall);
+	return executeResolvedToolCall(
+		game,
+		aiId,
+		resolveToolCall(game, aiId, rawCall),
+	);
+}
+
+function executeResolvedToolCall(
+	game: GameState,
+	aiId: AiId,
+	call: ToolCall,
+): GameState {
 	const entities = game.world.entities.map((e) => ({ ...e }));
 	const actorSpatial = game.personaSpatial[aiId];
 	const pickable = pickableEntities(entities);
@@ -452,7 +474,7 @@ export function dispatchAiTurn(
 	if (action.toolCall) {
 		const toolCall = resolveToolCall(state, aiId, action.toolCall);
 		const resolvedAction: AiTurnAction = { ...action, toolCall };
-		const validation = validateToolCall(state, aiId, toolCall);
+		const validation = validateResolvedToolCall(state, aiId, toolCall);
 
 		if (validation.valid) {
 			const preExecuteWorld = state.world;
@@ -460,7 +482,7 @@ export function dispatchAiTurn(
 			if (toolCall.name === "go") {
 				const prevCtx = buildAiContext(state, aiId);
 				const prevSnap = buildDiskSnapshot(prevCtx);
-				state = executeToolCall(state, aiId, toolCall);
+				state = executeResolvedToolCall(state, aiId, toolCall);
 				const currCtx = buildAiContext(state, aiId);
 				const currSnap = buildDiskSnapshot(currCtx);
 				const delta = renderWhatsNew(prevSnap, currSnap);
@@ -468,7 +490,7 @@ export function dispatchAiTurn(
 					actorDiskDelta = delta;
 				}
 			} else {
-				state = executeToolCall(state, aiId, toolCall);
+				state = executeResolvedToolCall(state, aiId, toolCall);
 			}
 
 			const pairPlacementFlavor =
