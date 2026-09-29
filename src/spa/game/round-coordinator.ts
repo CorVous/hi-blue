@@ -44,6 +44,7 @@ import type {
 	ComplicationResult,
 	ConversationEntry,
 	GameState,
+	GridPosition,
 	RoundActionRecord,
 	RoundResult,
 	ToolName,
@@ -438,7 +439,10 @@ export async function runRound(
 	}
 
 	state = expireSysadminDirectives(state);
-	state = evaluateConvergenceObjectives(state, game.personaSpatial);
+	state = evaluateConvergenceObjectives(
+		state,
+		game.round === 0 ? {} : game.personaSpatial,
+	);
 
 	let gameEnded = false;
 	if (checkWinCondition(state.world, state.objectives)) {
@@ -576,9 +580,20 @@ function expireSysadminDirectives(game: GameState): GameState {
 	return state;
 }
 
+function occupantIdsOf(
+	personaSpatial: GameState["personaSpatial"],
+	cell: GridPosition,
+): string {
+	return Object.entries(personaSpatial)
+		.filter(([, spatial]) => positionsEqual(spatial.position, cell))
+		.map(([daemonId]) => daemonId)
+		.sort()
+		.join(",");
+}
+
 function evaluateConvergenceObjectives(
 	game: GameState,
-	personaSpatialAtRoundStart: GameState["personaSpatial"],
+	personaSpatialAlreadyTold: GameState["personaSpatial"],
 ): GameState {
 	let state = game;
 	for (const objective of state.objectives) {
@@ -593,17 +608,15 @@ function evaluateConvergenceObjectives(
 
 		if (tier === 0) continue;
 
-		const tierAtRoundStart = checkConvergenceTier(
-			objective,
-			state.world,
-			personaSpatialAtRoundStart,
-		).tier;
-		const convergenceComplete = tier === 2;
-		if (tier === tierAtRoundStart && !convergenceComplete) continue;
-
 		const spaceEntity = state.world.entities.find((e) => e.id === spaceId);
 		if (!spaceEntity || !isGridPosition(spaceEntity.holder)) continue;
 		const spaceCell = spaceEntity.holder;
+
+		const convergenceComplete = tier === 2;
+		const occupantsUnchanged =
+			occupantIdsOf(state.personaSpatial, spaceCell) ===
+			occupantIdsOf(personaSpatialAlreadyTold, spaceCell);
+		if (occupantsUnchanged && !convergenceComplete) continue;
 
 		const witnessFlavor =
 			tier === 1

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { runRound } from "../round-coordinator";
 import { MockRoundLLMProvider } from "../round-llm-provider";
-import type { ConvergenceObjective, WorldEntity } from "../types";
+import type {
+	ConvergenceObjective,
+	ConversationEntry,
+	WorldEntity,
+} from "../types";
 import {
 	makeSilentProvider,
 	makeTestGame,
@@ -438,6 +442,107 @@ describe("runRound — convergence emits on tier changes only", () => {
 
 		const space = nextState.world.entities.find((e) => e.id === "altar_space");
 		expect(space?.satisfactionState).toBe("satisfied");
+	});
+});
+
+type ConvergenceEntry = Extract<
+	ConversationEntry,
+	{ kind: "witnessed-convergence" }
+>;
+
+function convergenceEntriesOf(
+	log: readonly ConversationEntry[] | undefined,
+): ConvergenceEntry[] {
+	return (log ?? []).filter(
+		(e): e is ConvergenceEntry => e.kind === "witnessed-convergence",
+	);
+}
+
+describe("runRound — convergence emits when the set of occupants changes", () => {
+	it("an occupant swap (one Daemon leaves as another arrives) tells the newcomer and the witnesses", async () => {
+		const baseGame = makeBaseGame();
+		const game = {
+			...baseGame,
+			round: 3,
+			personaSpatial: {
+				...baseGame.personaSpatial,
+				green: { position: { row: 3, col: 4 } },
+			},
+		};
+		const provider = new MockRoundLLMProvider([
+			{
+				assistantText: "",
+				toolCalls: [
+					{ id: "red-west", name: "go", argumentsJson: '{"direction":"west"}' },
+				],
+			},
+			{
+				assistantText: "",
+				toolCalls: [
+					{
+						id: "green-south",
+						name: "go",
+						argumentsJson: '{"direction":"south"}',
+					},
+				],
+			},
+			{ assistantText: "", toolCalls: [] },
+		]);
+
+		const { nextState } = await runRound(game, "red", "hi", provider);
+
+		expect(nextState.personaSpatial.green?.position).toEqual({
+			row: 4,
+			col: 4,
+		});
+		expect(nextState.personaSpatial.red?.position).toEqual({ row: 4, col: 3 });
+
+		const greenEntries = convergenceEntriesOf(nextState.conversationLogs.green);
+		expect(greenEntries).toHaveLength(1);
+		expect(greenEntries[0]?.tier).toBe(1);
+		expect(greenEntries[0]?.audience).toBe("actor");
+
+		const redEntries = convergenceEntriesOf(nextState.conversationLogs.red);
+		expect(redEntries).toHaveLength(1);
+		expect(redEntries[0]?.audience).toBe("witness");
+		expect(redEntries[0]?.flavor).toBe(
+			CONVERGENCE_SPACE.convergenceTier1Flavor,
+		);
+	});
+
+	it("a Daemon that stays alone on the space after the first round gets no new entry", async () => {
+		const game = { ...makeBaseGame(), round: 3 };
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
+
+		expect(convergenceEntriesOf(nextState.conversationLogs.red)).toHaveLength(
+			0,
+		);
+	});
+
+	it("a Daemon whose start cell is the space gets its tier-1 actor flavor in the first round", async () => {
+		const game = makeBaseGame();
+		expect(game.round).toBe(0);
+
+		const { nextState } = await runRound(
+			game,
+			"red",
+			"hi",
+			makeSilentProvider(),
+		);
+
+		const redEntries = convergenceEntriesOf(nextState.conversationLogs.red);
+		expect(redEntries).toHaveLength(1);
+		expect(redEntries[0]?.tier).toBe(1);
+		expect(redEntries[0]?.audience).toBe("actor");
+		expect(redEntries[0]?.flavor).toBe(
+			CONVERGENCE_SPACE.convergenceTier1ActorFlavor,
+		);
 	});
 });
 
