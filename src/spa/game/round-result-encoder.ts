@@ -13,7 +13,6 @@ export type SseEvent =
 	| { type: "lockout"; aiId: AiId; content: string }
 	| { type: "chat_lockout"; aiId: AiId; message: string }
 	| { type: "chat_lockout_resolved"; aiId: AiId }
-	| { type: "system_broadcast"; content: string }
 	| { type: "action_log"; entry: RoundResult["actions"][number] }
 	| { type: "game_ended" };
 
@@ -61,16 +60,6 @@ export function encodeRoundResult(
 				aiId,
 				content: lockoutContent(aiId),
 			});
-		}
-	}
-
-	const broadcastWitnessId = Object.keys(personas)[0];
-	if (broadcastWitnessId !== undefined) {
-		const log = phaseAfter.conversationLogs[broadcastWitnessId] ?? [];
-		for (const entry of log) {
-			if (entry.kind === "broadcast" && entry.round === playedRound) {
-				events.push({ type: "system_broadcast", content: entry.content });
-			}
 		}
 	}
 

@@ -1204,7 +1204,6 @@ function applyRoundEvent(
 	switch (event.type) {
 		case "ai_start":
 		case "ai_end":
-		case "system_broadcast":
 		case "action_log":
 			break;
 		case "message":

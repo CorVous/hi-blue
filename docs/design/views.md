@@ -268,8 +268,6 @@ it hides the other routes' screens and shows or hides the global chrome
   - `ai_start`: spinners are removed through `onAiTurnComplete`, and panel
     content comes from `message` events.
   - `ai_end`: message content already ends with `\n`.
-  - `system_broadcast`: it lives only in each daemon's `conversationLog` as
-    LLM context.
   - `action_log`: the dev inspector replaced it.
 - **`message` events.** A message from the player is skipped
   (`playerLineAlreadyPaintedAtSubmit`), because `beginRound` painted it at

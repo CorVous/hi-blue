@@ -124,7 +124,7 @@ The module is pure and takes an injected rng. `tickComplication` returns `null` 
 - Panels are driven by `message` entries in the logs, not by raw completions (since #214), so the encoder does not take completions.
 - `result.round` is the round *after* `advanceRound`, so entries written during the played round have `round === result.round - 1`.
 - Only blue's thread is emitted (the DM-thread filter). Daemon-to-daemon messages stay out of the panels.
-- Every Daemon receives each broadcast, so broadcasts are read from one Daemon's log.
+- Broadcasts and private system notices are not encoded. They live only in the Daemons' logs as LLM context, and the view has nothing to paint for them. A `system_broadcast` event used to be read from the first Daemon's log, but no view consumed it, it was filtered by the played round although complication broadcasts are stamped with the next one, and it would have shown one Daemon's private notices to everyone, so it was deleted.
 - The `lockout` event means budget exhaustion only; chat lockouts have their own events.
 - `GameState.exhausted` was called `lockedOut` until #576. It was renamed so it is not confused with the Chat Lockout Complication; `engine.dat` still stores it under `lockedOut` (see `persistence.md`).
 
