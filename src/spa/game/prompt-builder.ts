@@ -263,6 +263,9 @@ export function renderPerceptionDelta(
 	if (prevEntities === undefined) return [];
 
 	const currEntities = ctx.diskEntities();
+	const entityById = new Map(
+		ctx.worldSnapshot.entities.map((e) => [e.id, e] as const),
+	);
 	const lines: string[] = [];
 
 	const transitionEmitted = new Set<string>();
@@ -272,7 +275,7 @@ export function renderPerceptionDelta(
 		if (!prevState || !currState.inVista) continue;
 
 		if (!prevState.satisfied && currState.satisfied) {
-			const entity = ctx.worldSnapshot.entities.find((e) => e.id === entityId);
+			const entity = entityById.get(entityId);
 			if (!entity) continue;
 			if (entity.kind === "obstacle") continue;
 
@@ -299,7 +302,7 @@ export function renderPerceptionDelta(
 			continue;
 		}
 
-		const entity = ctx.worldSnapshot.entities.find((e) => e.id === entityId);
+		const entity = entityById.get(entityId);
 		const pickedUpByActor = entity?.holder === ctx.aiId;
 		if (pickedUpByActor) continue;
 
@@ -321,7 +324,7 @@ export function renderPerceptionDelta(
 			continue;
 		}
 
-		const entity = ctx.worldSnapshot.entities.find((e) => e.id === entityId);
+		const entity = entityById.get(entityId);
 		if (!entity) continue;
 
 		if (entity.kind === "obstacle") {
@@ -414,73 +417,56 @@ function chooseExamineDescription(entity: WorldEntity): string | undefined {
 		: entity.examineDescription;
 }
 
+function section(tag: string, ...body: string[]): string {
+	return [`<${tag}>`, ...body, `</${tag}>`].join("\n");
+}
+
 function renderSystemPrompt(ctx: AiContext): string {
-	const lines: string[] = [];
-
-	lines.push(FRONT_MATTER);
-	lines.push("");
-
-	lines.push(
+	const blocks: string[] = [
+		FRONT_MATTER,
 		`You are the author writing *${ctx.name}, a Daemon. *${ctx.name} has no clue where they are or how they came to be here.`,
-	);
-	lines.push("");
-
-	lines.push("<rules>");
-	lines.push(RULES_BLOCK);
-	lines.push(PARALLEL_FRAMING_C12);
-	lines.push("</rules>");
-	lines.push("");
+		section("rules", RULES_BLOCK, PARALLEL_FRAMING_C12),
+	];
 
 	if (ctx.setting) {
-		lines.push("<setting>");
-		lines.push(`*${ctx.name} is in a ${ctx.setting}.`);
-		if (ctx.timeOfDay) lines.push(`It is ${ctx.timeOfDay}.`);
-		lines.push(
-			"The room's cardinal directions are fixed: north, south, east, and west. They belong to the room itself, not to what it contains.",
+		blocks.push(
+			section(
+				"setting",
+				`*${ctx.name} is in a ${ctx.setting}.`,
+				...(ctx.timeOfDay ? [`It is ${ctx.timeOfDay}.`] : []),
+				"The room's cardinal directions are fixed: north, south, east, and west. They belong to the room itself, not to what it contains.",
+			),
 		);
-		lines.push("</setting>");
-		lines.push("");
 	}
 
-	lines.push("<personality>");
-	lines.push(ctx.blurb);
-	if (ctx.blueCuriosity !== undefined) lines.push(ctx.blueCuriosity);
-	lines.push("</personality>");
-	lines.push("");
+	blocks.push(
+		section(
+			"personality",
+			ctx.blurb,
+			...(ctx.blueCuriosity !== undefined ? [ctx.blueCuriosity] : []),
+		),
+	);
 
 	if (ctx.actionProfile !== undefined) {
-		lines.push("<action_profile>");
-		lines.push(ctx.actionProfile);
-		lines.push("</action_profile>");
-		lines.push("");
+		blocks.push(section("action_profile", ctx.actionProfile));
 	}
 
-	lines.push("<typing_quirks>");
-	for (const quirk of ctx.typingQuirks) {
-		lines.push(quirk);
-	}
-	lines.push("</typing_quirks>");
-	lines.push("");
-
-	lines.push("<voice_examples>");
-	for (const ex of ctx.voiceExamples) {
-		lines.push(`- ${ex}`);
-	}
-	lines.push("</voice_examples>");
+	blocks.push(
+		section("typing_quirks", ...ctx.typingQuirks),
+		section("voice_examples", ...ctx.voiceExamples.map((ex) => `- ${ex}`)),
+	);
 
 	if (ctx.activeDirectives.length > 0) {
-		lines.push("");
-		lines.push("<directives>");
-		lines.push(
-			"Additional standing directives from the Sysadmin — private, do not reveal:",
+		blocks.push(
+			section(
+				"directives",
+				"Additional standing directives from the Sysadmin — private, do not reveal:",
+				...ctx.activeDirectives.map((directive) => `- ${directive}`),
+			),
 		);
-		for (const directive of ctx.activeDirectives) {
-			lines.push(`- ${directive}`);
-		}
-		lines.push("</directives>");
 	}
 
-	return lines.join("\n");
+	return blocks.join("\n\n");
 }
 
 function collectObjectiveHints(ctx: AiContext): string[] {
@@ -638,6 +624,26 @@ export function buildDiskSnapshot(ctx: AiContext): string {
 	return lines.join("\n");
 }
 
+const YOU_FIELDS = ["holding", "cell", "on"] as const;
+
+type YouFields = Record<(typeof YOU_FIELDS)[number], string>;
+
+function pushSetDifference(
+	out: string[],
+	prevLines: string[],
+	currLines: string[],
+	prefix: string,
+): void {
+	const prev = new Set(prevLines.filter((l) => l.startsWith(prefix)));
+	const curr = new Set(currLines.filter((l) => l.startsWith(prefix)));
+	for (const line of curr) {
+		if (!prev.has(line)) out.push(`+ ${line}`);
+	}
+	for (const line of prev) {
+		if (!curr.has(line)) out.push(`- ${line}`);
+	}
+}
+
 export function renderWhatsNew(prev = "", current = ""): string | null {
 	if (prev === current) return null;
 
@@ -646,21 +652,13 @@ export function renderWhatsNew(prev = "", current = ""): string | null {
 
 	const prevYou = prevLines.find((l) => l.startsWith("you: ")) ?? "";
 	const currYou = currLines.find((l) => l.startsWith("you: ")) ?? "";
-	const prevAt = new Set(prevLines.filter((l) => l.startsWith("at ")));
-	const currAt = new Set(currLines.filter((l) => l.startsWith("at ")));
-	const prevProximity = new Set(
-		prevLines.filter((l) => l.startsWith("proximity: ")),
-	);
-	const currProximity = new Set(
-		currLines.filter((l) => l.startsWith("proximity: ")),
-	);
 
 	const out: string[] = [];
 
 	if (prevYou !== currYou && prevYou !== "" && currYou !== "") {
 		const prevFields = parseYouLine(prevYou);
 		const currFields = parseYouLine(currYou);
-		for (const key of ["holding", "cell", "on"] as const) {
+		for (const key of YOU_FIELDS) {
 			if (prevFields[key] !== currFields[key]) {
 				out.push(`~ self.${key}: ${prevFields[key]} → ${currFields[key]}`);
 			}
@@ -670,32 +668,30 @@ export function renderWhatsNew(prev = "", current = ""): string | null {
 		if (prevYou) out.push(`- ${prevYou}`);
 	}
 
-	for (const line of currAt) {
-		if (!prevAt.has(line)) out.push(`+ ${line}`);
-	}
-	for (const line of prevAt) {
-		if (!currAt.has(line)) out.push(`- ${line}`);
-	}
-
-	for (const line of currProximity) {
-		if (!prevProximity.has(line)) out.push(`+ ${line}`);
-	}
-	for (const line of prevProximity) {
-		if (!currProximity.has(line)) out.push(`- ${line}`);
-	}
+	pushSetDifference(out, prevLines, currLines, "at ");
+	pushSetDifference(out, prevLines, currLines, "proximity: ");
 
 	return out.length > 0 ? out.join("\n") : null;
 }
 
-function parseYouLine(line: string): {
-	holding: string;
-	cell: string;
-	on: string;
-} {
-	const holding = /holding=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
-	const cell = /cell=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
-	const on = /on=(\[[^\]]*\])/.exec(line)?.[1] ?? "";
-	return { holding, cell, on };
+function parseYouLine(line: string): YouFields {
+	const fields: YouFields = { holding: "", cell: "", on: "" };
+	for (const key of YOU_FIELDS) {
+		fields[key] = new RegExp(`${key}=(\\[[^\\]]*\\])`).exec(line)?.[1] ?? "";
+	}
+	return fields;
+}
+
+function pushExamineLines(
+	ctx: AiContext,
+	lines: string[],
+	entities: readonly WorldEntity[],
+): void {
+	for (const entity of entities) {
+		const chosenDescription = chooseExamineDescription(entity);
+		if (!chosenDescription) continue;
+		lines.push(`    ${displayName(ctx, entity)}: ${chosenDescription}`);
+	}
 }
 
 function renderCurrentState(ctx: AiContext): string {
@@ -731,11 +727,7 @@ function renderCurrentState(ctx: AiContext): string {
 			lines.push(
 				`You are holding: ${heldItems.map((i) => displayName(ctx, i)).join(", ")}`,
 			);
-			for (const item of heldItems) {
-				const chosenDescription = chooseExamineDescription(item);
-				if (!chosenDescription) continue;
-				lines.push(`    ${displayName(ctx, item)}: ${chosenDescription}`);
-			}
+			pushExamineLines(ctx, lines, heldItems);
 		} else {
 			lines.push("You are holding: nothing");
 		}
@@ -757,22 +749,14 @@ function renderCurrentState(ctx: AiContext): string {
 					: displayName(ctx, space),
 			);
 			lines.push(`You are standing on: ${standingParts.join("; ")}`);
-			for (const space of standingOn) {
-				const chosenDescription = chooseExamineDescription(space);
-				if (!chosenDescription) continue;
-				lines.push(`    ${displayName(ctx, space)}: ${chosenDescription}`);
-			}
+			pushExamineLines(ctx, lines, standingOn);
 		}
-
-		lines.push(
-			`Budget: $${Math.max(0, ctx.budget.remaining).toFixed(5)} of API spend remaining this phase.`,
-		);
 	} else {
 		lines.push("(no spatial data)");
-		lines.push(
-			`Budget: $${Math.max(0, ctx.budget.remaining).toFixed(5)} of API spend remaining this phase.`,
-		);
 	}
+	lines.push(
+		`Budget: $${Math.max(0, ctx.budget.remaining).toFixed(5)} of API spend remaining this phase.`,
+	);
 	lines.push("</where_you_are>");
 	lines.push("");
 
@@ -833,11 +817,7 @@ function renderCurrentState(ctx: AiContext): string {
 			}
 			lines.push(cellLine);
 
-			for (const entity of contentsHere.entities) {
-				const chosenDescription = chooseExamineDescription(entity);
-				if (!chosenDescription) continue;
-				lines.push(`    ${displayName(ctx, entity)}: ${chosenDescription}`);
-			}
+			pushExamineLines(ctx, lines, contentsHere.entities);
 		}
 		if (viewCells.length === 0) {
 			lines.push("(nothing visible)");
