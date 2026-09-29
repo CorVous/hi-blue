@@ -309,6 +309,26 @@ it hides the other routes' screens and shows or hides the global chrome
   (shown only when `readStoredByokKey()` finds a stored OpenRouter key) saves
   the new room under the same session id, because the active pointer is
   unchanged. "Same daemons" archives the old session and mints a new one.
+- **Endgame choices act on the ended session, not the active one.** "Same
+  daemons" and "continue" wait for a content-pack generation that can take
+  minutes, and meanwhile the player can open the picker and load another
+  session. Each choice therefore carries the ended session's id
+  (`EndgameChoice`) and, after every await, gives up without touching storage
+  or routing if the active pointer no longer names it
+  (`playerLeftEndedSession`). "Same daemons" builds the new room first, then
+  archives the ended session, saves the room under a freshly minted id
+  (`mintSessionId` plus `saveActiveSession`'s `sessionId` option), and only
+  then removes the ended session (`rmSession`, never `clearActiveSession`,
+  which deletes whatever is active) and moves the pointer. Building first
+  means giving up leaves nothing half-done. "Continue" saves under the ended
+  session's own id. "New daemons" removes the ended session only after
+  `archiveSession` succeeds.
+- **A failed choice keeps the finished game.** If archiving throws (a full
+  storage quota, or a save interrupted earlier), the room cannot be built, or
+  the new room cannot be saved, `failEndgameChoice` writes the reason to
+  `#endgame-choice-status` and enables the choice buttons again. Before, a
+  failed archive still deleted the session, so the only copy of the finished
+  game was lost.
 - State is saved after the events loop, including on the round that ends the
   game. Before #576 the final round was not saved, so the stored session ended
   one round early, with `isComplete: false` and the winning Objective still

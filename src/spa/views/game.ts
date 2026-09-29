@@ -77,8 +77,10 @@ import {
 	type LoadResult,
 	listSessions,
 	loadActiveSession,
-	mintAndActivateNewSession,
+	mintSessionId,
+	rmSession,
 	saveActiveSession,
+	setActiveSessionId,
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
 import { dropListenersByCloning, trySetCaret } from "./dom.js";
@@ -1387,6 +1389,14 @@ function showEndgameScreen(doc: Document): void {
 	doc.querySelector<HTMLElement>("#endgame")?.removeAttribute("hidden");
 }
 
+interface EndgameChoice {
+	root: HTMLElement;
+	endedSessionId: string | null;
+	endedState: GameState;
+	setStatus(text: string): void;
+	enableChoices(): void;
+}
+
 function wireEndgameChoices(
 	root: HTMLElement,
 	endedSessionId: string | null,
@@ -1409,26 +1419,32 @@ function wireEndgameChoices(
 		continueBtn.removeAttribute("hidden");
 	}
 
-	const disableChoiceButtons = (): void => {
+	const setChoicesDisabled = (disabled: boolean): void => {
 		for (const btn of [newDaemonsBtn, sameDaemonsBtn, continueBtn]) {
-			if (btn) btn.disabled = true;
+			if (btn) btn.disabled = disabled;
 		}
 	};
-	const setStatus = (text: string): void => {
-		if (choiceStatus) choiceStatus.textContent = text;
+	const choice: EndgameChoice = {
+		root,
+		endedSessionId,
+		endedState,
+		setStatus: (text) => {
+			if (choiceStatus) choiceStatus.textContent = text;
+		},
+		enableChoices: () => setChoicesDisabled(false),
 	};
 
 	newDaemonsBtn?.addEventListener("click", () => {
-		disableChoiceButtons();
-		startWithNewDaemons(root, endedSessionId, setStatus);
+		setChoicesDisabled(true);
+		void startWithNewDaemons(choice);
 	});
 	sameDaemonsBtn?.addEventListener("click", () => {
-		disableChoiceButtons();
-		restartWithSameDaemons(root, endedSessionId, endedState, setStatus);
+		setChoicesDisabled(true);
+		void restartWithSameDaemons(choice);
 	});
 	continueBtn?.addEventListener("click", () => {
-		disableChoiceButtons();
-		continueInNewRoom(root, endedState, setStatus);
+		setChoicesDisabled(true);
+		void continueInNewRoom(choice);
 	});
 }
 
@@ -1436,66 +1452,116 @@ function archiveIfKnown(sessionId: string | null): Promise<void> {
 	return sessionId ? archiveSession(sessionId) : Promise.resolve();
 }
 
-function startWithNewDaemons(
-	root: HTMLElement,
-	endedSessionId: string | null,
-	setStatus: (text: string) => void,
-): void {
-	setStatus("archiving…");
-	const restart = (): void => {
-		clearActiveSession();
-		releaseSession();
-		renderApp(root);
-	};
-	archiveIfKnown(endedSessionId).then(restart).catch(restart);
+function playerLeftEndedSession(choice: EndgameChoice): boolean {
+	return getActiveSessionId() !== choice.endedSessionId;
 }
 
-function restartWithSameDaemons(
-	root: HTMLElement,
-	endedSessionId: string | null,
-	endedState: GameState,
-	setStatus: (text: string) => void,
-): void {
-	setStatus("archiving…");
-	archiveIfKnown(endedSessionId)
-		.then(() => {
-			setStatus("spinning up a new room…");
-			return buildSameDaemonsSession(endedState.personas);
-		})
-		.then((newSess) => {
-			clearActiveSession();
-			mintAndActivateNewSession();
-			saveActiveSession(newSess.getState());
-			releaseSession();
-			gameEndHandled = false;
-			renderApp(root);
-		})
-		.catch(() => {
-			clearActiveSession();
-			releaseSession();
-			renderApp(root);
-		});
+function failEndgameChoice(choice: EndgameChoice, message: string): void {
+	choice.setStatus(message);
+	choice.enableChoices();
 }
 
-function continueInNewRoom(
-	root: HTMLElement,
-	endedState: GameState,
-	setStatus: (text: string) => void,
-): void {
-	setStatus("spinning up a new room…");
-	buildSameDaemonsSession(endedState.personas)
-		.then((newSess) => {
-			saveActiveSession(
-				appendBroadcast(newSess.getState(), NEW_ROOM_BROADCAST),
-			);
-			releaseSession();
-			gameEndHandled = false;
-			renderApp(root);
-		})
-		.catch(() => {
-			releaseSession();
-			renderApp(root);
-		});
+function failureDetail(err: unknown): string {
+	if (err instanceof DOMException && err.name === "QuotaExceededError") {
+		return "browser storage is full";
+	}
+	return err instanceof Error ? err.message : String(err);
+}
+
+function saveFailureDetail(reason: string): string {
+	return reason === "quota" ? "browser storage is full" : reason;
+}
+
+function removeEndedSession(choice: EndgameChoice): void {
+	if (choice.endedSessionId) rmSession(choice.endedSessionId);
+}
+
+async function startWithNewDaemons(choice: EndgameChoice): Promise<void> {
+	choice.setStatus("archiving…");
+	try {
+		await archiveIfKnown(choice.endedSessionId);
+	} catch (err) {
+		failEndgameChoice(
+			choice,
+			`could not archive this game: ${failureDetail(err)}`,
+		);
+		return;
+	}
+	const playerMovedOn = playerLeftEndedSession(choice);
+	removeEndedSession(choice);
+	if (playerMovedOn) return;
+	releaseSession();
+	renderApp(choice.root);
+}
+
+async function buildNewRoom(
+	choice: EndgameChoice,
+): Promise<GameSession | null> {
+	choice.setStatus("spinning up a new room…");
+	try {
+		return await buildSameDaemonsSession(choice.endedState.personas);
+	} catch (err) {
+		failEndgameChoice(
+			choice,
+			`could not spin up a new room: ${failureDetail(err)}`,
+		);
+		return null;
+	}
+}
+
+async function restartWithSameDaemons(choice: EndgameChoice): Promise<void> {
+	const newRoom = await buildNewRoom(choice);
+	if (!newRoom || playerLeftEndedSession(choice)) return;
+
+	choice.setStatus("archiving…");
+	try {
+		await archiveIfKnown(choice.endedSessionId);
+	} catch (err) {
+		failEndgameChoice(
+			choice,
+			`could not archive this game: ${failureDetail(err)}`,
+		);
+		return;
+	}
+	if (playerLeftEndedSession(choice)) return;
+
+	const newSessionId = mintSessionId();
+	const saveResult = saveActiveSession(newRoom.getState(), {
+		sessionId: newSessionId,
+	});
+	if (!saveResult.ok) {
+		rmSession(newSessionId);
+		failEndgameChoice(
+			choice,
+			`could not save the new room: ${saveFailureDetail(saveResult.reason)}`,
+		);
+		return;
+	}
+	removeEndedSession(choice);
+	setActiveSessionId(newSessionId);
+	releaseSession();
+	gameEndHandled = false;
+	renderApp(choice.root);
+}
+
+async function continueInNewRoom(choice: EndgameChoice): Promise<void> {
+	const newRoom = await buildNewRoom(choice);
+	if (!newRoom || playerLeftEndedSession(choice)) return;
+
+	const saveResult = saveActiveSession(
+		appendBroadcast(newRoom.getState(), NEW_ROOM_BROADCAST),
+		{ sessionId: choice.endedSessionId },
+	);
+	if (!saveResult.ok) {
+		failEndgameChoice(
+			choice,
+			`could not save the new room: ${saveFailureDetail(saveResult.reason)}`,
+		);
+		return;
+	}
+	releaseSession();
+	gameEndHandled = false;
+	renderApp(choice.root);
 }
 
 function wireSaveDownload(doc: Document, endedState: GameState): void {

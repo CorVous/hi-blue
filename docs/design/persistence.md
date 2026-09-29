@@ -39,8 +39,9 @@ Each session is a set of localStorage keys under one prefix:
 - **`saveActiveSession` can target a session other than the active one.**
   Its `sessionId` option writes under that id instead of the active pointer.
   The game route uses it for a round that finishes after the player loaded
-  another session. Without it the only way to save was to repoint the active
-  session first.
+  another session, and for the endgame's new room, which is written under a
+  freshly minted id before the pointer moves to it. Without it the only way to
+  save was to repoint the active session first.
   - **Fresh writes rely on `engine.dat`.** `dupSession` and `seedFromArchive`
     always write to a freshly minted, unused id, and `archiveSession` clears
     every key under `archive/<id>/` first so a reused id never merges two
