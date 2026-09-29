@@ -22,7 +22,7 @@ import {
 	renderReasonBanner,
 	VERSION_MISMATCH_MESSAGE,
 } from "./archived-build-link.js";
-import { dropListenersByCloning } from "./dom.js";
+import { dropListenersByCloning, setHidden } from "./dom.js";
 
 const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 	broken: "The active Session was unreadable and could not be loaded.",
@@ -30,19 +30,12 @@ const SESSIONS_BANNER_MESSAGES: Record<string, string> = {
 };
 
 function showOnly(doc: Document, visibleId: string): void {
-	const hide = [
-		"#start-screen",
-		"#panels",
-		"#composer",
-		"#endgame",
-		"#cap-hit",
-	];
-	for (const sel of hide) {
-		const el = doc.querySelector<HTMLElement>(sel);
-		if (el) el.hidden = true;
-	}
-	const target = doc.querySelector<HTMLElement>(visibleId);
-	if (target) target.hidden = false;
+	setHidden(
+		doc,
+		["#start-screen", "#panels", "#composer", "#endgame", "#cap-hit"],
+		true,
+	);
+	setHidden(doc, [visibleId], false);
 }
 
 function buildTreeLines(doc: Document, labels: string[]): HTMLElement {
@@ -87,9 +80,7 @@ function buildSpan(
 }
 
 function showGlobalChrome(doc: Document): void {
-	for (const selector of ["#stage > header", "#topinfo", "#banner"]) {
-		doc.querySelector<HTMLElement>(selector)?.removeAttribute("hidden");
-	}
+	setHidden(doc, ["#stage > header", "#topinfo", "#banner"], false);
 }
 
 type ActiveRow = { id: string; info: ReturnType<typeof getSessionInfo> };

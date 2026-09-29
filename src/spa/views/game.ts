@@ -83,7 +83,7 @@ import {
 	setActiveSessionId,
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
-import { dropListenersByCloning, trySetCaret } from "./dom.js";
+import { dropListenersByCloning, setHidden, trySetCaret } from "./dom.js";
 
 export const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
 
@@ -608,18 +608,12 @@ function adoptSession(
 }
 
 function revealGameRouteChrome(doc: Document): void {
-	for (const selector of ["#start-screen", "#sessions-screen", "#endgame"]) {
-		doc.querySelector<HTMLElement>(selector)?.setAttribute("hidden", "");
-	}
-	for (const selector of [
-		"#panels",
-		"#composer",
-		"#stage > header",
-		"#topinfo",
-		"#banner",
-	]) {
-		doc.querySelector<HTMLElement>(selector)?.removeAttribute("hidden");
-	}
+	setHidden(doc, ["#start-screen", "#sessions-screen", "#endgame"], true);
+	setHidden(
+		doc,
+		["#panels", "#composer", "#stage > header", "#topinfo", "#banner"],
+		false,
+	);
 }
 
 function paintBannerOnce(doc: Document): void {
@@ -628,11 +622,7 @@ function paintBannerOnce(doc: Document): void {
 }
 
 function setGameSurfaceHidden(doc: Document, hidden: boolean): void {
-	for (const selector of ["#panels", "#composer"]) {
-		const el = doc.querySelector<HTMLElement>(selector);
-		if (hidden) el?.setAttribute("hidden", "");
-		else el?.removeAttribute("hidden");
-	}
+	setHidden(doc, ["#panels", "#composer"], hidden);
 }
 
 function paintSessionPanels(
@@ -1371,17 +1361,16 @@ function paintFinalRoundLines(doc: Document, state: GameState): void {
 	linesEl.textContent = "";
 	const lines = finalRoundDaemonLines(state);
 	for (const { aiId, entry } of lines) {
-		linesEl.appendChild(transcriptMessageLine(doc, entry, aiId, state.personas));
+		linesEl.appendChild(
+			transcriptMessageLine(doc, entry, aiId, state.personas),
+		);
 	}
 	sectionEl.hidden = lines.length === 0;
 }
 
 function showEndgameScreen(doc: Document): void {
-	for (const selector of ["#panels", "#composer", "#cap-hit"]) {
-		const el = doc.querySelector<HTMLElement>(selector);
-		if (el) el.hidden = true;
-	}
-	doc.querySelector<HTMLElement>("#endgame")?.removeAttribute("hidden");
+	setHidden(doc, ["#panels", "#composer", "#cap-hit"], true);
+	setHidden(doc, ["#endgame"], false);
 }
 
 interface EndgameChoice {

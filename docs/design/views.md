@@ -8,6 +8,9 @@ it hides the other routes' screens and shows or hides the global chrome
 
 ## Shared: route chrome
 
+- Routes show and hide screens through `setHidden` (in `dom.ts`), which sets
+  `hidden` on every element a list of selectors finds and skips the ones
+  that are missing, so a test fixture without some screen still renders.
 - The start route hides the global chrome (the dial-up login takes the whole
   viewport). The game and sessions routes therefore always un-hide it on
   entry (`revealGameRouteChrome`, `showGlobalChrome`), because either can be
