@@ -167,14 +167,16 @@ function availableComplicationTypes(
 	return pool;
 }
 
+function pickFrom<T>(items: readonly T[], rng: () => number): T {
+	// biome-ignore lint/style/noNonNullAssertion: bounded index into a non-empty list
+	return items[Math.floor(rng() * items.length)]!;
+}
+
 function drawComplication(
 	phase: GameState,
 	rng: () => number,
 ): ComplicationVariant {
-	const pool = availableComplicationTypes(phase);
-	const idx = Math.floor(rng() * pool.length);
-	// biome-ignore lint/style/noNonNullAssertion: bounded index into non-empty pool
-	const kind = pool[idx]!;
+	const kind = pickFrom(availableComplicationTypes(phase), rng);
 
 	if (kind !== "tool_disable") {
 		return buildSimpleComplication(kind, phase, rng);
@@ -201,16 +203,11 @@ function drawComplication(
 
 	const everyToolAlreadyDisabled = validPairs.length === 0;
 	if (everyToolAlreadyDisabled) {
-		const fallbackPool = availableComplicationTypes(phase, true);
-		const fallbackIdx = Math.floor(rng() * fallbackPool.length);
-		// biome-ignore lint/style/noNonNullAssertion: bounded index
-		const fallbackKind = fallbackPool[fallbackIdx]!;
+		const fallbackKind = pickFrom(availableComplicationTypes(phase, true), rng);
 		return buildSimpleComplication(fallbackKind, phase, rng);
 	}
 
-	const pairIdx = Math.floor(rng() * validPairs.length);
-	// biome-ignore lint/style/noNonNullAssertion: bounded index
-	const pair = validPairs[pairIdx]!;
+	const pair = pickFrom(validPairs, rng);
 	const duration = drawComplicationDuration(rng);
 	return {
 		kind: "tool_disable",

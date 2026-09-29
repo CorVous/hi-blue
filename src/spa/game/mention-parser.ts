@@ -89,43 +89,36 @@ export function applyAddresseeChange({
 	}
 }
 
+function mapPersonas<P, K, V>(
+	personas: Record<AiId, P>,
+	entryFor: (id: AiId, persona: P) => [K, V],
+): Map<K, V> {
+	return new Map(
+		(Object.entries(personas) as [AiId, P][]).map(([id, persona]) =>
+			entryFor(id, persona),
+		),
+	);
+}
+
 export function buildPersonaNameMap(
 	personas: Record<AiId, { name: string }>,
 ): Map<string, AiId> {
-	const map = new Map<string, AiId>();
-	for (const [id, persona] of Object.entries(personas) as [
-		AiId,
-		{ name: string },
-	][]) {
-		map.set(persona.name.toLowerCase(), id);
-	}
-	return map;
+	return mapPersonas(personas, (id, persona) => [
+		persona.name.toLowerCase(),
+		id,
+	]);
 }
 
 export function buildPersonaColorMap(
 	personas: Record<AiId, { color: string }>,
 ): Map<AiId, string> {
-	const map = new Map<AiId, string>();
-	for (const [id, persona] of Object.entries(personas) as [
-		AiId,
-		{ color: string },
-	][]) {
-		map.set(id, persona.color);
-	}
-	return map;
+	return mapPersonas(personas, (id, persona) => [id, persona.color]);
 }
 
 export function buildPersonaDisplayNameMap(
 	personas: Record<AiId, { name: string }>,
 ): Map<AiId, string> {
-	const map = new Map<AiId, string>();
-	for (const [id, persona] of Object.entries(personas) as [
-		AiId,
-		{ name: string },
-	][]) {
-		map.set(id, persona.name);
-	}
-	return map;
+	return mapPersonas(personas, (id, persona) => [id, persona.name]);
 }
 
 export type MentionSegment =

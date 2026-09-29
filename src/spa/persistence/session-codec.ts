@@ -208,12 +208,9 @@ export function deserializeSession(
 			? meta.personaOrder
 			: Object.keys(daemonFiles);
 	const personas: Record<AiId, AiPersona> = {};
-	for (const aiId of personaOrder) {
+	for (const aiId of new Set([...personaOrder, ...Object.keys(daemonFiles)])) {
 		const daemonFile = daemonFiles[aiId];
 		if (daemonFile) personas[aiId] = daemonFile.persona;
-	}
-	for (const [aiId, daemonFile] of Object.entries(daemonFiles)) {
-		if (!(aiId in personas)) personas[aiId] = daemonFile.persona;
 	}
 
 	try {
