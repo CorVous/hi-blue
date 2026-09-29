@@ -3,13 +3,9 @@ import { installLocalStorageStub } from "./fixtures/local-storage";
 import { STATIC_CONTENT_PACKS } from "./fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "./fixtures/static-personas";
 
-vi.mock("../../content", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("../../content")>();
-	return {
-		...actual,
-		generatePersonas: async () => STATIC_PERSONAS,
-	};
-});
+vi.mock("../../content/persona-generator", () => ({
+	generatePersonas: async () => STATIC_PERSONAS,
+}));
 
 vi.mock("../../content/content-pack-generator", () => ({
 	generateDualContentPacks: async () => ({

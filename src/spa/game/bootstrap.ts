@@ -1,9 +1,7 @@
 import { generateDualContentPacks } from "../../content/content-pack-generator.js";
-import {
-	generatePersonas,
-	SETTING_POOL,
-	SINGLE_GAME_CONFIG,
-} from "../../content/index.js";
+import { generatePersonas } from "../../content/persona-generator.js";
+import { SINGLE_GAME_CONFIG } from "../../content/phases.js";
+import { SETTING_POOL } from "../../content/pools.js";
 import type { ContentPackProvider } from "./content-pack-provider.js";
 import { BrowserContentPackProvider } from "./content-pack-provider.js";
 import { GameSession } from "./game-session.js";

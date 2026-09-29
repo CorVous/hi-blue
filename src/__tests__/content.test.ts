@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { COLOR_PALETTE } from "../content/color-palette";
+import { generatePersonas } from "../content/persona-generator";
 import {
-	COLOR_PALETTE,
-	generatePersonas,
 	PERSONA_GOAL_POOL,
 	TEMPERAMENT_POOL,
 	TYPING_QUIRK_POOL,
-} from "../content";
+} from "../content/pools";
 import type { SynthesisInput } from "../spa/game/llm-synthesis-provider.js";
 import { MockSynthesisProvider } from "../spa/game/llm-synthesis-provider.js";
 
