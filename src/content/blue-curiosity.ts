@@ -1,4 +1,4 @@
-export const BLUE_CURIOUS_TEMPERAMENTS: readonly string[] = ["curious"];
+const BLUE_CURIOUS_TEMPERAMENTS: readonly string[] = ["curious"];
 
 export function blueCuriosityClauseFor(
 	name: string,

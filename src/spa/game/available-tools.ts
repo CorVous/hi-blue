@@ -164,7 +164,7 @@ export function entityHandle(
 	return targetHandles(entities).get(entity.id) ?? entity.name.trim();
 }
 
-export function toolTargetCandidates(
+function toolTargetCandidates(
 	game: GameState,
 	aiId: AiId,
 	tool: ItemToolName,

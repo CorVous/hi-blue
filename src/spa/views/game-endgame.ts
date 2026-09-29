@@ -84,7 +84,7 @@ function paintEndgameSubtitle(
 	subtitleEl.dataset.outcome = outcome === "lose" ? "budget-exhausted" : "win";
 }
 
-export function finalRoundDaemonLines(
+function finalRoundDaemonLines(
 	state: GameState,
 ): Array<{ aiId: AiId; entry: MessageEntry }> {
 	const finalRound = state.round - 1;

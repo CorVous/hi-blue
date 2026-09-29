@@ -142,7 +142,7 @@ export const USE_CUE_KEYWORD_HINTS: readonly string[] = [
 
 export type PackLabel = "A" | "B";
 
-export type RetryUnit = (
+type RetryUnit = (
 	| { kind: "objective-pair"; pairId: string }
 	| { kind: "obstacle"; entityId: string }
 	| { kind: "carry-binding"; bindingId: string }
