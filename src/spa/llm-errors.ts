@@ -23,7 +23,7 @@ export class UpstreamErrorBodyError extends Error {
 
 	constructor(opts: {
 		upstreamMessage: string;
-		upstreamCode?: string;
+		upstreamCode?: string | null;
 	}) {
 		super(`upstream returned 200 with error body: ${opts.upstreamMessage}`);
 		this.name = "UpstreamErrorBodyError";

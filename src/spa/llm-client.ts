@@ -29,14 +29,18 @@ async function readJsonOrNull(response: Response): Promise<unknown> {
 	}
 }
 
-function errorObjectOf(body: unknown): Record<string, unknown> | null {
-	if (body == null || typeof body !== "object" || !("error" in body)) {
-		return null;
-	}
-	const error = (body as Record<string, unknown>).error;
-	return error != null && typeof error === "object"
-		? (error as Record<string, unknown>)
+function asRecord(value: unknown): Record<string, unknown> | null {
+	return value != null && typeof value === "object"
+		? (value as Record<string, unknown>)
 		: null;
+}
+
+function stringOr<T>(value: unknown, fallback: T): string | T {
+	return typeof value === "string" ? value : fallback;
+}
+
+function errorObjectOf(body: unknown): Record<string, unknown> | null {
+	return asRecord(asRecord(body)?.error);
 }
 
 function retryAfterSecOf(response: Response): number | null {
@@ -55,13 +59,11 @@ function capHitFromBody(response: Response, body: unknown): CapHitError | null {
 	if (!err || err.type !== "rate_limit_exceeded") return null;
 	if (err.code !== "per-ip-daily" && err.code !== "global-daily") return null;
 
-	const retryAfterHeader = response.headers?.get("Retry-After");
-	const retryAfterSec =
-		retryAfterHeader != null ? Number(retryAfterHeader) : null;
-	const message =
-		typeof err.message === "string" ? err.message : "rate limit exceeded";
-
-	return new CapHitError({ message, reason: err.code, retryAfterSec });
+	return new CapHitError({
+		message: stringOr(err.message, "rate limit exceeded"),
+		reason: err.code,
+		retryAfterSec: retryAfterSecOf(response),
+	});
 }
 
 export async function parseCapHitFromResponse(
@@ -77,14 +79,10 @@ async function errorFromFailedResponse(
 	const body = await readJsonOrNull(response);
 	const capHit = capHitFromBody(response, body);
 	if (capHit) return capHit;
-	const upstreamMessage = errorObjectOf(body)?.message;
 	return new HttpStatusError({
 		status: response.status,
 		statusText: response.statusText,
-		upstreamMessage:
-			typeof upstreamMessage === "string" && upstreamMessage.length > 0
-				? upstreamMessage
-				: null,
+		upstreamMessage: stringOr(errorObjectOf(body)?.message, null) || null,
 		retryAfterSec: retryAfterSecOf(response),
 	});
 }
@@ -220,40 +218,17 @@ export async function chatCompletionJson(opts: {
 
 	const errorObj = errorObjectOf(body);
 	if (errorObj !== null) {
-		const message =
-			typeof errorObj.message === "string" ? errorObj.message : "unknown error";
-		const code = typeof errorObj.code === "string" ? errorObj.code : undefined;
-		throw new UpstreamErrorBodyError(
-			code === undefined
-				? { upstreamMessage: message }
-				: { upstreamMessage: message, upstreamCode: code },
-		);
+		throw new UpstreamErrorBodyError({
+			upstreamMessage: stringOr(errorObj.message, "unknown error"),
+			upstreamCode: stringOr(errorObj.code, null),
+		});
 	}
 
-	const msg =
-		body != null &&
-		typeof body === "object" &&
-		"choices" in body &&
-		Array.isArray((body as Record<string, unknown>).choices)
-			? ((body as Record<string, unknown>).choices as unknown[])[0]
-			: null;
-
-	const message =
-		msg != null &&
-		typeof msg === "object" &&
-		"message" in (msg as Record<string, unknown>)
-			? ((msg as Record<string, unknown>).message as Record<string, unknown>)
-			: null;
-
-	const content =
-		message != null && typeof message.content === "string"
-			? message.content
-			: null;
-
-	const reasoning =
-		message != null && typeof message.reasoning === "string"
-			? message.reasoning
-			: null;
-
-	return { content, reasoning };
+	const choices = asRecord(body)?.choices;
+	const firstChoice = Array.isArray(choices) ? choices[0] : null;
+	const message = asRecord(asRecord(firstChoice)?.message);
+	return {
+		content: stringOr(message?.content, null),
+		reasoning: stringOr(message?.reasoning, null),
+	};
 }
