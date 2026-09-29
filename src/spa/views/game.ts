@@ -52,9 +52,13 @@ import {
 	clearActiveSession,
 	deactivateActiveSession,
 	getActiveSessionId,
+	isSessionSaveInProgress,
+	isSessionStorageKey,
 	type LoadResult,
 	listSessions,
 	loadActiveSession,
+	readSessionLastSavedAt,
+	type SaveResult,
 	saveActiveSession,
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
@@ -153,6 +157,7 @@ interface RoundOutcome {
 interface RoundOwner {
 	session: GameSession;
 	sessionId: string | null;
+	lastSavedAt: string | null;
 }
 
 let gameEndHandled = false;
@@ -162,6 +167,10 @@ let session: GameSession | null = null;
 let hydratedSessionId: string | null = null;
 
 let hydratedEpoch: number = 1;
+
+let hydratedLastSavedAt: string | null = null;
+
+let crossTabListenerWired = false;
 
 let viewCtx: GameViewContext | null = null;
 
@@ -264,14 +273,14 @@ function dropSessionIfActivePointerMoved(): void {
 	const activePointerMoved =
 		session !== null && hydratedSessionId !== getActiveSessionId();
 	if (!activePointerMoved) return;
-	session = null;
-	hydratedSessionId = null;
+	releaseSession();
 	gameEndHandled = false;
 }
 
 function releaseSession(): void {
 	session = null;
 	hydratedSessionId = null;
+	hydratedLastSavedAt = null;
 }
 
 function currentPersonas(): Record<AiId, AiPersona> {
@@ -394,6 +403,8 @@ function adoptBootstrappedSession(
 	session = built;
 	hydratedSessionId = sessionId;
 	hydratedEpoch = 1;
+	hydratedLastSavedAt =
+		sessionId === null ? null : readSessionLastSavedAt(sessionId);
 	return renderGame(ctx.root, ctx.opts);
 }
 
@@ -406,6 +417,7 @@ function restoreActiveSession(ctx: GameViewContext): Promise<void> | null {
 	session = GameSession.restore(loadResult.state);
 	hydratedSessionId = loadResult.sessionId;
 	hydratedEpoch = loadResult.epoch;
+	hydratedLastSavedAt = loadResult.lastSavedAt;
 	repaintRestoredTranscripts(ctx.doc, loadResult.state);
 	return null;
 }
@@ -561,6 +573,47 @@ function wireViewListeners(ctx: GameViewContext): void {
 	for (const panel of ctx.doc.querySelectorAll<HTMLElement>(".ai-panel")) {
 		panel.addEventListener("click", () => addressPanel(ctx, panel));
 	}
+	wireCrossTabReload(ctx.doc.defaultView);
+}
+
+function wireCrossTabReload(win: Window | null): void {
+	if (crossTabListenerWired || !win) return;
+	crossTabListenerWired = true;
+	win.addEventListener("storage", (event) => {
+		const ctx = viewCtx;
+		if (!ctx || ctx.roundInFlight) return;
+		const cachedSessionId = hydratedSessionId;
+		if (cachedSessionId === null) return;
+		const touchesCachedSession =
+			event.key === null || isSessionStorageKey(event.key, cachedSessionId);
+		if (!touchesCachedSession) return;
+		if (!cachedSessionChangedElsewhere(ctx)) return;
+		reloadChangedSession(ctx, { warn: false });
+	});
+}
+
+function cachedSessionChangedElsewhere(ctx: GameViewContext): boolean {
+	if (session === null || hydratedSessionId === null) return false;
+	if (hydratedLastSavedAt === null) return false;
+	if (ctx.root.dataset.view !== "game") return false;
+	if (isSessionSaveInProgress(hydratedSessionId)) return false;
+	return readSessionLastSavedAt(hydratedSessionId) !== hydratedLastSavedAt;
+}
+
+function reloadChangedSession(
+	ctx: GameViewContext,
+	{ warn }: { warn: boolean },
+): void {
+	releaseSession();
+	gameEndHandled = false;
+	void renderGame(ctx.root, ctx.opts);
+	if (warn) showPersistenceWarning(ctx.persistenceWarningEl, "stale");
+}
+
+function saveExpectation(lastSavedAt: string | null): {
+	expectedLastSavedAt?: string;
+} {
+	return lastSavedAt === null ? {} : { expectedLastSavedAt: lastSavedAt };
 }
 
 function syncOverlayScroll(ctx: GameViewContext): void {
@@ -752,6 +805,7 @@ async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 	const owner: RoundOwner = {
 		session: activeSession,
 		sessionId: hydratedSessionId,
+		lastSavedAt: hydratedLastSavedAt,
 	};
 	beginRound(ctx, activeSession, draft);
 
@@ -774,6 +828,9 @@ async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 		if (!outcome.gameEnded) {
 			refreshComposerState(ctx);
 			refreshTopInfo(ctx);
+		}
+		if (!outcome.gameEnded && cachedSessionChangedElsewhere(ctx)) {
+			reloadChangedSession(ctx, { warn: true });
 		}
 	}
 }
@@ -900,9 +957,19 @@ async function playRound(
 	);
 
 	if (playerLeftRoundSession(owner)) {
-		saveRoundLeftBehind(ctx, owner.sessionId, nextState);
+		saveRoundLeftBehind(ctx, owner, nextState);
 		return;
 	}
+
+	const saveResult = saveActiveSession(nextState, {
+		sessionId: owner.sessionId,
+		...saveExpectation(owner.lastSavedAt),
+	});
+	if (!saveResult.ok && saveResult.reason === "stale") {
+		reloadChangedSession(ctx, { warn: true });
+		return;
+	}
+	if (saveResult.ok) hydratedLastSavedAt = saveResult.lastSavedAt;
 
 	for (const event of encodeRoundResult(
 		result,
@@ -920,12 +987,7 @@ async function playRound(
 		);
 	}
 
-	const saveResult = saveActiveSession(nextState, {
-		sessionId: owner.sessionId,
-	});
-	if (!saveResult.ok) {
-		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
-	}
+	warnIfSaveFailed(ctx, saveResult);
 
 	if (outcome.gameEnded) {
 		refreshTopInfo(ctx);
@@ -933,15 +995,25 @@ async function playRound(
 	}
 }
 
+function warnIfSaveFailed(ctx: GameViewContext, saveResult: SaveResult): void {
+	if (!saveResult.ok) {
+		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
+	}
+}
+
 function saveRoundLeftBehind(
 	ctx: GameViewContext,
-	roundSessionId: string | null,
+	owner: RoundOwner,
 	nextState: GameState,
 ): void {
+	const roundSessionId = owner.sessionId;
 	const roundSessionStillExists =
 		roundSessionId !== null && listSessions().includes(roundSessionId);
 	if (roundSessionStillExists) {
-		saveActiveSession(nextState, { sessionId: roundSessionId });
+		saveActiveSession(nextState, {
+			sessionId: roundSessionId,
+			...saveExpectation(owner.lastSavedAt),
+		});
 	}
 	const cachedSessionIsRoundSession = hydratedSessionId === roundSessionId;
 	if (!cachedSessionIsRoundSession) return;

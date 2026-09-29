@@ -34,6 +34,8 @@ const PERSISTENCE_WARNING_MESSAGES: Record<SaveFailureReason, string> = {
 		"Game progress cannot be saved: storage is disabled in your browser. Your session will be lost on refresh.",
 	quota: "Game progress could not be saved: browser storage is full.",
 	unknown: "Game progress could not be saved due to an unexpected error.",
+	stale:
+		"This session changed in another tab — reloaded. Your last round here was not saved.",
 };
 
 export function hidePersistenceWarning(warningEl: HTMLElement | null): void {

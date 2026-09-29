@@ -44,6 +44,24 @@ Each session is a set of localStorage keys under one prefix:
   another session, and for the endgame's new room, which is written under a
   freshly minted id before the pointer moves to it. Without it the only way to
   save was to repoint the active session first.
+- **Saves can refuse to overwrite a newer save (`expectedLastSavedAt`).**
+  Two tabs share one localStorage, so two tabs on the same session used to
+  clobber each other: each held its own `GameState` in memory and wrote it
+  blindly, and whichever saved last erased the other tab's rounds without a
+  sign. `saveActiveSession` now takes an optional `expectedLastSavedAt`,
+  the `meta.lastSavedAt` the caller's in-memory state was loaded or last
+  saved with. When the stored value differs (another tab saved, or the
+  session was removed), the save writes nothing and returns
+  `{ ok: false, reason: "stale" }`. A successful save returns the
+  `lastSavedAt` it wrote, so the caller can carry it into the next save.
+  This is optimistic concurrency on a timestamp with millisecond
+  resolution: two tabs saving in the same millisecond are not told apart,
+  which is rare enough to accept for a single-player game. Callers that
+  omit the option (the bootstrap's first save, the endgame's new room) keep
+  the old unconditional write. `readSessionLastSavedAt`,
+  `isSessionStorageKey` and `isSessionSaveInProgress` let the game view
+  watch another tab's writes; see "Two tabs on one session" in
+  `views.md`.
   - **Fresh writes rely on `engine.dat`.** `dupSession` and `seedFromArchive`
     always write to a freshly minted, unused id, and `archiveSession` clears
     every key under `archive/<id>/` first so a reused id never merges two

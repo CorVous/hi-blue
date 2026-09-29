@@ -40,8 +40,8 @@ export const ARCHIVE_PREFIX = "hi-blue:archive/";
 export const LEGACY_KEY = "hi-blue-game-state";
 
 export type SaveResult =
-	| { ok: true }
-	| { ok: false; reason: "unavailable" | "quota" | "unknown" };
+	| { ok: true; lastSavedAt: string }
+	| { ok: false; reason: "unavailable" | "quota" | "unknown" | "stale" };
 
 export type LoadResult =
 	| { kind: "none" }
@@ -220,7 +220,11 @@ function writeSessionFiles(
 
 export function saveActiveSession(
 	state: GameState,
-	opts?: { createdAt?: string; sessionId?: string | null },
+	opts?: {
+		createdAt?: string;
+		sessionId?: string | null;
+		expectedLastSavedAt?: string;
+	},
 ): SaveResult {
 	const sessionId = opts?.sessionId ?? getActiveSessionId();
 	if (!sessionId) return { ok: false, reason: "unknown" };
@@ -228,6 +232,10 @@ export function saveActiveSession(
 	const now = new Date().toISOString();
 
 	const existingMeta = readMetaFile(SESSIONS_PREFIX, sessionId);
+	const expected = opts?.expectedLastSavedAt;
+	if (expected !== undefined && existingMeta?.lastSavedAt !== expected) {
+		return { ok: false, reason: "stale" };
+	}
 	const epoch =
 		typeof existingMeta?.epoch === "number" ? existingMeta.epoch : 1;
 	const existingCreatedAt =
@@ -262,7 +270,7 @@ export function saveActiveSession(
 		localStorage.setItem(engineKey(SESSIONS_PREFIX, sessionId), files.engine);
 		localStorage.removeItem(markerKey);
 
-		return { ok: true };
+		return { ok: true, lastSavedAt: now };
 	} catch (err) {
 		if (markerWritten && !anyDataKeyWritten) {
 			ignoringStorageErrors(() => localStorage.removeItem(markerKey));
@@ -280,6 +288,25 @@ export function saveActiveSession(
 			}
 		}
 		return { ok: false, reason: "unknown" };
+	}
+}
+
+export function readSessionLastSavedAt(sessionId: string): string | null {
+	const lastSavedAt = readMetaFile(SESSIONS_PREFIX, sessionId)?.lastSavedAt;
+	return typeof lastSavedAt === "string" ? lastSavedAt : null;
+}
+
+export function isSessionStorageKey(key: string, sessionId: string): boolean {
+	return key.startsWith(sessionDir(SESSIONS_PREFIX, sessionId));
+}
+
+export function isSessionSaveInProgress(sessionId: string): boolean {
+	try {
+		return (
+			localStorage.getItem(savingMarkerKey(SESSIONS_PREFIX, sessionId)) !== null
+		);
+	} catch {
+		return false;
 	}
 }
 

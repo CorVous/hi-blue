@@ -22,6 +22,7 @@ import {
 	getSessionInfo,
 	hasLegacySave,
 	isSessionComplete,
+	isSessionSaveInProgress,
 	LEGACY_KEY,
 	listArchivedSessions,
 	listSessions,
@@ -30,6 +31,7 @@ import {
 	loadSession,
 	mintAndActivateNewSession,
 	mintSessionId,
+	readSessionLastSavedAt,
 	rmArchivedSession,
 	rmSession,
 	SESSIONS_PREFIX,
@@ -522,6 +524,73 @@ describe("consecutive saves", () => {
 		if (secondLoad.kind === "ok") {
 			expect(secondLoad.state.isComplete).toBe(false);
 		}
+	});
+});
+
+describe("saveActiveSession expectedLastSavedAt", () => {
+	beforeEach(() => {
+		installLocalStorageStub();
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.restoreAllMocks();
+	});
+
+	it("saves and reports the new lastSavedAt when the stored save is the expected one", () => {
+		const id = mintAndActivateNewSession();
+		vi.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
+		const first = saveActiveSession(makeFreshGame());
+		if (!first.ok) throw new Error("first save failed");
+		vi.setSystemTime(new Date("2025-01-01T00:00:01.000Z"));
+
+		const second = saveActiveSession(makeFreshGame(), {
+			expectedLastSavedAt: first.lastSavedAt,
+		});
+
+		expect(second).toEqual({
+			ok: true,
+			lastSavedAt: "2025-01-01T00:00:01.000Z",
+		});
+		expect(readSessionLastSavedAt(id)).toBe("2025-01-01T00:00:01.000Z");
+	});
+
+	it("refuses with reason stale and leaves storage untouched when another writer saved since", () => {
+		const id = mintAndActivateNewSession();
+		vi.setSystemTime(new Date("2025-01-01T00:00:00.000Z"));
+		const loadedWith = saveActiveSession(makeFreshGame());
+		if (!loadedWith.ok) throw new Error("first save failed");
+		vi.setSystemTime(new Date("2025-01-01T00:00:05.000Z"));
+		saveActiveSession(makeFreshGame());
+		const metaBefore = localStorage.getItem(
+			`${SESSIONS_PREFIX}${id}/meta.json`,
+		);
+		vi.setSystemTime(new Date("2025-01-01T00:00:09.000Z"));
+
+		const result = saveActiveSession(makeFreshGame(), {
+			expectedLastSavedAt: loadedWith.lastSavedAt,
+		});
+
+		expect(result).toEqual({ ok: false, reason: "stale" });
+		expect(localStorage.getItem(`${SESSIONS_PREFIX}${id}/meta.json`)).toBe(
+			metaBefore,
+		);
+		expect(isSessionSaveInProgress(id)).toBe(false);
+	});
+
+	it("refuses with reason stale when the session was removed since", () => {
+		const id = mintAndActivateNewSession();
+		const loadedWith = saveActiveSession(makeFreshGame());
+		if (!loadedWith.ok) throw new Error("first save failed");
+		rmSession(id);
+
+		const result = saveActiveSession(makeFreshGame(), {
+			sessionId: id,
+			expectedLastSavedAt: loadedWith.lastSavedAt,
+		});
+
+		expect(result).toEqual({ ok: false, reason: "stale" });
+		expect(listSessions()).not.toContain(id);
 	});
 });
 
