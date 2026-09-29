@@ -165,8 +165,6 @@ interface RoundOwner {
 	lastSavedAt: string | null;
 }
 
-let gameEndHandled = false;
-
 let session: GameSession | null = null;
 
 let hydratedSessionId: string | null = null;
@@ -279,7 +277,6 @@ function dropSessionIfActivePointerMoved(): void {
 		session !== null && hydratedSessionId !== getActiveSessionId();
 	if (!activePointerMoved) return;
 	releaseSession();
-	gameEndHandled = false;
 }
 
 function releaseSession(): void {
@@ -501,7 +498,6 @@ function mountSessionView(ctx: GameViewContext): void {
 
 	const restoredState = session?.getState();
 	if (restoredState?.isComplete) {
-		gameEndHandled = true;
 		enterEndgame(ctx, restoredState, hydratedSessionId);
 	}
 }
@@ -520,7 +516,6 @@ function adoptSession(
 	for (const aiId of Object.keys(state.personas)) {
 		ctx.lockouts.set(aiId, isPlayerChatLockedOut(state, aiId));
 	}
-	gameEndHandled = false;
 	return adopted;
 }
 
@@ -610,7 +605,6 @@ function reloadChangedSession(
 	{ warn }: { warn: boolean },
 ): void {
 	releaseSession();
-	gameEndHandled = false;
 	void renderGame(ctx.root, ctx.opts);
 	if (warn) showPersistenceWarning(ctx.persistenceWarningEl, "stale");
 }
@@ -1080,8 +1074,6 @@ function applyRoundEvent(
 			setChatLockout(ctx, event.aiId, false);
 			break;
 		case "game_ended":
-			if (gameEndHandled) break;
-			gameEndHandled = true;
 			outcome.gameEnded = true;
 			break;
 	}
@@ -1124,10 +1116,5 @@ function enterEndgame(
 
 	releaseSession();
 
-	showEndgame(ctx.root, endedState, endedSessionId, releaseEndedGame);
-}
-
-function releaseEndedGame(): void {
-	releaseSession();
-	gameEndHandled = false;
+	showEndgame(ctx.root, endedState, endedSessionId, releaseSession);
 }

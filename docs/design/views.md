@@ -122,9 +122,9 @@ it hides the other routes' screens and shows or hides the global chrome
 
 - The endgame screen lives in `game-endgame.ts`. `game.ts` only disables
   the composer, releases the cached session and calls `showEndgame` with the
-  ended state, the ended session's id, and a `releaseEndedGame` callback
-  that clears `session`, `hydratedSessionId` and `gameEndHandled` when a
-  choice leaves the endgame. The endgame never reads `game.ts`'s module
+  ended state, the ended session's id, and `releaseSession` as the
+  `releaseEndedGame` callback, which clears `session`, `hydratedSessionId`
+  and `hydratedLastSavedAt` when a choice leaves the endgame. The endgame never reads `game.ts`'s module
   state directly, so the two files do not import each other in a cycle.
   `transcript-lines.ts` builds the `.msg-line` elements (player and daemon
   lines with mention highlighting) that both the panels and the endgame's
@@ -145,8 +145,8 @@ it hides the other routes' screens and shows or hides the global chrome
   parameter, grouped by concern: bootstrap loading and recovery, restore
   from storage, composer wiring, transcript painting, round dispatch, and
   the endgame. Other state that must outlive one entry (`session`,
-  `hydratedSessionId`, `hydratedEpoch`, `hydratedLastSavedAt`, `gameEndHandled`) stays at module
-  level.
+  `hydratedSessionId`, `hydratedEpoch`, `hydratedLastSavedAt`) stays at
+  module level.
 - **One context per page.** The route is re-entered without a reload:
   toggling the session picker, Escape, Load, the bootstrap handover and the
   endgame choices all call `renderGame` again on the same persistent DOM.
@@ -199,8 +199,10 @@ it hides the other routes' screens and shows or hides the global chrome
   a page refresh. When the pointer has moved (`activePointerMoved`), the
   cached session is dropped so that the restore path loads the new session
   instead of re-rendering the old one.
-- `gameEndHandled` stops a second `game_ended` event from binding the endgame
-  handlers again. It is reset whenever a session is set up.
+- A round enters the endgame at most once without a guard flag:
+  `encodeRoundResult` emits at most one `game_ended` per round, and
+  `enterEndgame` releases the cached session, so no further round can run
+  until a new session is mounted.
 - **Two tabs on one session.** localStorage is shared by every tab of the
   origin, but each tab caches its own `GameSession`. `hydratedLastSavedAt`
   records the `meta.lastSavedAt` the cached session was loaded (or last
