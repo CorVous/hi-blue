@@ -70,29 +70,6 @@ function drawNewWeather(current: string, rng: () => number): string {
 	return candidates[idx]!;
 }
 
-function isObstacleShiftAvailable(
-	world: WorldState,
-	personaSpatial: GameState["personaSpatial"],
-): boolean {
-	const occupied = occupiedCellKeys(world, personaSpatial);
-
-	for (const entity of world.entities) {
-		if (entity.kind !== "obstacle") continue;
-		const h = entity.holder;
-		if (typeof h !== "object" || h === null) continue;
-
-		const obstacleCell: GridPosition = h;
-
-		for (const dir of CARDINAL_DIRECTIONS) {
-			if (isNeighborCellFree(applyDirection(obstacleCell, dir), occupied)) {
-				return true;
-			}
-		}
-	}
-
-	return false;
-}
-
 function validObstacleShiftTuples(
 	world: WorldState,
 	personaSpatial: GameState["personaSpatial"],
@@ -134,7 +111,7 @@ function availableComplicationTypes(
 		pool.push("tool_disable");
 	}
 
-	if (isObstacleShiftAvailable(world, personaSpatial)) {
+	if (validObstacleShiftTuples(world, personaSpatial).length > 0) {
 		pool.push("obstacle_shift");
 	}
 

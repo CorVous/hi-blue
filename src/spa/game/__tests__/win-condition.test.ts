@@ -23,7 +23,6 @@ import {
 	outcomeOfCompletedGame,
 } from "../win-condition";
 import { TEST_PERSONAS } from "./fixtures/make-game-state";
-import { makeTestPack } from "./fixtures/make-test-pack";
 
 type Holder = WorldEntity["holder"];
 type SatisfactionState = Objective["satisfactionState"];
@@ -389,8 +388,6 @@ describe("outcomeOfCompletedGame", () => {
 });
 
 describe("checkPlacementFlavor", () => {
-	const PACK = makeTestPack([], { setting: "test", wallName: "wall" });
-
 	function itemAction(
 		name: "put_down" | "use" | "pick_up",
 		itemId: string,
@@ -433,7 +430,7 @@ describe("checkPlacementFlavor", () => {
 		]),
 	)("%s", (_name, { action, flavor, expected }) => {
 		const world = gemOnAltar({ row: 2, col: 2 }, flavor);
-		expect(checkPlacementFlavor(action, PACK, world)).toBe(expected);
+		expect(checkPlacementFlavor(action, world)).toBe(expected);
 	});
 
 	it.each(
@@ -503,7 +500,7 @@ describe("checkPlacementFlavor", () => {
 			},
 		]),
 	)("returns null when %s", (_name, { action, world }) => {
-		expect(checkPlacementFlavor(action, PACK, world)).toBeNull();
+		expect(checkPlacementFlavor(action, world)).toBeNull();
 	});
 });
 

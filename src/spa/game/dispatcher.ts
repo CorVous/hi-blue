@@ -1,5 +1,7 @@
 import {
+	obstaclePositions,
 	pairedSpaceHoldingItem,
+	pickableEntities,
 	withinInteractionRange,
 } from "./available-tools.js";
 import {
@@ -11,9 +13,8 @@ import {
 	positionsEqual,
 } from "./direction.js";
 import {
-	appendActionFailure,
+	appendLogEntry,
 	appendMessage,
-	appendWitnessedEvent,
 	deductBudget,
 	isDaemonExhausted,
 } from "./engine";
@@ -32,7 +33,6 @@ import type {
 	PhysicalActionRecord,
 	RoundActionRecord,
 	ToolCall,
-	WorldEntity,
 } from "./types";
 import { vistaContains } from "./vista-projector.js";
 import {
@@ -55,22 +55,6 @@ export interface DispatchResult {
 }
 
 const DROP_CELL_WITHOUT_SPATIAL_STATE: GridPosition = { row: 0, col: 0 };
-
-function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
-	return entities.filter(
-		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
-	);
-}
-
-function obstaclePositions(entities: WorldEntity[]): GridPosition[] {
-	return entities
-		.filter((e) => e.kind === "obstacle")
-		.map((e) => {
-			const h = e.holder;
-			return isGridPosition(h) ? h : null;
-		})
-		.filter((pos): pos is GridPosition => pos !== null);
-}
 
 export function validateToolCall(
 	game: GameState,
@@ -441,7 +425,7 @@ export function dispatchAiTurn(
 
 			const pairPlacementFlavor =
 				action.toolCall.name === "put_down" || action.toolCall.name === "use"
-					? checkPlacementFlavor(action, state.contentPack, state.world)
+					? checkPlacementFlavor(action, state.world)
 					: null;
 			const activationFlavor =
 				action.toolCall.name === "use"
@@ -554,7 +538,7 @@ export function dispatchAiTurn(
 								? { placementFlavorRaw: physRecord.placementFlavorRaw }
 								: {}),
 						};
-						state = appendWitnessedEvent(state, witnessId, witnessEntry);
+						state = appendLogEntry(state, witnessId, witnessEntry);
 					}
 				}
 			}
@@ -565,7 +549,7 @@ export function dispatchAiTurn(
 				kind: "tool_failure",
 				description: `${game.personas[aiId]?.name ?? aiId} tried to ${action.toolCall.name} ${action.toolCall.args.item ?? action.toolCall.args.direction ?? ""} but failed: ${validation.reason}`,
 			});
-			state = appendActionFailure(state, aiId, {
+			state = appendLogEntry(state, aiId, {
 				kind: "action-failure",
 				round,
 				tool: action.toolCall.name,

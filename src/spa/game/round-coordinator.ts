@@ -9,10 +9,9 @@ import {
 import { dispatchAiTurn } from "./dispatcher";
 import {
 	advanceRound,
+	appendLogEntry,
 	appendMessage,
 	appendPrivateSystemNotice,
-	appendWitnessedConvergence,
-	appendWitnessedObstacleShift,
 	FAREWELL_LINE,
 	isDaemonExhausted,
 	resolveToolDisables,
@@ -566,7 +565,7 @@ function shiftObstacle(
 			toCell: shift.toCell,
 			flavor: obstacle.shiftFlavor ?? "",
 		};
-		state = appendWitnessedObstacleShift(state, daemonId, entry);
+		state = appendLogEntry(state, daemonId, entry);
 	}
 	return state;
 }
@@ -651,7 +650,7 @@ function evaluateConvergenceObjectives(game: GameState): GameState {
 				flavor: isOccupant ? actorFlavor : witnessFlavor,
 				audience: isOccupant ? "actor" : "witness",
 			};
-			state = appendWitnessedConvergence(state, daemonId, entry);
+			state = appendLogEntry(state, daemonId, entry);
 		}
 
 		const convergenceComplete = tier === 2;

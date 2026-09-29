@@ -251,44 +251,16 @@ export function appendMessage(
 	return { ...game, conversationLogs: logs };
 }
 
-export function appendWitnessedEvent(
+export function appendLogEntry(
 	game: GameState,
-	witnessId: AiId,
-	entry: Extract<ConversationEntry, { kind: "witnessed-event" }>,
+	aiId: AiId,
+	entry: ConversationEntry,
 ): GameState {
 	return {
 		...game,
 		conversationLogs: {
 			...game.conversationLogs,
-			[witnessId]: [...(game.conversationLogs[witnessId] ?? []), entry],
-		},
-	};
-}
-
-export function appendWitnessedConvergence(
-	game: GameState,
-	witnessId: AiId,
-	entry: Extract<ConversationEntry, { kind: "witnessed-convergence" }>,
-): GameState {
-	return {
-		...game,
-		conversationLogs: {
-			...game.conversationLogs,
-			[witnessId]: [...(game.conversationLogs[witnessId] ?? []), entry],
-		},
-	};
-}
-
-export function appendWitnessedObstacleShift(
-	game: GameState,
-	witnessId: AiId,
-	entry: Extract<ConversationEntry, { kind: "witnessed-obstacle-shift" }>,
-): GameState {
-	return {
-		...game,
-		conversationLogs: {
-			...game.conversationLogs,
-			[witnessId]: [...(game.conversationLogs[witnessId] ?? []), entry],
+			[aiId]: [...(game.conversationLogs[aiId] ?? []), entry],
 		},
 	};
 }
@@ -314,37 +286,16 @@ export function setWeather(game: GameState, weather: string): GameState {
 	};
 }
 
-export function appendActionFailure(
-	game: GameState,
-	actorId: AiId,
-	entry: Extract<ConversationEntry, { kind: "action-failure" }>,
-): GameState {
-	return {
-		...game,
-		conversationLogs: {
-			...game.conversationLogs,
-			[actorId]: [...(game.conversationLogs[actorId] ?? []), entry],
-		},
-	};
-}
-
 export function appendPrivateSystemNotice(
 	game: GameState,
 	recipientId: AiId,
 	content: string,
 ): GameState {
-	const entry: ConversationEntry = {
+	return appendLogEntry(game, recipientId, {
 		kind: "broadcast",
 		round: game.round,
 		content,
-	};
-	return {
-		...game,
-		conversationLogs: {
-			...game.conversationLogs,
-			[recipientId]: [...(game.conversationLogs[recipientId] ?? []), entry],
-		},
-	};
+	});
 }
 
 export function resolveToolDisables(game: GameState): {

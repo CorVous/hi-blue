@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceRound, appendActionFailure, appendMessage } from "../engine";
+import { advanceRound, appendLogEntry, appendMessage } from "../engine";
 import {
 	buildOpenAiMessages,
 	buildSilentTurn,
@@ -502,7 +502,7 @@ describe("multi-id roundtrip replay shapes (#238)", () => {
 describe("buildOpenAiMessages — action-failure entries", () => {
 	it("action-failure entry is emitted as role: 'user' with rendered content", () => {
 		let game = makeTestGame();
-		game = appendActionFailure(game, "red", {
+		game = appendLogEntry(game, "red", {
 			kind: "action-failure",
 			round: 0,
 			tool: "go",
@@ -527,7 +527,7 @@ describe("buildOpenAiMessages — action-failure entries", () => {
 
 	it("action-failure entries interleave with message and witnessed-event entries by round (stable sort)", () => {
 		let game = makeTestGame();
-		game = appendActionFailure(game, "red", {
+		game = appendLogEntry(game, "red", {
 			kind: "action-failure",
 			round: 0,
 			tool: "go",

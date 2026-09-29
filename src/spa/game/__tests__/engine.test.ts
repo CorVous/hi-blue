@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
 	advanceRound,
-	appendActionFailure,
 	appendBroadcast,
+	appendLogEntry,
 	appendMessage,
 	deductBudget,
 	isDaemonExhausted,
@@ -298,7 +298,7 @@ describe("appendBroadcast", () => {
 	});
 });
 
-describe("appendActionFailure", () => {
+describe("appendLogEntry", () => {
 	it("appends a single action-failure entry to the actor's log", () => {
 		const game = startGame(TEST_PERSONAS, TEST_CONTENT_PACK, {
 			budgetPerAi: 5,
@@ -309,7 +309,7 @@ describe("appendActionFailure", () => {
 			tool: "go" as const,
 			reason: "That cell is blocked by an obstacle",
 		};
-		const updated = appendActionFailure(game, "red", entry);
+		const updated = appendLogEntry(game, "red", entry);
 		const redLog = updated.conversationLogs.red ?? [];
 		expect(redLog).toHaveLength(1);
 		expect(redLog[0]).toEqual(entry);
@@ -325,7 +325,7 @@ describe("appendActionFailure", () => {
 			tool: "go" as const,
 			reason: "blocked",
 		};
-		const updated = appendActionFailure(game, "red", entry);
+		const updated = appendLogEntry(game, "red", entry);
 		expect(updated.conversationLogs.green ?? []).toHaveLength(0);
 		expect(updated.conversationLogs.cyan ?? []).toHaveLength(0);
 	});
@@ -344,8 +344,8 @@ describe("appendActionFailure", () => {
 			tool: "put_down" as const,
 			reason: "second",
 		};
-		game = appendActionFailure(game, "red", entry1);
-		game = appendActionFailure(game, "red", entry2);
+		game = appendLogEntry(game, "red", entry1);
+		game = appendLogEntry(game, "red", entry2);
 		const redLog = game.conversationLogs.red ?? [];
 		expect(redLog).toHaveLength(2);
 		expect(redLog[0]).toEqual(entry1);

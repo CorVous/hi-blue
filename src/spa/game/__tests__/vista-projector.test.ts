@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GridPosition } from "../direction";
-import { directionDelta, GRID_COLS, GRID_ROWS, inBounds } from "../direction";
+import { applyDirection, GRID_COLS, GRID_ROWS, inBounds } from "../direction";
 import type { VistaAxisStep, VistaCell, VistaOffset } from "../vista-projector";
 import { inVista, projectVista, VISTA_OFFSETS } from "../vista-projector";
 
@@ -73,9 +73,9 @@ function stepsOffset(steps: readonly VistaAxisStep[]): [number, number] {
 	let dx = 0;
 	let dy = 0;
 	for (const step of steps) {
-		const d = directionDelta(step.direction);
-		dx += d.dcol * step.distance;
-		dy += -d.drow * step.distance;
+		const unit = applyDirection({ row: 0, col: 0 }, step.direction);
+		dx += unit.col * step.distance;
+		dy += -unit.row * step.distance;
 	}
 	return [dx, dy];
 }

@@ -3,7 +3,6 @@ import type {
 	AiId,
 	AiTurnAction,
 	CarryObjective,
-	ContentPack,
 	ConvergenceObjective,
 	GameState,
 	Objective,
@@ -119,7 +118,6 @@ export function outcomeOfCompletedGame(
 
 export function checkPlacementFlavor(
 	action: AiTurnAction,
-	_contentPack: ContentPack,
 	world: WorldState,
 ): string | null {
 	const toolCall = action.toolCall;

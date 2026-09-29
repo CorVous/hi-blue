@@ -17,7 +17,7 @@ export interface GridPosition {
 	col: number;
 }
 
-export function directionDelta(dir: CardinalDirection): {
+function directionDelta(dir: CardinalDirection): {
 	drow: number;
 	dcol: number;
 } {
@@ -45,14 +45,6 @@ export function inBounds(pos: GridPosition): boolean {
 	return (
 		pos.row >= 0 && pos.row < GRID_ROWS && pos.col >= 0 && pos.col < GRID_COLS
 	);
-}
-
-export function manhattan(a: GridPosition, b: GridPosition): number {
-	return Math.abs(a.row - b.row) + Math.abs(a.col - b.col);
-}
-
-export function areAdjacent4(a: GridPosition, b: GridPosition): boolean {
-	return manhattan(a, b) === 1;
 }
 
 export function positionsEqual(a: GridPosition, b: GridPosition): boolean {

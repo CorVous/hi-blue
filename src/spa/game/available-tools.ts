@@ -42,13 +42,13 @@ export function pairedSpaceHoldingItem(
 	);
 }
 
-function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
+export function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
 	return entities.filter(
 		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
 	);
 }
 
-function obstaclePositions(entities: WorldEntity[]): GridPosition[] {
+export function obstaclePositions(entities: WorldEntity[]): GridPosition[] {
 	return entities
 		.filter((e) => e.kind === "obstacle")
 		.map((e) => {
