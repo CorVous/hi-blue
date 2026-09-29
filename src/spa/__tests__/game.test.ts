@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GAME_SAVE_VERSION } from "../../save-serializer";
+import { BOOTSTRAP_LOADING_TIMEOUT_MS } from "../views/game-bootstrap-flow.js";
 import {
 	installLocalStorageStub,
 	type LocalStorageStub,
@@ -2483,7 +2484,6 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
-		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../views/game.js");
 		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
 		await vi.runAllTimersAsync();
 
@@ -2532,9 +2532,7 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		);
 		const stalled = startBootstrap();
 
-		const { renderGame, BOOTSTRAP_LOADING_TIMEOUT_MS } = await import(
-			"../views/game.js"
-		);
+		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
 		await renderPromise;
@@ -2639,7 +2637,6 @@ describe("renderBootstrapLoadingFlow — timeout", () => {
 		const { renderGame } = await import("../views/game.js");
 		const renderPromise = renderGame(getEl<HTMLElement>("main"));
 
-		const { BOOTSTRAP_LOADING_TIMEOUT_MS } = await import("../views/game.js");
 		await vi.advanceTimersByTimeAsync(BOOTSTRAP_LOADING_TIMEOUT_MS + 1);
 		await vi.runAllTimersAsync();
 		await renderPromise;
@@ -2737,7 +2734,7 @@ describe("renderBootstrapLoadingFlow — re-entry and a moved active pointer", (
 
 		expect(getEl("#panels").hasAttribute("hidden")).toBe(false);
 		const loadingTimeouts = setTimeoutSpy.mock.calls.filter(
-			([, delay]) => delay === game.BOOTSTRAP_LOADING_TIMEOUT_MS,
+			([, delay]) => delay === BOOTSTRAP_LOADING_TIMEOUT_MS,
 		);
 		expect(loadingTimeouts).toHaveLength(1);
 

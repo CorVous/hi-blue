@@ -83,8 +83,6 @@ import {
 	transcriptMessageLine,
 } from "./transcript-lines.js";
 
-export { BOOTSTRAP_LOADING_TIMEOUT_MS } from "./game-bootstrap-flow.js";
-
 const UNSET_PROMPT_TARGET = "/?????";
 
 const DAEMON_FOOTER_STATE_BY_PHASE: Partial<

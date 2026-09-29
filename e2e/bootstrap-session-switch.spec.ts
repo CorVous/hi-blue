@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { BOOTSTRAP_LOADING_TIMEOUT_MS } from "../src/spa/views/game-bootstrap-flow.js";
 import {
 	classifyJsonRequest,
 	expectNoPageErrors,
@@ -9,7 +10,6 @@ import {
 
 const SEEDED_SESSION = "0xAAAA";
 const HANDOVER_SETTLE_MS = 1_000;
-const BOOTSTRAP_LOADING_TIMEOUT_MS = 300_000;
 
 async function holdContentPacks(page: Page) {
 	let requests = 0;
