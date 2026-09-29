@@ -85,9 +85,52 @@ function makeFreshGame(): GameState {
 }
 
 describe("mintSessionId", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it("matches /^0x[0-9A-F]{4}$/", () => {
 		const id = mintSessionId();
 		expect(id).toMatch(/^0x[0-9A-F]{4}$/);
+	});
+
+	it("can mint 0xFFFF at the top of the range", () => {
+		installLocalStorageStub();
+		vi.spyOn(Math, "random").mockReturnValue(0.99999999);
+		expect(mintSessionId()).toBe("0xFFFF");
+	});
+
+	it("re-rolls while the id is taken under sessions/ or archive/", () => {
+		installLocalStorageStub({
+			[`${SESSIONS_PREFIX}0x0000/meta.json`]: "{}",
+			[`${ARCHIVE_PREFIX}0x0001/engine.dat`]: "x",
+		});
+		vi.spyOn(Math, "random")
+			.mockReturnValueOnce(0)
+			.mockReturnValueOnce(1 / 0x10000)
+			.mockReturnValueOnce(2 / 0x10000);
+		expect(mintSessionId()).toBe("0x0002");
+	});
+
+	it("dupSession and seedFromArchive never reuse an existing id", async () => {
+		installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		await archiveSession(id);
+		const takenValue = Number.parseInt(id.slice(2), 16) / 0x10000;
+		const freeValue =
+			((Number.parseInt(id.slice(2), 16) + 1) % 0x10000) / 0x10000;
+		const random = vi.spyOn(Math, "random");
+
+		random.mockReturnValueOnce(takenValue).mockReturnValueOnce(freeValue);
+		const dupId = dupSession(id);
+		expect(dupId).not.toBe(id);
+
+		random.mockReturnValueOnce(takenValue).mockReturnValueOnce(freeValue);
+		rmSession(dupId);
+		const seededId = seedFromArchive(id, makeFreshGame());
+		expect(seededId).not.toBe(id);
+		expect(loadArchivedSession(id).kind).toBe("ok");
 	});
 });
 
@@ -187,6 +230,40 @@ describe("saveActiveSession", () => {
 		const result = saveActiveSession(game);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.reason).toBe("quota");
+	});
+
+	it.each([
+		"meta.json",
+		".txt",
+		"engine.dat",
+	])("a re-save that fails writing %s leaves the session broken, not the old engine", (failingSuffix) => {
+		const stub = installLocalStorageStub();
+		mintAndActivateNewSession();
+		expect(saveActiveSession(makeFreshGame()).ok).toBe(true);
+		expect(loadActiveSession().kind).toBe("ok");
+
+		stub.setItem.mockImplementation((key: string, value: string) => {
+			if (key.endsWith(failingSuffix)) {
+				throw new DOMException("quota", "QuotaExceededError");
+			}
+			stub._store[key] = value;
+		});
+		const result = saveActiveSession(makeFreshGame());
+		expect(result).toEqual({ ok: false, reason: "quota" });
+		expect(loadActiveSession().kind).toBe("broken");
+	});
+
+	it("preserves createdAt from the existing meta.json on re-save", () => {
+		installLocalStorageStub();
+		mintAndActivateNewSession();
+		const game = makeFreshGame();
+		saveActiveSession(game, { createdAt: "2024-01-01T00:00:00.000Z" });
+		saveActiveSession(game);
+		const loaded = loadActiveSession();
+		expect(loaded.kind).toBe("ok");
+		if (loaded.kind === "ok") {
+			expect(loaded.createdAt).toBe("2024-01-01T00:00:00.000Z");
+		}
 	});
 
 	it("returns ok: false reason: unavailable on SecurityError", () => {
@@ -710,6 +787,31 @@ describe("archiveSession", () => {
 			(k) => k.startsWith(dstPrefix) && k.endsWith(".txt"),
 		);
 		expect(daemonKeys.length).toBeGreaterThan(0);
+	});
+
+	it("replaces an existing archive under the same id instead of merging", async () => {
+		const stub = installLocalStorageStub();
+		const id = mintAndActivateNewSession();
+		saveActiveSession(makeFreshGame());
+		const dstPrefix = `${ARCHIVE_PREFIX}${id}/`;
+		stub._store[`${dstPrefix}stale.txt`] = JSON.stringify({
+			aiId: "stale",
+			persona: TEST_PERSONAS.red,
+			conversationLog: [],
+		});
+
+		await archiveSession(id);
+
+		expect(stub._store[`${dstPrefix}stale.txt`]).toBeUndefined();
+		const archived = loadArchivedSession(id);
+		expect(archived.kind).toBe("ok");
+		if (archived.kind === "ok") {
+			expect(Object.keys(archived.state.personas).sort()).toEqual([
+				"cyan",
+				"green",
+				"red",
+			]);
+		}
 	});
 
 	it("engine.dat is written LAST in archive namespace", async () => {

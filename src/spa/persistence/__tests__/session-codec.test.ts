@@ -683,6 +683,21 @@ describe("serializeSession / deserializeSession", () => {
 		expect(result.kind).toBe("broken");
 	});
 
+	it.each([
+		["missing", { aiId: "red", conversationLog: [] }],
+		["null", { aiId: "red", persona: null, conversationLog: [] }],
+		["a string", { aiId: "red", persona: "Ember", conversationLog: [] }],
+		["an array", { aiId: "red", persona: [], conversationLog: [] }],
+	])("broken: daemon file parses but its persona is %s", (_label, daemon) => {
+		const game = makeFreshGame();
+		const files = serializeSession(game, NOW, CREATED_AT);
+		const result = deserializeSession({
+			...files,
+			daemons: { ...files.daemons, red: JSON.stringify(daemon) },
+		});
+		expect(result.kind).toBe("broken");
+	});
+
 	it("version-mismatch: stale schemaVersion in sealed engine", () => {
 		const game = makeFreshGame();
 		const files = serializeSession(game, NOW, CREATED_AT);

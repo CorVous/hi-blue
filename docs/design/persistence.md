@@ -20,9 +20,16 @@ Each session is a set of localStorage keys under one prefix:
 
 - **`engine.dat` is the commit signal.** Every writer (`saveActiveSession`,
   `dupSession`, `archiveSession`, `seedFromArchive`) writes it in this order:
-  meta, then daemons, then `engine.dat`. There is no rollback. If a write fails
-  partway, `engine.dat` is missing, and the load path reports the session as
-  `broken`.
+  meta, then daemons, then `engine.dat`. A writer that can overwrite an
+  existing save first takes the old `engine.dat` away: `saveActiveSession`
+  removes it before writing meta, and `archiveSession` clears every key under
+  `archive/<id>/` so a reused id never merges two games. `dupSession` and
+  `seedFromArchive` always write to a freshly minted, unused id. There is no
+  rollback. If a write fails partway, `engine.dat` is missing, and the load
+  path reports the session as `broken`. Otherwise a failed re-save would leave
+  new meta and daemons beside the previous `engine.dat`, and that mix would
+  load as `ok`. The cost is that a re-save failing on its very first write
+  also loses the previous save: a known `broken` beats a silently torn `ok`.
 - **Minted but never saved.** If neither `meta.json` nor `engine.dat` exists,
   the id was minted but never written. The loader reports `none`, so the
   dispatcher sends the player to start. The picker shows it as `broken`
@@ -37,12 +44,17 @@ Each session is a set of localStorage keys under one prefix:
 - **`clearActiveSession` vs `deactivateActiveSession`.** A broken session is
   deleted. A version-mismatch session only loses the active pointer. Its bytes
   stay, so the picker can link it to the archived build that still reads it.
-- **Session ids** are `0x` plus 4 upper-case hex digits (`mintSessionId`).
+- **Session ids** are `0x` plus 4 upper-case hex digits (`mintSessionId`),
+  drawn uniformly from `0x0000` to `0xFFFF`. Minting re-rolls while the id
+  already has keys under `sessions/` or `archive/`, so a new game can never
+  land on top of an existing or archived one.
   `mintSession` returns a new id without activating it.
   `mintAndActivateNewSession` also sets the pointer.
-- **Epoch.** It survives re-saves (read back from the existing `meta.json`).
-  `seedFromArchive` increments it. The version-mismatch picker row accepts the
-  pre-v6 `phase` meta field as the epoch.
+- **Epoch and `createdAt`.** Both survive re-saves (read back from the
+  existing `meta.json`). An explicit `createdAt` passed to
+  `saveActiveSession` still wins. `seedFromArchive` increments the epoch. The
+  version-mismatch picker row accepts the pre-v6 `phase` meta field as the
+  epoch.
 - **Archived meta** carries `readonly: true` and `lastPlayedAt`. Active
   sessions have neither field.
 - **`seedFromArchive`** deep-copies the archived conversation logs into a fresh
@@ -56,6 +68,9 @@ Each session is a set of localStorage keys under one prefix:
   implementation-defined, so without it a restore could shuffle the panels.
   Saves written before this field existed fall back to daemon-file key order.
   A daemon file that `personaOrder` does not list is still restored.
+- **A daemon file must carry an object `persona`.** A `.txt` that parses as
+  JSON but has no `persona` object (a likely hand edit, ADR 0004) makes the
+  load `broken` instead of restoring a Daemon with no persona.
 - **`actionProfile` is spread in only when it is set.** Saves written with the
   feature off stay byte-identical to saves from before the field existed.
 - **`StoredSealedEngine` vs `SealedEngine`.** The payload read from disk types

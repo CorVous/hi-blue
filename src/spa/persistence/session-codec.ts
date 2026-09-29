@@ -11,11 +11,7 @@ import type {
 	WorldState,
 } from "../game/types.js";
 import { outcomeOfCompletedGame } from "../game/win-condition.js";
-import {
-	deobfuscate,
-	obfuscate,
-	SealedBlobCorrupt,
-} from "./sealed-blob-codec.js";
+import { deobfuscate, obfuscate } from "./sealed-blob-codec.js";
 import {
 	checkVersionCompatibility,
 	liveVersionBoundary,
@@ -148,6 +144,12 @@ function schemaAsArchivedBuildReadsIt(storedSchema: number): number {
 		: storedSchema;
 }
 
+function isDaemonFileShape(parsed: unknown): parsed is DaemonFile {
+	if (!parsed || typeof parsed !== "object") return false;
+	const persona: unknown = (parsed as { persona?: unknown }).persona;
+	return !!persona && typeof persona === "object" && !Array.isArray(persona);
+}
+
 export function deserializeSession(
 	files: SerializedSessionFiles,
 	boundary: VersionBoundary = liveVersionBoundary(),
@@ -157,8 +159,7 @@ export function deserializeSession(
 	let sealedJson: string;
 	try {
 		sealedJson = deobfuscate(files.engine);
-	} catch (e) {
-		if (e instanceof SealedBlobCorrupt) return { kind: "broken" };
+	} catch {
 		return { kind: "broken" };
 	}
 
@@ -195,8 +196,8 @@ export function deserializeSession(
 	for (const [aiId, daemonJson] of Object.entries(files.daemons)) {
 		try {
 			const parsed = JSON.parse(daemonJson);
-			if (!parsed || typeof parsed !== "object") return { kind: "broken" };
-			daemonFiles[aiId] = parsed as DaemonFile;
+			if (!isDaemonFileShape(parsed)) return { kind: "broken" };
+			daemonFiles[aiId] = parsed;
 		} catch {
 			return { kind: "broken" };
 		}
