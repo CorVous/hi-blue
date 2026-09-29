@@ -236,6 +236,15 @@ describe("prompt-builder — spatial 'Where you are' section (current-state user
 		expect(ctx.toSystemPrompt()).not.toContain("<where_you_are>");
 	});
 
+	it("frames the remaining budget as covering the whole game, not a phase", () => {
+		const ctx = buildAiContext(makeTestGame({ rng: () => 0 }), "red");
+		const stateMsg = ctx.toCurrentStateUserMessage();
+		expect(stateMsg).toMatch(
+			/Budget: \$\d+\.\d{5} of API spend remaining for the whole game\./,
+		);
+		expect(stateMsg).not.toMatch(/phase/i);
+	});
+
 	it("omits any per-round direction anchor from the current-state user turn", () => {
 		const ctx = buildAiContext(makeTestGame({ rng: () => 0 }), "red");
 		const stateMsg = ctx.toCurrentStateUserMessage();

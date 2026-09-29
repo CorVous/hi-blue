@@ -751,7 +751,7 @@ function renderCurrentState(ctx: AiContext): string {
 		lines.push("(no spatial data)");
 	}
 	lines.push(
-		`Budget: $${Math.max(0, ctx.budget.remaining).toFixed(5)} of API spend remaining this phase.`,
+		`Budget: $${Math.max(0, ctx.budget.remaining).toFixed(5)} of API spend remaining for the whole game.`,
 	);
 	lines.push("</where_you_are>");
 	lines.push("");
