@@ -47,13 +47,19 @@ if (sessionsIconBtn) {
 	});
 }
 
+function isTypingInVisibleField(target: EventTarget | null): boolean {
+	const isTextField =
+		target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+	if (!isTextField) return false;
+	return !target.disabled && target.closest("[hidden]") === null;
+}
+
 document.addEventListener("keydown", (e) => {
 	if (e.key !== "Escape") return;
 	if (!isPickerOpen()) return;
 	const byokDialog = document.querySelector<HTMLDialogElement>("#byok-dialog");
 	if (byokDialog?.open) return;
-	const tag = (e.target as HTMLElement | null)?.tagName;
-	if (tag === "INPUT" || tag === "TEXTAREA") return;
+	if (isTypingInVisibleField(e.target)) return;
 	setPickerOpen(false);
 	renderApp(rootEl);
 });

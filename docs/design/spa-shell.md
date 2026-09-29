@@ -40,8 +40,13 @@ re-render is a call to `renderApp` from a view.
   reason reaches the banner. Otherwise, `pickerOpen` shows the picker with no
   reason, because the user opened it. Otherwise, the verdict's route
   determines the view.
-- **Escape closes the picker** unless the BYOK dialog is open or focus is in
-  an input or textarea.
+- **Escape closes the picker** unless the BYOK dialog is open or the player
+  is typing in a visible, enabled input or textarea
+  (`isTypingInVisibleField`). The picker hides the composer, but `#prompt`
+  can keep focus inside the hidden form (the player sent a round and then
+  opened the picker without clicking elsewhere, or the browser does not move
+  focus to the icon button). A plain "focus is in an input" check then
+  swallowed every Escape until the player clicked somewhere.
 
 ## BBS chrome (`bbs-chrome.ts`)
 

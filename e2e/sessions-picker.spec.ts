@@ -441,3 +441,49 @@ test("[ + new session ] flow: click → start view, new active pointer", async (
 
 	await expectNoPageErrors(page, pageErrors);
 });
+
+test("Escape closes the picker while the hidden prompt still holds focus", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await goToGame(page);
+	await page.locator("#sessions-icon").click();
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+	await expect(page.locator("#composer")).toBeHidden();
+
+	await page.evaluate(() => {
+		document
+			.querySelector("#prompt")
+			?.dispatchEvent(
+				new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+			);
+	});
+	await expect(page.locator('main[data-view="game"]')).toBeAttached();
+	await expect(page.locator("#composer")).toBeVisible();
+
+	await expectNoPageErrors(page, pageErrors);
+});
+
+test("Escape in a visible text field on the picker leaves the picker open", async ({
+	page,
+}) => {
+	const pageErrors: Error[] = [];
+	page.on("pageerror", (err) => pageErrors.push(err));
+
+	await goToGame(page);
+	await page.locator("#sessions-icon").click();
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+
+	await page.evaluate(() => {
+		const field = document.createElement("input");
+		document.querySelector("#sessions-screen")?.appendChild(field);
+		field.dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+		);
+	});
+	await expect(page.locator('main[data-view="sessions"]')).toBeAttached();
+
+	await expectNoPageErrors(page, pageErrors);
+});
