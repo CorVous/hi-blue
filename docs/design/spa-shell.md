@@ -76,7 +76,12 @@ re-render is a call to `renderApp` from a view.
     edited it since.
   - Only one validation runs at a time (`runExclusiveValidation`). A second
     click on Validate & save or Re-validate while a request is out is
-    ignored, so one key is not checked, and written, twice.
+    ignored, so one key is not checked, and written, twice; the status line
+    says "Validation in progress…" so the click does not look dead. The
+    request is aborted after `KEY_VALIDATION_TIMEOUT_MS` (15 s) and then
+    counts as a network failure, so a stalled fetch cannot hold the lock
+    forever. An abort while the body is being read also counts as a network
+    failure, not as an unparseable 200.
   - A 200 response that reports `usage >= limit` is treated as a 402.
   - A 200 response whose body cannot be parsed counts as validated
     (`readAuthKeyInfoOrNull` returns `null`). The endpoint has already

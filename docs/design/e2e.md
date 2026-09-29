@@ -199,6 +199,7 @@ specs that assert on generation failure check `#cap-hit` themselves.
 | `dev-inspector` | The dev world map in a real browser: a 5×5 room-only board, markers that carry identity only, the focus Vista tint, and narrow viewports. | #540, ADR 0015 |
 | `mobile-overflow` | The app shell does not overflow horizontally at phone widths. | #554 |
 | `responsive-bento` | The ≤720px bento layout, strip-card previews, and the mobile header. | |
+| `byok-validation` | A key validation whose `/api/v1/auth/key` request never answers: a second click says "Validation in progress…" and sends nothing, the request is aborted after 15 s (fast-forwarded with `page.clock`) and offers Save unverified, and the button validates again afterwards. | |
 
 ### Notes on individual specs
 

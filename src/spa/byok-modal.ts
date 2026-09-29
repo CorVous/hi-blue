@@ -19,14 +19,32 @@ export type KeyMeta = {
 	keySuffix: string;
 };
 
+export const KEY_VALIDATION_TIMEOUT_MS = 15_000;
+
 export async function validateOpenRouterKey(
 	key: string,
 	fetchImpl: typeof fetch = fetch,
+	timeoutMs: number = KEY_VALIDATION_TIMEOUT_MS,
+): Promise<ValidationResult> {
+	const abortController = new AbortController();
+	const abortTimer = setTimeout(() => abortController.abort(), timeoutMs);
+	try {
+		return await requestKeyValidation(key, fetchImpl, abortController.signal);
+	} finally {
+		clearTimeout(abortTimer);
+	}
+}
+
+async function requestKeyValidation(
+	key: string,
+	fetchImpl: typeof fetch,
+	signal: AbortSignal,
 ): Promise<ValidationResult> {
 	let response: Response;
 	try {
 		response = await fetchImpl("https://openrouter.ai/api/v1/auth/key", {
 			headers: { Authorization: `Bearer ${key}` },
+			signal,
 		});
 	} catch {
 		return { kind: "network-or-5xx", status: null };
@@ -42,6 +60,7 @@ export async function validateOpenRouterKey(
 	}
 
 	const keyInfo = await readAuthKeyInfoOrNull(response);
+	if (signal.aborted) return { kind: "network-or-5xx", status: null };
 	if (keyInfo !== null && hasReachedSpendLimit(keyInfo)) {
 		return { kind: "rejected-402" };
 	}
@@ -197,7 +216,11 @@ function showKeyEntryControls(keyInput: HTMLInputElement): void {
 async function runExclusiveValidation(
 	validation: () => Promise<void>,
 ): Promise<void> {
-	if (validationInFlight) return;
+	if (validationInFlight) {
+		const statusEl = getEl("byok-status");
+		if (statusEl) statusEl.textContent = "Validation in progress…";
+		return;
+	}
 	validationInFlight = true;
 	try {
 		await validation();

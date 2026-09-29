@@ -3,6 +3,7 @@ import {
 	clearKey,
 	formatRelativeTime,
 	initByokModal,
+	KEY_VALIDATION_TIMEOUT_MS,
 	openByokModal,
 	readMeta,
 	validateOpenRouterKey,
@@ -79,6 +80,33 @@ describe("validateOpenRouterKey", () => {
 		const mockFetch = vi.fn().mockRejectedValue(new Error("network error"));
 		const result = await validateOpenRouterKey("key", mockFetch);
 		expect(result).toEqual({ kind: "network-or-5xx", status: null });
+	});
+});
+
+describe("validateOpenRouterKey timeout", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("aborts a stalled request after the timeout and reports network-or-5xx", async () => {
+		vi.useFakeTimers();
+		const stalledFetch = vi.fn(
+			(_url: string, init: RequestInit) =>
+				new Promise<Response>((_resolve, reject) => {
+					init.signal?.addEventListener("abort", () =>
+						reject(new DOMException("aborted", "AbortError")),
+					);
+				}),
+		);
+		const pending = validateOpenRouterKey(
+			"sk-or-v1-testkey",
+			stalledFetch as unknown as typeof fetch,
+		);
+		await vi.advanceTimersByTimeAsync(KEY_VALIDATION_TIMEOUT_MS);
+		await expect(pending).resolves.toEqual({
+			kind: "network-or-5xx",
+			status: null,
+		});
 	});
 });
 
@@ -538,6 +566,42 @@ describe("openByokModal UI", () => {
 		await vi.waitFor(() => {
 			expect(getEl("byok-status").textContent).toContain("didn't authenticate");
 		});
+	});
+
+	it("a stalled validation times out, releases the lock, and ignored clicks say validation is in progress", async () => {
+		vi.useFakeTimers();
+		try {
+			openByokModal();
+			initByokModal();
+
+			getEl<HTMLInputElement>("byok-key-input").value = "sk-or-v1-somekey";
+
+			const fetchMock = vi.fn(
+				(_url: string, init: RequestInit) =>
+					new Promise<Response>((_resolve, reject) => {
+						init.signal?.addEventListener("abort", () =>
+							reject(new DOMException("aborted", "AbortError")),
+						);
+					}),
+			);
+			vi.stubGlobal("fetch", fetchMock);
+
+			getEl("byok-validate-save").click();
+			getEl("byok-validate-save").click();
+			expect(getEl("byok-status").textContent).toBe("Validation in progress…");
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+
+			await vi.advanceTimersByTimeAsync(KEY_VALIDATION_TIMEOUT_MS);
+			expect(getEl("byok-status").textContent).toContain(
+				"Couldn't reach OpenRouter",
+			);
+
+			getEl("byok-validate-save").click();
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			await vi.advanceTimersByTimeAsync(KEY_VALIDATION_TIMEOUT_MS);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("Clear key removes both localStorage entries with no confirm prompt", async () => {
