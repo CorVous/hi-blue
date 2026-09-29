@@ -1,14 +1,20 @@
 import type { GameSession } from "../game/game-session.js";
 import type { PendingBootstrap } from "../game/pending-bootstrap.js";
 import { getPendingCallMeta } from "../game/pending-bootstrap.js";
+import type { AiId } from "../game/types";
 import {
 	clearDaemonTurnResults,
 	refreshDaemonFooter,
 	renderDaemonFooter,
 } from "./daemon-footer.js";
-import { renderGameStrip } from "./game-strip.js";
+import { renderGameStrip, updateGameStripSummary } from "./game-strip.js";
 import { clearPendingStrip, renderPendingStrip } from "./pending-strip.js";
-import { getMapFocus, renderWorldMap, setMapFocus } from "./world-map.js";
+import {
+	getMapFocus,
+	renderWorldMap,
+	setMapFocus,
+	updateWorldMap,
+} from "./world-map.js";
 
 export interface RenderInspectorOpts {
 	session?: GameSession;
@@ -72,6 +78,23 @@ function renderSessionInspector(
 	setMapFocus(getMapFocus());
 
 	attachEscapeClearsFocusOnce(doc);
+}
+
+export function refreshInspectorAfterRound(
+	doc: Document,
+	session: GameSession,
+	aiIds: readonly AiId[],
+): void {
+	const strip = doc.querySelector<HTMLElement>("#dev-game-strip");
+	if (strip) updateGameStripSummary(strip, session);
+	const map = doc.querySelector<HTMLElement>("#dev-world-map");
+	if (map) updateWorldMap(map, session);
+	for (const aiId of aiIds) {
+		const panel = doc.querySelector<HTMLElement>(
+			`.ai-panel[data-ai="${aiId}"]`,
+		);
+		if (panel) refreshDaemonFooter(panel, aiId, session);
+	}
 }
 
 function attachEscapeClearsFocusOnce(doc: Document): void {

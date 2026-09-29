@@ -10,16 +10,17 @@ import {
 } from "../bbs-chrome.js";
 import { isDevHost } from "../dev-host.js";
 import {
+	type DaemonFooterPipState,
 	recordDaemonError,
 	recordDaemonRound,
 	recordDaemonSystemPrompt,
 	recordDaemonTurnResult,
-	refreshDaemonFooter,
 	setDaemonFooterInFlight,
 } from "../dev-inspector/daemon-footer.js";
-import { updateGameStripSummary } from "../dev-inspector/game-strip.js";
-import { renderInspector } from "../dev-inspector/index.js";
-import { updateWorldMap } from "../dev-inspector/world-map.js";
+import {
+	refreshInspectorAfterRound,
+	renderInspector,
+} from "../dev-inspector/index.js";
 import {
 	buildSessionFromAssets,
 	type NewGameAssets,
@@ -70,6 +71,7 @@ import {
 	type LoadResult,
 	listSessions,
 	loadActiveSession,
+	type SaveResult,
 	saveActiveSession,
 } from "../persistence/session-storage.js";
 import { type RenderOpts, renderApp } from "../render-app.js";
@@ -104,17 +106,21 @@ const PANEL_SPINNER_SELECTOR = ".panel-name .panel-spinner";
 const BRIGHTNESS_WIPE_TAU_MS = 60_000;
 const BRIGHTNESS_WIPE_MAX_PCT = 99;
 
-const PERSISTENCE_WARNING_MESSAGES: Record<string, string> = {
+type SaveFailureReason = Extract<SaveResult, { ok: false }>["reason"];
+
+const PERSISTENCE_WARNING_MESSAGES: Record<SaveFailureReason, string> = {
 	unavailable:
 		"Game progress cannot be saved: storage is disabled in your browser. Your session will be lost on refresh.",
 	quota: "Game progress could not be saved: browser storage is full.",
-	corrupt:
-		"Saved game data was unreadable and has been discarded. Starting a new game.",
-	"version-mismatch":
-		"Saved game data is from an older version and has been discarded. Starting a new game.",
-	"legacy-save-discarded":
-		"Saved game data from an older format has been discarded. Starting a new game.",
 	unknown: "Game progress could not be saved due to an unexpected error.",
+};
+
+const DAEMON_FOOTER_STATE_BY_PHASE: Partial<
+	Record<LifecyclePhase["phase"], DaemonFooterPipState>
+> = {
+	started: "in-flight",
+	completed: "idle",
+	errored: "errored",
 };
 
 type PersonaLookups = Pick<
@@ -372,37 +378,10 @@ function updateDaemonFooterOnLifecycle(
 	if (!event.daemonId) return;
 	const panel = findPanel(doc, event.daemonId);
 	if (!panel) return;
-	switch (event.phase) {
-		case "started":
-			setDaemonFooterInFlight(panel, "in-flight");
-			break;
-		case "completed":
-			setDaemonFooterInFlight(panel, "idle");
-			break;
-		case "errored":
-			setDaemonFooterInFlight(panel, "errored");
-			recordDaemonError(event.daemonId, event.error);
-			break;
-		case "first-token":
-			break;
-	}
-}
-
-function refreshInspectorAfterRound(
-	doc: Document,
-	gameSession: GameSession,
-	aiIds: readonly AiId[],
-): void {
-	const stripEl = doc.querySelector<HTMLElement>("#dev-game-strip");
-	if (stripEl) updateGameStripSummary(stripEl, gameSession);
-	const mapEl = doc.querySelector<HTMLElement>("#dev-world-map");
-	if (mapEl) updateWorldMap(mapEl, gameSession);
-	for (const aiId of aiIds) {
-		const panel = findPanel(doc, aiId);
-		if (panel) {
-			refreshDaemonFooter(panel, aiId, gameSession);
-		}
-	}
+	const footerState = DAEMON_FOOTER_STATE_BY_PHASE[event.phase];
+	if (!footerState) return;
+	setDaemonFooterInFlight(panel, footerState);
+	if (event.phase === "errored") recordDaemonError(event.daemonId, event.error);
 }
 
 function findPanel(doc: Document, aiId: AiId): HTMLElement | null {
@@ -457,14 +436,10 @@ function hidePersistenceWarning(warningEl: HTMLElement | null): void {
 
 function showPersistenceWarning(
 	warningEl: HTMLElement | null,
-	reason: string,
+	reason: SaveFailureReason,
 ): void {
 	if (!warningEl) return;
-	const msg =
-		PERSISTENCE_WARNING_MESSAGES[reason] ??
-		PERSISTENCE_WARNING_MESSAGES.unknown ??
-		"Game progress could not be saved.";
-	warningEl.textContent = msg;
+	warningEl.textContent = PERSISTENCE_WARNING_MESSAGES[reason];
 	warningEl.removeAttribute("hidden");
 }
 
@@ -543,7 +518,7 @@ function mountSessionView(ctx: GameViewContext): void {
 
 	if (session !== null) {
 		const state = session.getState();
-		paintSessionPanels(doc, state, Object.keys(state.personas));
+		paintSessionPanels(doc, state);
 		paintHandlesPlaceholder(ctx.promptInput, state.personas);
 	}
 
@@ -596,19 +571,26 @@ function setGameSurfaceHidden(doc: Document, hidden: boolean): void {
 	setHidden(doc, ["#panels", "#composer"], hidden);
 }
 
-function paintSessionPanels(
+function paintPersonaPanels(
 	doc: Document,
-	state: GameState,
-	aiIds: readonly AiId[],
+	personas: Record<AiId, AiPersona>,
+	paintPanelExtras: (panel: HTMLElement, aiId: AiId) => void,
 ): void {
+	const aiIds = Object.keys(personas);
 	doc.querySelectorAll<HTMLElement>(".ai-panel").forEach((panel, idx) => {
 		const aiId = aiIds[idx];
 		if (!aiId) return;
-		panel.dataset.ai = aiId;
-		const persona = state.personas[aiId];
+		const persona = personas[aiId];
 		if (!persona) return;
+		panel.dataset.ai = aiId;
 		panel.style.setProperty("--panel-color", persona.color);
 		initPanelChrome(panel, persona);
+		paintPanelExtras(panel, aiId);
+	});
+}
+
+function paintSessionPanels(doc: Document, state: GameState): void {
+	paintPersonaPanels(doc, state.personas, (panel, aiId) => {
 		const budget = state.budgets[aiId];
 		if (budget) paintPanelBudget(panel, budget.remaining);
 	});
@@ -737,7 +719,10 @@ function refreshComposerState(ctx: GameViewContext): void {
 	ctx.sendBtn.disabled = !state.sendEnabled || ctx.roundInFlight;
 	setPanelColor(ctx.promptInput, state.borderColor);
 	paintPanelAddressingAndLockouts(ctx.doc, lookups.personaColors.keys(), state);
-	paintLockoutError(ctx.doc, state.lockoutError);
+	setOutput(
+		ctx.doc.querySelector<HTMLOutputElement>("#lockout-error"),
+		state.lockoutError,
+	);
 	rebuildMentionOverlay(
 		ctx.mentionOverlay,
 		ctx.promptInput.value,
@@ -771,16 +756,10 @@ function paintPanelAddressingAndLockouts(
 	}
 }
 
-function paintLockoutError(doc: Document, lockoutError: string | null): void {
-	const lockoutErrorEl = doc.querySelector<HTMLOutputElement>("#lockout-error");
-	if (!lockoutErrorEl) return;
-	if (lockoutError) {
-		lockoutErrorEl.textContent = lockoutError;
-		lockoutErrorEl.removeAttribute("hidden");
-	} else {
-		lockoutErrorEl.textContent = "";
-		lockoutErrorEl.setAttribute("hidden", "");
-	}
+function setOutput(el: HTMLOutputElement | null, text: string | null): void {
+	if (!el) return;
+	el.textContent = text ?? "";
+	el.hidden = text === null;
 }
 
 function rebuildMentionOverlay(
@@ -964,7 +943,7 @@ function beginRound(
 	ctx.sendBtn.disabled = true;
 	setRoundInFlightMarker(doc, true);
 
-	hideRoundError(doc);
+	setOutput(roundErrorEl(doc), null);
 	ctx.connectionUnstable = false;
 
 	const addressedNameNow =
@@ -984,22 +963,15 @@ function setRoundInFlightMarker(doc: Document, inFlight: boolean): void {
 	else stageEl?.removeAttribute("data-round-in-flight");
 }
 
-function hideRoundError(doc: Document): void {
-	const roundErrorEl = doc.querySelector<HTMLOutputElement>("#round-error");
-	if (!roundErrorEl) return;
-	roundErrorEl.textContent = "";
-	roundErrorEl.setAttribute("hidden", "");
+function roundErrorEl(doc: Document): HTMLOutputElement | null {
+	return doc.querySelector<HTMLOutputElement>("#round-error");
 }
 
-function showRoundError(doc: Document, err: unknown): void {
-	const roundErrorEl = doc.querySelector<HTMLOutputElement>("#round-error");
-	if (!roundErrorEl) return;
+function roundErrorText(err: unknown): string {
 	const upstreamMessage = upstreamMessageOf(err);
-	roundErrorEl.textContent =
-		upstreamMessage === null
-			? "the daemons stuttered — try again"
-			: `the daemons stuttered (${upstreamMessage}) — try again`;
-	roundErrorEl.removeAttribute("hidden");
+	return upstreamMessage === null
+		? "the daemons stuttered — try again"
+		: `the daemons stuttered (${upstreamMessage}) — try again`;
 }
 
 function brailleFrameText(frame: number): string {
@@ -1199,7 +1171,7 @@ function reportRoundFailure(ctx: GameViewContext, err: unknown): void {
 		return;
 	}
 	ctx.connectionUnstable = true;
-	showRoundError(ctx.doc, err);
+	setOutput(roundErrorEl(ctx.doc), roundErrorText(err));
 }
 
 function enterEndgame(
@@ -1372,15 +1344,7 @@ function paintLoadingPersonaPanels(
 	doc: Document,
 	personas: Record<AiId, AiPersona>,
 ): void {
-	const ids = Object.keys(personas);
-	doc.querySelectorAll<HTMLElement>(".ai-panel").forEach((panel, idx) => {
-		const aiId = ids[idx];
-		if (!aiId) return;
-		const persona = personas[aiId];
-		if (!persona) return;
-		panel.dataset.ai = aiId;
-		panel.style.setProperty("--panel-color", persona.color);
-		initPanelChrome(panel, persona);
+	paintPersonaPanels(doc, personas, (panel) => {
 		appendPanelSpinners(panel);
 	});
 }
@@ -1435,11 +1399,8 @@ function handOverBootstrappedSession(
 ): Promise<void> | undefined {
 	const { doc } = ctx;
 	cleanupLoadingTimers(flow.timers);
-	if (loadingFlowAbandoned(flow)) {
-		forgetLoadingFlow(flow);
-		return;
-	}
 	forgetLoadingFlow(flow);
+	if (loadingFlowAbandoned(flow)) return;
 	const gameSessionRng = getSpikeRng("gameSession");
 	const built = applyTestAffordances(
 		buildSessionFromAssets(
@@ -1490,25 +1451,44 @@ function dismissStaleBootstrapRecovery(doc: Document): void {
 	if (staleAbandonLink) dropListenersByCloning(staleAbandonLink);
 }
 
+function failedFlowAbandoned(flow: LoadingFlow): boolean {
+	cleanupLoadingTimers(flow.timers);
+	if (!loadingFlowAbandoned(flow)) return false;
+	forgetLoadingFlow(flow);
+	return true;
+}
+
+function blockFlowOnCapHit(
+	ctx: GameViewContext,
+	flow: LoadingFlow,
+	err: unknown,
+): boolean {
+	if (!(err instanceof CapHitError) || !ctx.capHitEl) return false;
+	flow.blockedBy = "cap-hit";
+	ctx.capHitEl.removeAttribute("hidden");
+	setGameSurfaceHidden(ctx.doc, true);
+	return true;
+}
+
+function blockFlowOnRecovery(
+	ctx: GameViewContext,
+	flow: LoadingFlow,
+	recoveryEl: HTMLElement,
+): void {
+	flow.blockedBy = "recovery";
+	recoveryEl.removeAttribute("hidden");
+	setGameSurfaceHidden(ctx.doc, true);
+	setStageLoadState(ctx.doc, "unstable");
+}
+
 function handleBootstrapFailure(
 	ctx: GameViewContext,
 	flow: LoadingFlow,
 	err: unknown,
 ): void {
-	cleanupLoadingTimers(flow.timers);
-	if (loadingFlowAbandoned(flow)) {
-		forgetLoadingFlow(flow);
-		return;
-	}
+	if (failedFlowAbandoned(flow)) return;
 	ctx.dev.showPendingBootstrap(ctx.root, flow.pending);
-
-	if (err instanceof CapHitError && ctx.capHitEl) {
-		flow.blockedBy = "cap-hit";
-		ctx.capHitEl.removeAttribute("hidden");
-		setGameSurfaceHidden(ctx.doc, true);
-		return;
-	}
-
+	if (blockFlowOnCapHit(ctx, flow, err)) return;
 	showBootstrapRecovery(ctx, flow, err);
 }
 
@@ -1525,11 +1505,7 @@ function showBootstrapRecovery(
 		return;
 	}
 
-	flow.blockedBy = "recovery";
-	recoveryEl.removeAttribute("hidden");
-	setGameSurfaceHidden(doc, true);
-	setStageLoadState(doc, "unstable");
-
+	blockFlowOnRecovery(ctx, flow, recoveryEl);
 	wireRegenerateButton(ctx, flow, recoveryEl);
 	wireAbandonLink(root);
 }
@@ -1587,9 +1563,7 @@ async function runRegenerate(
 	const { doc } = ctx;
 	flow.blockedBy = null;
 	recoveryEl.setAttribute("hidden", "");
-	doc
-		.querySelector<HTMLElement>("#persistence-warning")
-		?.setAttribute("hidden", "");
+	hidePersistenceWarning(ctx.persistenceWarningEl);
 	setGameSurfaceHidden(doc, false);
 	showComposerAsLoading(ctx.promptInput);
 
@@ -1600,11 +1574,7 @@ async function runRegenerate(
 	try {
 		await runBootstrapChain(ctx, flow);
 	} catch (regenErr: unknown) {
-		cleanupLoadingTimers(flow.timers);
-		if (loadingFlowAbandoned(flow)) {
-			forgetLoadingFlow(flow);
-			return;
-		}
+		if (failedFlowAbandoned(flow)) return;
 		showRegenerateFailure(ctx, flow, recoveryEl, regenBtn, regenErr);
 	}
 }
@@ -1616,18 +1586,12 @@ function showRegenerateFailure(
 	regenBtn: HTMLButtonElement,
 	regenErr: unknown,
 ): void {
-	if (regenErr instanceof CapHitError && ctx.capHitEl) {
-		flow.blockedBy = "cap-hit";
-		ctx.capHitEl.removeAttribute("hidden");
+	if (blockFlowOnCapHit(ctx, flow, regenErr)) {
 		recoveryEl.setAttribute("hidden", "");
-		setGameSurfaceHidden(ctx.doc, true);
 		return;
 	}
 	paintRecoveryCopy(ctx.doc, regenErr);
-	flow.blockedBy = "recovery";
-	recoveryEl.removeAttribute("hidden");
-	setGameSurfaceHidden(ctx.doc, true);
-	setStageLoadState(ctx.doc, "unstable");
+	blockFlowOnRecovery(ctx, flow, recoveryEl);
 	regenBtn.disabled = false;
 }
 

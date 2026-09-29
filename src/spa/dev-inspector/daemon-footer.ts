@@ -59,7 +59,7 @@ export function recordDaemonRound(aiId: AiId, round: number): void {
 	daemonRounds.set(aiId, round);
 }
 
-type DaemonFooterPipState = "in-flight" | "idle" | "errored";
+export type DaemonFooterPipState = "in-flight" | "idle" | "errored";
 
 const PIP_GLYPHS: Readonly<Record<DaemonFooterPipState, string>> = {
 	idle: "○",
