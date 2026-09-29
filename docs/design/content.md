@@ -107,6 +107,10 @@ prompt.
 - Clauses describe concrete behaviour ("answers when blue addresses them by
   name"), not permissions. Step 6 showed that abstract "you may be quiet"
   wording reads as a uniform opt-out.
+- The outgoing and chatty clauses describe how often a Daemon messages, never
+  two messages in one turn. They used to say the Daemon addresses a peer and
+  blue "in the same turn", which contradicts ADR 0018's one message per turn
+  and invites a second `message` call that the coordinator rejects.
 - Off by default. `?engagementClauses=1` turns it on through
   `BootstrapOpts.engagementClauses`. With it off, output is byte-identical.
 

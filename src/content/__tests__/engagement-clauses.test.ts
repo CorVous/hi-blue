@@ -52,6 +52,15 @@ describe("engagement-clauses", () => {
 		expect(clause.length).toBeGreaterThan(20);
 	});
 
+	it.each([
+		["verbose", "stoic"],
+		["verbose", "effusive"],
+	] as const)("the %s + %s clause never asks for more than one message per turn", (t1, t2) => {
+		const clause = engagementClauseFor("d", t1, t2);
+		expect(clause).not.toMatch(/same turn/i);
+		expect(clause).not.toMatch(/peers? and blue|blue and a peer/i);
+	});
+
 	it("emits a different clause shape for each bucket", () => {
 		const veryQuiet = engagementClauseFor("a", "taciturn", "aloof");
 		const reserved = engagementClauseFor("b", "taciturn", "curious");
