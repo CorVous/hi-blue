@@ -1,0 +1,224 @@
+{
+  "summary": {
+    "successOnFirst": 10,
+    "successAfterRetry": 0,
+    "exhausted": 0,
+    "thrown": 0,
+    "ruleHistogram": {},
+    "retryUnitHistogram": {},
+    "avgAttemptsToSuccess": 1,
+    "totalCostUsd": 0.03808461
+  },
+  "iterations": [
+    {
+      "iter": 1,
+      "settingA": "throne room of a pagoda",
+      "settingB": "flooded underground cistern",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_item",
+        "carry",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 1,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 7815
+        }
+      ],
+      "totalCostUsd": 0.00369555
+    },
+    {
+      "iter": 2,
+      "settingA": "collapsed market arcade",
+      "settingB": "tide-flooded boardwalk",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_space",
+        "carry",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 2,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 10678
+        }
+      ],
+      "totalCostUsd": 0.00475389
+    },
+    {
+      "iter": 3,
+      "settingA": "tide-flooded boardwalk",
+      "settingB": "abandoned subway station",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_space",
+        "carry",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 3,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 6871
+        }
+      ],
+      "totalCostUsd": 0.00320919
+    },
+    {
+      "iter": 4,
+      "settingA": "tide-flooded boardwalk",
+      "settingB": "collapsed market arcade",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_space",
+        "use_space",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 4,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 9178
+        }
+      ],
+      "totalCostUsd": 0.00427389
+    },
+    {
+      "iter": 5,
+      "settingA": "tide-flooded boardwalk",
+      "settingB": "abandoned subway station",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_space",
+        "carry",
+        "use_item"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 5,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 9138
+        }
+      ],
+      "totalCostUsd": 0.00374679
+    },
+    {
+      "iter": 6,
+      "settingA": "rusted oil platform deck",
+      "settingB": "tide-flooded boardwalk",
+      "theme": "magical",
+      "objectiveTypes": [
+        "carry",
+        "carry",
+        "carry"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 6,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 8169
+        }
+      ],
+      "totalCostUsd": 0.00330624
+    },
+    {
+      "iter": 7,
+      "settingA": "sun-baked salt flat",
+      "settingB": "tide-flooded boardwalk",
+      "theme": "magical",
+      "objectiveTypes": [
+        "use_item",
+        "use_item",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 7,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 8721
+        }
+      ],
+      "totalCostUsd": 0.00339429
+    },
+    {
+      "iter": 8,
+      "settingA": "flooded underground cistern",
+      "settingB": "dust-filled opera hall",
+      "theme": "technological",
+      "objectiveTypes": [
+        "use_space",
+        "carry",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 8,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 8700
+        }
+      ],
+      "totalCostUsd": 0.00344154
+    },
+    {
+      "iter": 9,
+      "settingA": "hollowed glacier cave",
+      "settingB": "library overflowing with books",
+      "theme": "mundane",
+      "objectiveTypes": [
+        "use_item",
+        "convergence",
+        "convergence"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 9,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 6954
+        }
+      ],
+      "totalCostUsd": 0.00385719
+    },
+    {
+      "iter": 10,
+      "settingA": "abandoned subway station",
+      "settingB": "library overflowing with books",
+      "theme": "technological",
+      "objectiveTypes": [
+        "carry",
+        "use_item",
+        "use_space"
+      ],
+      "finalOutcome": "ok",
+      "attempts": [
+        {
+          "iter": 10,
+          "attempt": 0,
+          "outcome": "ok",
+          "rawLength": 10745
+        }
+      ],
+      "totalCostUsd": 0.00440604
+    }
+  ]
+}

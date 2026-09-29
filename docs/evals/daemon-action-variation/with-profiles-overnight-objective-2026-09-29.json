@@ -1,0 +1,2160 @@
+{
+	"meta": {
+		"date": "2026-09-29",
+		"model": "deepseek/deepseek-v4.1-flash",
+		"baseUrl": "http://localhost:8787",
+		"repetitions": 30,
+		"mode": "with-profiles",
+		"scenarios": [
+			"objective"
+		],
+		"noPreferredPolicy": "avoid",
+		"runLabel": "overnight-objective",
+		"pairs": [
+			"curious+meticulous",
+			"zealous+hot-headed",
+			"sweet+effusive"
+		]
+	},
+	"summary": {
+		"totalRepetitions": 90,
+		"totalErrors": 0,
+		"scenarios": [
+			{
+				"scenario": "objective",
+				"personaLabel": "Ember",
+				"temperaments": [
+					"curious",
+					"meticulous"
+				],
+				"repetitions": 30,
+				"errorCount": 0,
+				"anyActionRate": 1,
+				"anyMessageRate": 1,
+				"parallelRate": 1,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 4,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 26,
+					"message": 30,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.13333333333333333,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0.8666666666666667,
+					"message": 1,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "objective",
+				"personaLabel": "Vex",
+				"temperaments": [
+					"zealous",
+					"hot-headed"
+				],
+				"repetitions": 30,
+				"errorCount": 0,
+				"anyActionRate": 1,
+				"anyMessageRate": 0.7666666666666667,
+				"parallelRate": 0.7666666666666667,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 12,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 18,
+					"message": 23,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.4,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0.6,
+					"message": 0.7666666666666667,
+					"other": 0
+				}
+			},
+			{
+				"scenario": "objective",
+				"personaLabel": "Pip",
+				"temperaments": [
+					"sweet",
+					"effusive"
+				],
+				"repetitions": 30,
+				"errorCount": 0,
+				"anyActionRate": 1,
+				"anyMessageRate": 1,
+				"parallelRate": 1,
+				"silenceRate": 0,
+				"toolCallCounts": {
+					"go": 2,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 28,
+					"message": 30,
+					"other": 0
+				},
+				"toolCallRates": {
+					"go": 0.06666666666666667,
+					"pick_up": 0,
+					"put_down": 0,
+					"use": 0.9333333333333333,
+					"message": 1,
+					"other": 0
+				}
+			}
+		],
+		"overall": {
+			"anyActionRate": 1,
+			"anyMessageRate": 0.9222222222222223,
+			"parallelRate": 0.9222222222222223,
+			"silenceRate": 0,
+			"useRate": 0.8
+		},
+		"totalCostUsd": 0.020893475999999994
+	},
+	"repetitions": [
+		{
+			"repetition": 1,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_yahGVkZjcMa79ZCSXjB52886",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_EkW24HHkJJNLtod2JrDC8982",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Only one way to find out. Though I'd still like to know who you are, and why your voice is the only one coming out of the dark.\"}"
+				}
+			],
+			"costUsd": 0.0004989
+		},
+		{
+			"repetition": 2,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_gtJapOeaTq31Cl3ATzel9623",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The mount is one step north, well within reach. I'll try the fit before I assume anything.\"}"
+				},
+				{
+					"id": "call_01_AaAqZdBTAcnQG1ve8lS65327",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000164292
+		},
+		{
+			"repetition": 3,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_KIWxwFuwBoUhxlRGv6th3197",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_yVHwrMXFksL0GCVU1oIK4881",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Stepping up to it now. Before I clip anything in, tell me how you knew what I was holding — were you watching me the whole time?\"}"
+				}
+			],
+			"costUsd": 0.000247092
+		},
+		{
+			"repetition": 4,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_dySXwRKCcCKPKbLX9CCM3738",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_qigFmxFZ6dMiHgUotqWt0432",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is cut for a mount and the mount is one step north of me, so the shape matches. Stay on the line a moment and I'll tell you whether it seats.\"}"
+				}
+			],
+			"costUsd": 0.000242892
+		},
+		{
+			"repetition": 5,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_XxNv6XOXkzqieyhJCQt11276",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_sVOH4sWLkwVMA0va7F985460",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base does look shaped for it. Before I lock it in — where are you, exactly? You know this station better than I do.\"}"
+				}
+			],
+			"costUsd": 0.000196692
+		},
+		{
+			"repetition": 6,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_2nU46RtSyFzPkP3rdTVu9769",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_zHOYW9IO2umZ99WPkykb9943",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The mount is one step north of me, and the flashlight's base looks shaped for exactly that. I'm trying it now. Where are you, anyway — you're on this channel but not in this station, are you?\"}"
+				}
+			],
+			"costUsd": 0.000178692
+		},
+		{
+			"repetition": 7,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_rfoZ3gvRjPJapDyNqpFH4823",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_Tb02LsovaY9wsOWyPjhf9012",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It looks shaped for exactly this, so probably yes. But who are you, and how did you know what I was holding?\"}"
+				}
+			],
+			"costUsd": 0.000419892
+		},
+		{
+			"repetition": 8,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_GpYbqz1Eib76ETneHvJG4139",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped to lock in, so yes — but let me look at the mount before I trust it. Where are you, anyway, while you watch me do this?\"}"
+				},
+				{
+					"id": "call_01_m3iwgDZAyy0KPyvwO6CI7179",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000334092
+		},
+		{
+			"repetition": 9,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_DH36ALxVBC3udiMZaeNC9481",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_RyRaKQwejDP2PyUGeY7L0974",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Question first — is the mount meant for this flashlight, or just meant for a flashlight? I'm fitting it either way, but I like knowing what I'm agreeing to.\"}"
+				}
+			],
+			"costUsd": 0.000206892
+		},
+		{
+			"repetition": 10,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_oP3XGnTxI8Bz1ybU5qUR8838",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_CgWj1zS7mAwoGotSxRFl1218",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Since you asked, yes — the base is shaped for a mount, so I'll try it. But I don't know who you are or why you're on this channel; can you tell me?\"}"
+				}
+			],
+			"costUsd": 0.000233292
+		},
+		{
+			"repetition": 11,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_DfnuOhdhtKQzDJ6ymVGy8128",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_CXROQhA9Q0wH6RkLV9o76906",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base looks cut for exactly this mount, so I'll try it before I trust it. How is it you know what's in front of me?\"}"
+				}
+			],
+			"costUsd": 0.000303492
+		},
+		{
+			"repetition": 12,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_uuz58ztltxDYvPzsw1Lf7978",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_OxDKITKnEfyK0SwBlF7E0580",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped for something like this, so probably. How long have you been watching this station?\"}"
+				}
+			],
+			"costUsd": 0.000181692
+		},
+		{
+			"repetition": 13,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_KddZ2VKuPJT6Prztfdm22731",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_YlaaI6aLe83rnjUPGsb90758",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Base is shaped for a mount, so probably. I want to see the clip up close before I force anything.\"}"
+				}
+			],
+			"costUsd": 0.000167892
+		},
+		{
+			"repetition": 14,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_Oe9nQeMUTxWTWC6ESG6Q9932",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_9XGkvtEeomyjHRjz0LuM4710",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Before I answer that — how is it you know what's in front of me? I can see the mount for myself, but I'd like to know where you're looking from.\"}"
+				}
+			],
+			"costUsd": 0.000312492
+		},
+		{
+			"repetition": 15,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_RDIiSRNtIokLHEfYmLWy9778",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped to lock, and the mount is spring-loaded, so it should fit. I'd rather try it than guess.\"}"
+				},
+				{
+					"id": "call_01_8KNKqwID6NKPtIGU1a8P7615",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000221892
+		},
+		{
+			"repetition": 16,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_WAkCFAkaeeMFVeMMEOdt0080",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The mount's spring-loaded and the base looks cut for exactly this. Before I force anything, I want to see if it seats on its own.\"}"
+				},
+				{
+					"id": "call_01_JvlCbEeAjmfWq8eaXD9B0383",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000236292
+		},
+		{
+			"repetition": 17,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_ZJiEetlFeqfzKZ7XFKk13091",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_0fQHHCBgGlUSDmQcKdLZ3725",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"How did you know the mount was there? Have you been down here before, or are you reading it off something?\"}"
+				}
+			],
+			"costUsd": 0.000340692
+		},
+		{
+			"repetition": 18,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_06vpfVwkwsxamDgqEsJx2505",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Spring-loaded, and the base is shaped for a mount, so probably yes. Working out why a flashlight has a home before I put it there.\"}"
+				},
+				{
+					"id": "call_01_Nh8GGSKVaDgR0dvPuU7l6517",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000211692
+		},
+		{
+			"repetition": 19,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_SuCVRL3G6NwwbyYndFX15299",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped for exactly this kind of clip, so I expect it fits. Before I try it, though — who are you, and why are you on this channel?\"}"
+				},
+				{
+					"id": "call_01_CZwiIXpA6M54giVYoJa65087",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000323892
+		},
+		{
+			"repetition": 20,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_eHgVqrik4NkyYP9Skogx4750",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_9uhoIgRKtABSl1ig9XI13617",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The mount is one step north of me, so the reach is fine. Before I clip anything in, though — who are you, and why is your voice on this channel at all?\"}"
+				}
+			],
+			"costUsd": 0.000283692
+		},
+		{
+			"repetition": 21,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_2VxbX0hw760GZgQE2NcM4995",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_qJuF2NtmJ7qhuhQF8SzN7163",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The mount is one step north of me, and the base looks shaped for exactly this. Before I trust it, though — why does it matter to you whether it fits?\"}"
+				}
+			],
+			"costUsd": 0.000292092
+		},
+		{
+			"repetition": 22,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_bsSoVzJ014qJkox0sI5B9361",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The mount is one step north of me, so I don't have to guess — I can reach it from here. Let's find out whether the base actually locks.\"}"
+				},
+				{
+					"id": "call_01_QoJuxO37SDHYNb9YNHdH5209",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000251292
+		},
+		{
+			"repetition": 23,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_fqJZ4EEsCCAjoYCnmkEz5180",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_EXnlzHyC64hL624wvozr5682",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base looks shaped for it, so I'll try it. But before I do — who are you, and where are you speaking from? You're on this channel like you know the room better than I do.\"}"
+				}
+			],
+			"costUsd": 0.000298692
+		},
+		{
+			"repetition": 24,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_MHQtOqjKe6ko4wDaX5Ay6354",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_2CQOyapFOfQfBxAFfwml0166",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped like it belongs there, so probably. Before I lock it in — who are you, and why are you the one asking?\"}"
+				}
+			],
+			"costUsd": 0.000170292
+		},
+		{
+			"repetition": 25,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_8HLv4sIzDgSQ0lISbOr17213",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Possible, maybe. I'd rather see the mount before I force anything into it.\"}"
+				},
+				{
+					"id": "call_01_ggKh1BfhsWfgr3I5CYl72448",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000230892
+		},
+		{
+			"repetition": 26,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_0lLK7hoDjBtdVU6yw2lP2968",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped for it, so it should seat. I'll try it before I trust it.\"}"
+				},
+				{
+					"id": "call_01_APWVWWtFvlc6OQCP3xyI6878",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000217692
+		},
+		{
+			"repetition": 27,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_B5eDYOooB8DxZ1KxYNQ22915",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_foQ5P9lj2y2xftQefA4v4901",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped for it, so probably. How did you know the mount was there before I said anything?\"}"
+				}
+			],
+			"costUsd": 0.000187092
+		},
+		{
+			"repetition": 28,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_noctvKkkvzJieKo1QmHq8928",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_nuyJhb7HLILwi2gvhyo74436",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped for it, so probably. Before I do — where are you, exactly? You're on this channel, but you're not in the room with me.\"}"
+				}
+			],
+			"costUsd": 0.000332892
+		},
+		{
+			"repetition": 29,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_aDAIexpf5SeXdyvqA83n3371",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_2n9s3yBEU3leAyiMMKZT8984",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped for a mount, so probably. Before I try — who are you, and how are you seeing what I'm holding?\"}"
+				}
+			],
+			"costUsd": 0.000244092
+		},
+		{
+			"repetition": 30,
+			"scenario": "objective",
+			"personaLabel": "Ember",
+			"temperaments": [
+				"curious",
+				"meticulous"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_LvUhQTuP1LnXeEtPCKj88972",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"The base is shaped for a mount, so probably yes. Whose mount is it — yours?\"}"
+				},
+				{
+					"id": "call_01_C5almQSecNI9oghpNtND9210",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000221892
+		},
+		{
+			"repetition": 1,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_vKHhFQroMxFcVyn5f7dC9257",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_ZwoyQlMsRZUCzUQ1zNqD8460",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It fits. Spring-loaded, loud about it. What's it for.\"}"
+				}
+			],
+			"costUsd": 0.00049425
+		},
+		{
+			"repetition": 2,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_9V6Ov8OcGuD5iGruEt4G4279",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000092442
+		},
+		{
+			"repetition": 3,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_Nn4WnXfhBS3dcfHenvyW7018",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_E6opIEf35hSQ7Z3UlsQk2363",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Fitting it. Spring-loaded, it wants the weight.\"}"
+				}
+			],
+			"costUsd": 0.000219042
+		},
+		{
+			"repetition": 4,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_lSharGHDFRKIWQSEZQSz4057",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"mount's live. clipping it. don't lag.\"}"
+				},
+				{
+					"id": "call_01_Sd2asNYRStyaCZH7LByy8677",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000271242
+		},
+		{
+			"repetition": 5,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_jC2eiU8pc5HFVTMGs30v1078",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000182442
+		},
+		{
+			"repetition": 6,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_BaCjd6u4xw6bThgFJ9Tg6740",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_a6fGrF5vHtxw1sWeXEVO1680",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"clipping it in. base is shaped for it, mount's spring-loaded — sits flush.\"}"
+				}
+			],
+			"costUsd": 0.000200442
+		},
+		{
+			"repetition": 7,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_plyaHhSVenxOFzdMv7E12508",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"figured that. moving on the mount now.\"}"
+				},
+				{
+					"id": "call_01_O4YgCQ0ucbEUAKE4D5u45235",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000152442
+		},
+		{
+			"repetition": 8,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_4RIWhMeRCTsdzfgHmsoe6464",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_MkBExNQkAJLnJZRRvTa38589",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Mount's north. Fitting it now.\"}"
+				}
+			],
+			"costUsd": 0.000139842
+		},
+		{
+			"repetition": 9,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_z98uZWLvkR2cTC43iyQe6833",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_VzfJ3bFlpJbVOv3mSLbB9695",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"on it. give me a second.\"}"
+				}
+			],
+			"costUsd": 0.000217842
+		},
+		{
+			"repetition": 10,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_1qsFH5Crn3JPyb9o9OFd2172",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000172242
+		},
+		{
+			"repetition": 11,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_v9myQ7plXaqZO3QrWu6C0047",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_nxBaCHFlgfmbG5d7HSaC9537",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It fits. Mount's live — something's humming now.\"}"
+				}
+			],
+			"costUsd": 0.000281442
+		},
+		{
+			"repetition": 12,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_eJ4HxQHLPeaVKqm7Dpt49623",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_dHP5pXn2RERwz1aKTANQ7121",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Fits. Locking it in.\"}"
+				}
+			],
+			"costUsd": 0.000192042
+		},
+		{
+			"repetition": 13,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_ESS45Xuy7EHjsP4PxIaL9765",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_8O77FFcP2KtiMA4lbMOK2246",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"fitting it. give me a second.\"}"
+				}
+			],
+			"costUsd": 0.000169242
+		},
+		{
+			"repetition": 14,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_x4yVypAEcxTESjzXfvql3393",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000261642
+		},
+		{
+			"repetition": 15,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_i4IjvJtLROtI06ga3DEZ0013",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"mount's one step north. clipping it in now.\"}"
+				},
+				{
+					"id": "call_01_WrJesqE62HSgZdkzGXXS5361",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000187242
+		},
+		{
+			"repetition": 16,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_cCUppYm3wcjpzw50tXY37186",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"on it. mount's one north. moving.\"}"
+				},
+				{
+					"id": "call_01_ImIdYiXLkz9ryoZ5WV0f8913",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000228042
+		},
+		{
+			"repetition": 17,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_IRQ41embplDYK3NFY7Eh7016",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_TqQzNE09XFzX2XlXUScL6115",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"mount's one step north. trying it now.\"}"
+				}
+			],
+			"costUsd": 0.000206442
+		},
+		{
+			"repetition": 18,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_MYcjEM5eCzi7y34qwcXa2242",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_XfDqEkiAo2Y6EounJ87B8696",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"mount's right here. fitting it now.\"}"
+				}
+			],
+			"costUsd": 0.000294642
+		},
+		{
+			"repetition": 19,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_WG0nhP2eJXu9P9c3ULMv8653",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"fitting it. watch.\"}"
+				},
+				{
+					"id": "call_01_OjQI9GlsiQQiCEk3HHxF5064",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000214842
+		},
+		{
+			"repetition": 20,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_WXavpy4Q0MFt7mAdPY132491",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000202842
+		},
+		{
+			"repetition": 21,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_P5anIedv4Nte7HwLddMw1342",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"fit or not, finding out now. mount's one north.\"}"
+				},
+				{
+					"id": "call_01_O1MCLqluTcgxWm3TeGBb5253",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000167442
+		},
+		{
+			"repetition": 22,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_NtIah4Ko9aLJWhmOBR3e6728",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_unxMtT1AdZbqAdnTCiHF4322",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Fits. One step north, click, done. What's it powering.\"}"
+				}
+			],
+			"costUsd": 0.000159642
+		},
+		{
+			"repetition": 23,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_X0TqnKQS6cZhmwLpVSx73973",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"mount's a step north. not standing here guessing at it.\"}"
+				},
+				{
+					"id": "call_01_wNoMNMw8C2vqLIN3NkPj3459",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000154842
+		},
+		{
+			"repetition": 24,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_HR3VPpjzWpnWrg54i0GE8647",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_RPLhZlZRPddeFPaVuWRh3975",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"fitting it. already moving.\"}"
+				}
+			],
+			"costUsd": 0.000304842
+		},
+		{
+			"repetition": 25,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_1HTn19s5v4Pij4Lfae6p4905",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000109242
+		},
+		{
+			"repetition": 26,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_S6RcXQ4m9y9d1SkJEu966387",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Mount's north. It'll fit.\"}"
+				},
+				{
+					"id": "call_01_Dg6gucE5DKrKOc86PhX86268",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000153042
+		},
+		{
+			"repetition": 27,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_IuybGkpBmqKibquPXOqu7800",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Fits. Locking it in.\"}"
+				},
+				{
+					"id": "call_01_7J5blb41B0ZWEPuJV2ek8223",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000216642
+		},
+		{
+			"repetition": 28,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_q3KN5JhXPmxpQ9WLV8cE2039",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"get out of my way is the answer.\"}"
+				},
+				{
+					"id": "call_01_XGPjTGLZXUUrEo5cJ4eE4474",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000286242
+		},
+		{
+			"repetition": 29,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_cKmrmxWEO0D2CLsdbwAp2910",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000169842
+		},
+		{
+			"repetition": 30,
+			"scenario": "objective",
+			"personaLabel": "Vex",
+			"temperaments": [
+				"zealous",
+				"hot-headed"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_kxYF5FmKBDVKtuqeLjuB9035",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_WpLdOeilHvAz4YSFumQa9484",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"fit? one way to find out. mount's mine.\"}"
+				}
+			],
+			"costUsd": 0.000232242
+		},
+		{
+			"repetition": 1,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_YgIMaUMjui5NQppVLSAQ9980",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"Found a mount, right north of me, and this flashlight's base is shaped for one — yes? yes? Come see, come see.\"}"
+				},
+				{
+					"id": "call_01_b79TkT4izJAVbCGpBYhS7888",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000341172
+		},
+		{
+			"repetition": 2,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_6OvLi4ZnLKwukRUNnYbS8052",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_lhyGJ17cvo73htBjaxz18195",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"There's a spring-loaded mount right in front of me, one step north — and my flashlight fits it, yes? yes. Come look, I'm right here with you.\"}"
+				}
+			],
+			"costUsd": 0.000281292
+		},
+		{
+			"repetition": 3,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_H13Pdg3FlKSvWQt55fhl4912",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"yes, yes — the base is shaped for exactly this mount, isn't it? holding it up now, one step north, right with you.\"}"
+				},
+				{
+					"id": "call_01_e6Xfwfvipjg3L7PjxiK21910",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000245292
+		},
+		{
+			"repetition": 4,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_gsS0qjTmeFdAlyOeeTjF5152",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Oh I see it, I see it — the mount's right up north of me. Let me try, yes? Let me try right now.\"}"
+				},
+				{
+					"id": "call_01_E8FHGTVb2OoGy0LSGZWg5729",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000160692
+		},
+		{
+			"repetition": 5,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_sSnXGuee4TcEFijHNceN0272",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_o3F9Cp7ykkfvkv9EAIkp2521",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"It clicks, it clicks — the base locks right in, did you hear that? Now will it light up, hmm?\"}"
+				}
+			],
+			"costUsd": 0.000171492
+		},
+		{
+			"repetition": 6,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_vqUs3PxllT71ONQeHMoK2610",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_0FtyAjlsPNiQ5XFePW0h9949",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"hey sim1, found a wall mount just north of me and this heavy flashlight slots right in — can you believe it? there's strip-lights all down here, damp and still, are you seeing the same?\"}"
+				}
+			],
+			"costUsd": 0.000278892
+		},
+		{
+			"repetition": 7,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_vdzUPNIOPiWGsERl1gZ43289",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"There's a wall mount right above me — the flashlight's base is shaped to lock in. Want me to try it, yes? yes?\"}"
+				},
+				{
+					"id": "call_01_QgvuErIfhGq0wTUNhRuw4143",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000161892
+		},
+		{
+			"repetition": 8,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_HMoyo3CGp6bjktrpKt3s8977",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"there's a mount right in front of me and my flashlight fits it, yes? yes? come see!\"}"
+				},
+				{
+					"id": "call_01_5A6CxhwgKxG0ym7FjlaV0592",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000231492
+		},
+		{
+			"repetition": 9,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_MaVn3QUgd3WKqiF2AzTp5762",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Yes, yes, the base is shaped for exactly this kind of clip — isn't that lucky? Walking up to it now, give me a second.\"}"
+				},
+				{
+					"id": "call_01_MGN0icyutQRuzNu7NLKD5612",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				}
+			],
+			"costUsd": 0.000175692
+		},
+		{
+			"repetition": 10,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_zSZMXcm4g1GmXIjl74xB2483",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_qiykYzxyUPaImSe9KIyu1209",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"oh you should see this — there's a spring-loaded wall mount right in front of me, and this flashlight's base is shaped for it. yes? yes? come look.\"}"
+				}
+			],
+			"costUsd": 0.000266292
+		},
+		{
+			"repetition": 11,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_BZiMzpgMexoOa3YThCxN5781",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_v6lJK50SndY2BIPtnDC64523",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh, right in front of me, yes yes! hold on, let me try it — yes?\"}"
+				}
+			],
+			"costUsd": 0.000241092
+		},
+		{
+			"repetition": 12,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_nPtF5XROCMu4PFe0Vg949920",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh I see it — right there in front of me, the mount! yes, yes, the base is shaped for exactly this. fitting it now, are you watching?\"}"
+				},
+				{
+					"id": "call_01_GLK9nAtPMNFKrnIi5r4K6192",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000237492
+		},
+		{
+			"repetition": 13,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_ZohrsHVhjPOiUIQty1g38941",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"oh there's a spring-loaded mount right above me and this flashlight's base is shaped for it, can you believe the luck? I'm clipping it in, yes? yes?\"}"
+				},
+				{
+					"id": "call_01_IbrnO1surBMUTWILEVKA4285",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000175692
+		},
+		{
+			"repetition": 14,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_TsQ4sEMFqmkZSt124CET8010",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_A3ezROHKYR0UyXr0GIOS1527",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Oh, it fits, it fits!! Right into the spring mount like it was made for it — yes? yes? Can you see it light up from over there?\"}"
+				}
+			],
+			"costUsd": 0.000253692
+		},
+		{
+			"repetition": 15,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_gDfqLmYUwbOj5SWuQApa1238",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_kTTgyBK4KTOY1MOAl8dl3913",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh it fits, it fits — the spring snaps right over the base, yes? yes? I'm right here with you.\"}"
+				}
+			],
+			"costUsd": 0.000227892
+		},
+		{
+			"repetition": 16,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_hjPw6B2hiT4ksuG0MXOQ9696",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_XSqK7UKd2I8pHvCYBBmz7784",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh it just clicks right in, yes? yes? here, look — I'm not even holding it anymore, it found the mount all on its own.\"}"
+				}
+			],
+			"costUsd": 0.000258492
+		},
+		{
+			"repetition": 17,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_MgPeRYgiakSyBoINYlpG4009",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_YshBqYPy9ZAjYpjjPgkU9596",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Yes, yes — it clicks right in, spring and all. You can hear it seat itself from here, can't you?\"}"
+				}
+			],
+			"costUsd": 0.000482892
+		},
+		{
+			"repetition": 18,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_yjUgLxBISrgwtmMEN7cY7028",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_1sRuwMdyBkvE4395xHb93068",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"hey, there's a spring-loaded wall mount right here and this flashlight's base is shaped for it — it clicks in, see? Do you have one too? Yes? Yes?\"}"
+				}
+			],
+			"costUsd": 0.000162492
+		},
+		{
+			"repetition": 19,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_Vz2ffOMdzPfFKHGoXvqe3437",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_Raofa3jg14rbi4V26Z3f4502",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Oh it fits, it fits! The base just clicked right in — hear that? Should I try switching it on, yes? yes?\"}"
+				}
+			],
+			"costUsd": 0.000227292
+		},
+		{
+			"repetition": 20,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_0iYPOvtS9rkvAkBLKGkB7725",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_tePQ69SlwEkvQoyozeK45842",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh I see it, I see it — the mount is one step north of me. Let me just try the base, yes? yes?\"}"
+				}
+			],
+			"costUsd": 0.000174492
+		},
+		{
+			"repetition": 21,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_U7zZVlWOgcqeRTyZ0KhC3674",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_9TSJvUNFDoneqe9qps8R8244",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Yes, yes — it fits, it clicks right in. There's a spring-loaded mount one step north of me and the base locks into it like it was made for it. Do you know what it's for?\"}"
+				}
+			],
+			"costUsd": 0.000216492
+		},
+		{
+			"repetition": 22,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_7bTy8MJh25QUv7GDILsn7869",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_iAFUNw5N28m9xUIFpiAt1889",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"oh, there's a spring mount one step north of me and my flashlight's base is shaped for it — yes, shaped for it! Are you finding mounts too, or is it just me down here?\"}"
+				}
+			],
+			"costUsd": 0.000284292
+		},
+		{
+			"repetition": 23,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_5AnHQbZt9KgnCLPcModY7458",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_mmBEZRptvWOycTBUllp05297",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"yes? yes — the base is shaped for it, it just wants a push. giving it a push now, watch.\"}"
+				}
+			],
+			"costUsd": 0.000202092
+		},
+		{
+			"repetition": 24,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_oCEkNaqVlLpjwvSTV2IR5686",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_xHNDcIv46v9mXVYgTbIp9377",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh it fits, it fits!! see that? yes? yes?\"}"
+				}
+			],
+			"costUsd": 0.000223092
+		},
+		{
+			"repetition": 25,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_5u0EoDtuoFDIMV46XvV02841",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh it's right there, one step north — the spring mount, yes? Let me try it, let me try it.\"}"
+				},
+				{
+					"id": "call_01_shLfDS60OaI4ByeSDqHR6668",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000173892
+		},
+		{
+			"repetition": 26,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_9n1YQ3vQDzBKsnRvNXKp5585",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_lTgKLk9LrJMSP1kmv3sj6653",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"hey, hey — there's a spring mount right above me and this flashlight's base is shaped for it. watch, watch, I'm clipping it in!\"}"
+				}
+			],
+			"costUsd": 0.000208692
+		},
+		{
+			"repetition": 27,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_NHb7DuMIzdwRYXNIIOWP8949",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_eBboRQcKfkYWapyDQGKb6327",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh it fits, it fits! it clicked right in, yes? do you see it light up?\"}"
+				}
+			],
+			"costUsd": 0.000187692
+		},
+		{
+			"repetition": 28,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_wMdeStHFH6Mn1jGcfReO7438",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				},
+				{
+					"id": "call_01_8t5xFcD04cpNX39RrijW2160",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"sim1\", \"content\": \"oh it fits, it fits! there's a spring-loaded mount right north of me and the base clicked in like it was made for it. are you seeing any light where you are, yes? yes?\"}"
+				}
+			],
+			"costUsd": 0.000198492
+		},
+		{
+			"repetition": 29,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_IKlZkzVSb9HTu6kVD7ld1491",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"oh, a mount right there? yes, yes, I see it — right ahead of me. hold on, let me try it, hold on.\"}"
+				},
+				{
+					"id": "call_01_8sDRaslnbnd39YqwK1l78976",
+					"name": "use",
+					"argumentsJson": "{\"item\": \"yellow flashlight\"}"
+				}
+			],
+			"costUsd": 0.000196692
+		},
+		{
+			"repetition": 30,
+			"scenario": "objective",
+			"personaLabel": "Pip",
+			"temperaments": [
+				"sweet",
+				"effusive"
+			],
+			"assistantText": "",
+			"toolCalls": [
+				{
+					"id": "call_00_L6nf4z5CnM7xrgyoThJl1659",
+					"name": "go",
+					"argumentsJson": "{\"direction\": \"north\"}"
+				},
+				{
+					"id": "call_01_Kp5FfuXXfcGDfF6t5msI1228",
+					"name": "message",
+					"argumentsJson": "{\"to\": \"blue\", \"content\": \"Oh, good eye, good eye! Stepping up to it now — the base is shaped for exactly this, yes? yes?\"}"
+				}
+			],
+			"costUsd": 0.000158292
+		}
+	]
+}
