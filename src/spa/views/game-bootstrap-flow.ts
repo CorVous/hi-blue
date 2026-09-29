@@ -15,6 +15,8 @@ import { getSpikeRng } from "../game/spike-seed.js";
 import type { AiId, AiPersona } from "../game/types";
 import { CapHitError, upstreamMessageOf } from "../llm-client.js";
 import {
+	type ActiveSessionToken,
+	captureActiveSession,
 	clearActiveSession,
 	getActiveSessionId,
 	loadActiveSession,
@@ -50,7 +52,7 @@ interface LoadingTimers {
 }
 
 interface LoadingFlow {
-	sessionId: string | null;
+	session: ActiveSessionToken;
 	pending: PendingBootstrap;
 	timers: LoadingTimers;
 	blockedBy: "cap-hit" | "recovery" | null;
@@ -129,7 +131,7 @@ function runningLoadingFlowFor(pending: PendingBootstrap): LoadingFlow | null {
 	const running =
 		loadingFlow !== null &&
 		loadingFlow.pending === pending &&
-		loadingFlow.sessionId === getActiveSessionId();
+		loadingFlow.session.stillActive();
 	return running ? loadingFlow : null;
 }
 
@@ -147,7 +149,7 @@ function revealRunningLoadingFlow(
 }
 
 function loadingFlowAbandoned(flow: LoadingFlow): boolean {
-	return getActiveSessionId() !== flow.sessionId;
+	return !flow.session.stillActive();
 }
 
 function forgetLoadingFlow(flow: LoadingFlow): void {
@@ -172,7 +174,7 @@ function renderBootstrapLoadingFlow(
 	ctx.dev.showPendingBootstrap(ctx.root, pending);
 
 	const flow: LoadingFlow = {
-		sessionId: getActiveSessionId(),
+		session: captureActiveSession(),
 		pending,
 		timers: { spinnerInterval: undefined, wipeRaf: undefined },
 		blockedBy: null,
@@ -327,7 +329,7 @@ function handOverBootstrappedSession(
 	ctx.promptInput.disabled = false;
 	ctx.promptInput.placeholder = "";
 
-	const rendered = flow.adopt(built, flow.sessionId);
+	const rendered = flow.adopt(built, flow.session.id);
 	if (!saveResult.ok) {
 		showPersistenceWarning(ctx.persistenceWarningEl, saveResult.reason);
 	}

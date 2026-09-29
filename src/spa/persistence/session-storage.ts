@@ -146,6 +146,17 @@ export function getActiveSessionId(): string | null {
 	}
 }
 
+export interface ActiveSessionToken {
+	readonly id: string | null;
+	stillActive(): boolean;
+}
+
+export function captureActiveSession(
+	id: string | null = getActiveSessionId(),
+): ActiveSessionToken {
+	return { id, stillActive: () => getActiveSessionId() === id };
+}
+
 export function setActiveSessionId(id: string): void {
 	ignoringStorageErrors(() => localStorage.setItem(ACTIVE_KEY, id));
 }

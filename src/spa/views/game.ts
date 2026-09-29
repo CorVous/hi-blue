@@ -49,6 +49,8 @@ import type {
 } from "../game/types";
 import { CapHitError, upstreamMessageOf } from "../llm-client.js";
 import {
+	type ActiveSessionToken,
+	captureActiveSession,
 	clearActiveSession,
 	deactivateActiveSession,
 	getActiveSessionId,
@@ -159,7 +161,7 @@ interface RoundOutcome {
 
 interface RoundOwner {
 	session: GameSession;
-	sessionId: string | null;
+	sessionToken: ActiveSessionToken;
 	lastSavedAt: string | null;
 }
 
@@ -802,7 +804,7 @@ async function submitRound(ctx: GameViewContext, evt: Event): Promise<void> {
 
 	const owner: RoundOwner = {
 		session: activeSession,
-		sessionId: hydratedSessionId,
+		sessionToken: captureActiveSession(hydratedSessionId),
 		lastSavedAt: hydratedLastSavedAt,
 	};
 	const submitted = beginRound(ctx, activeSession, draft);
@@ -952,7 +954,7 @@ function startRoundSpinners(
 }
 
 function playerLeftRoundSession(owner: RoundOwner): boolean {
-	return session !== owner.session || getActiveSessionId() !== owner.sessionId;
+	return session !== owner.session || !owner.sessionToken.stillActive();
 }
 
 async function playRound(
@@ -982,7 +984,7 @@ async function playRound(
 	}
 
 	const saveResult = saveActiveSession(nextState, {
-		sessionId: owner.sessionId,
+		sessionId: owner.sessionToken.id,
 		...saveExpectation(owner.lastSavedAt),
 	});
 	if (!saveResult.ok && saveResult.reason === "stale") {
@@ -1011,7 +1013,7 @@ async function playRound(
 
 	if (outcome.gameEnded) {
 		refreshTopInfo(ctx);
-		enterEndgame(ctx, nextState, owner.sessionId);
+		enterEndgame(ctx, nextState, owner.sessionToken.id);
 	}
 }
 
@@ -1026,7 +1028,7 @@ function saveRoundLeftBehind(
 	owner: RoundOwner,
 	nextState: GameState,
 ): void {
-	const roundSessionId = owner.sessionId;
+	const roundSessionId = owner.sessionToken.id;
 	const roundSessionStillExists =
 		roundSessionId !== null && listSessions().includes(roundSessionId);
 	if (roundSessionStillExists) {

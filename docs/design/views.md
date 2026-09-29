@@ -199,6 +199,15 @@ it hides the other routes' screens and shows or hides the global chrome
   a page refresh. When the pointer has moved (`activePointerMoved`), the
   cached session is dropped so that the restore path loads the new session
   instead of re-rendering the old one.
+- **Did the player leave?** Work that outlives an await (a round, the
+  bootstrap loading flow, an endgame choice) records which session it
+  belongs to with `captureActiveSession` (`session-storage.ts`), which
+  returns `{ id, stillActive() }`. It captures the active pointer, or an id
+  the caller already knows (the round's `hydratedSessionId`, the ended
+  session's id), and `stillActive()` is true while the active pointer still
+  names that id. `playerLeftRoundSession`, `loadingFlowAbandoned` and
+  `playerLeftEndedSession` are built on it; the round check also compares
+  the cached `GameSession` object.
 - A round enters the endgame at most once without a guard flag:
   `encodeRoundResult` emits at most one `game_ended` per round, and
   `enterEndgame` releases the cached session, so no further round can run

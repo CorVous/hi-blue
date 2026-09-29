@@ -5,8 +5,9 @@ import type { GameSession } from "../game/game-session.js";
 import type { AiId, GameState } from "../game/types";
 import { readStoredByokKey } from "../openrouter-key.js";
 import {
+	type ActiveSessionToken,
 	archiveSession,
-	getActiveSessionId,
+	captureActiveSession,
 	isSessionComplete,
 	mintSessionId,
 	rmSession,
@@ -45,7 +46,12 @@ export function showEndgame(
 	paintFinalRoundLines(doc, endedState);
 	showEndgameScreen(doc);
 	resetEndgameControls(doc);
-	wireEndgameChoices({ root, endedSessionId, endedState, releaseEndedGame });
+	wireEndgameChoices({
+		root,
+		endedSession: captureActiveSession(endedSessionId),
+		endedState,
+		releaseEndedGame,
+	});
 	wireSaveDownload(doc, endedState);
 	wireDiagnosticsSubmit(doc);
 }
@@ -139,7 +145,7 @@ function showEndgameScreen(doc: Document): void {
 
 interface EndedGame {
 	root: HTMLElement;
-	endedSessionId: string | null;
+	endedSession: ActiveSessionToken;
 	endedState: GameState;
 	releaseEndedGame(): void;
 }
@@ -187,7 +193,7 @@ function wireEndgameChoices(endedGame: EndedGame): void {
 	};
 
 	const inFlight = choiceInFlight;
-	if (inFlight && inFlight.endedSessionId === endedGame.endedSessionId) {
+	if (inFlight && inFlight.endedSessionId === endedGame.endedSession.id) {
 		setChoicesDisabled(true);
 		paintStatus(inFlight.status);
 	}
@@ -211,7 +217,7 @@ async function runChoice(
 	run: (choice: EndgameChoice) => Promise<void>,
 ): Promise<void> {
 	const record: ChoiceInFlight = {
-		endedSessionId: choice.endedSessionId,
+		endedSessionId: choice.endedSession.id,
 		status: "",
 	};
 	choiceInFlight = record;
@@ -223,7 +229,7 @@ async function runChoice(
 }
 
 function playerLeftEndedSession(choice: EndgameChoice): boolean {
-	return getActiveSessionId() !== choice.endedSessionId;
+	return !choice.endedSession.stillActive();
 }
 
 function failEndgameChoice(choice: EndgameChoice, message: string): void {
@@ -243,7 +249,7 @@ function saveFailureDetail(reason: string): string {
 }
 
 function removeEndedSession(choice: EndgameChoice): void {
-	if (choice.endedSessionId) rmSession(choice.endedSessionId);
+	if (choice.endedSession.id) rmSession(choice.endedSession.id);
 }
 
 interface ArchivePlan {
@@ -263,7 +269,7 @@ function failArchive(choice: EndgameChoice, err: unknown): void {
 }
 
 function planArchive(choice: EndgameChoice): ArchivePlan | null {
-	const sessionId = choice.endedSessionId;
+	const sessionId = choice.endedSession.id;
 	if (!sessionId) return { archive: false, note: "" };
 	try {
 		return isSessionComplete(sessionId)
@@ -279,10 +285,10 @@ async function archiveAsPlanned(
 	choice: EndgameChoice,
 	plan: ArchivePlan,
 ): Promise<boolean> {
-	if (!plan.archive || !choice.endedSessionId) return true;
+	if (!plan.archive || !choice.endedSession.id) return true;
 	choice.setStatus("archiving…");
 	try {
-		await archiveSession(choice.endedSessionId);
+		await archiveSession(choice.endedSession.id);
 		return true;
 	} catch (err) {
 		failArchive(choice, err);
@@ -355,7 +361,7 @@ async function continueInNewRoom(choice: EndgameChoice): Promise<void> {
 	};
 	const saveResult = saveActiveSession(
 		appendBroadcast(newRoomWithEndedLogs, NEW_ROOM_BROADCAST),
-		{ sessionId: choice.endedSessionId, advanceEpoch: true },
+		{ sessionId: choice.endedSession.id, advanceEpoch: true },
 	);
 	if (!saveResult.ok) {
 		failEndgameChoice(
