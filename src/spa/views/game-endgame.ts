@@ -27,6 +27,13 @@ const NEW_ROOM_BROADCAST = "The sysadmin has created a new room.";
 const INCOMPLETE_SAVE_NOTE =
 	"this game's last save was incomplete, so it was not archived";
 
+interface ChoiceInFlight {
+	endedSessionId: string | null;
+	status: string;
+}
+
+let choiceInFlight: ChoiceInFlight | null = null;
+
 export function showEndgame(
 	root: HTMLElement,
 	endedState: GameState,
@@ -43,10 +50,14 @@ export function showEndgame(
 	wireDiagnosticsSubmit(doc);
 }
 
-const ENDGAME_BUTTON_SELECTORS = [
+const ENDGAME_CHOICE_SELECTORS = [
 	"#endgame-new-daemons-btn",
 	"#endgame-same-daemons-btn",
 	"#endgame-continue-btn",
+];
+
+const ENDGAME_BUTTON_SELECTORS = [
+	...ENDGAME_CHOICE_SELECTORS,
 	"#download-ais-btn",
 	"#submit-diagnostics-btn",
 ];
@@ -66,6 +77,10 @@ function resetEndgameControls(doc: Document): void {
 		const statusEl = doc.querySelector<HTMLElement>(selector);
 		if (statusEl) statusEl.textContent = "";
 	}
+	const summaryInput = doc.querySelector<HTMLInputElement>(
+		"#diagnostics-summary",
+	);
+	if (summaryInput) summaryInput.disabled = false;
 }
 
 export function endgameSubtitle(outcome: GameState["outcome"]): string {
@@ -145,38 +160,66 @@ function wireEndgameChoices(endedGame: EndedGame): void {
 	const continueBtn = doc.querySelector<HTMLButtonElement>(
 		"#endgame-continue-btn",
 	);
-	const choiceStatus = doc.querySelector<HTMLElement>("#endgame-choice-status");
 
 	const hasOpenRouterKey = readStoredByokKey() !== null;
-	if (continueBtn && hasOpenRouterKey) {
-		continueBtn.removeAttribute("hidden");
-	}
+	if (continueBtn) continueBtn.hidden = !hasOpenRouterKey;
 
 	const setChoicesDisabled = (disabled: boolean): void => {
-		for (const btn of [newDaemonsBtn, sameDaemonsBtn, continueBtn]) {
+		for (const selector of ENDGAME_CHOICE_SELECTORS) {
+			const btn = doc.querySelector<HTMLButtonElement>(selector);
 			if (btn) btn.disabled = disabled;
 		}
+	};
+	const paintStatus = (text: string): void => {
+		const statusEl = doc.querySelector<HTMLElement>("#endgame-choice-status");
+		if (statusEl) statusEl.textContent = text;
 	};
 	const choice: EndgameChoice = {
 		...endedGame,
 		setStatus: (text) => {
-			if (choiceStatus) choiceStatus.textContent = text;
+			if (choiceInFlight) choiceInFlight.status = text;
+			paintStatus(text);
 		},
-		enableChoices: () => setChoicesDisabled(false),
+		enableChoices: () => {
+			choiceInFlight = null;
+			setChoicesDisabled(false);
+		},
 	};
 
-	newDaemonsBtn?.addEventListener("click", () => {
+	const inFlight = choiceInFlight;
+	if (inFlight && inFlight.endedSessionId === endedGame.endedSessionId) {
 		setChoicesDisabled(true);
-		void startWithNewDaemons(choice);
-	});
-	sameDaemonsBtn?.addEventListener("click", () => {
-		setChoicesDisabled(true);
-		void restartWithSameDaemons(choice);
-	});
-	continueBtn?.addEventListener("click", () => {
-		setChoicesDisabled(true);
-		void continueInNewRoom(choice);
-	});
+		paintStatus(inFlight.status);
+	}
+
+	const wireChoice = (
+		btn: HTMLButtonElement | null,
+		run: (choice: EndgameChoice) => Promise<void>,
+	): void => {
+		btn?.addEventListener("click", () => {
+			setChoicesDisabled(true);
+			void runChoice(choice, run);
+		});
+	};
+	wireChoice(newDaemonsBtn, startWithNewDaemons);
+	wireChoice(sameDaemonsBtn, restartWithSameDaemons);
+	wireChoice(continueBtn, continueInNewRoom);
+}
+
+async function runChoice(
+	choice: EndgameChoice,
+	run: (choice: EndgameChoice) => Promise<void>,
+): Promise<void> {
+	const record: ChoiceInFlight = {
+		endedSessionId: choice.endedSessionId,
+		status: "",
+	};
+	choiceInFlight = record;
+	try {
+		await run(choice);
+	} finally {
+		if (choiceInFlight === record) choiceInFlight = null;
+	}
 }
 
 function playerLeftEndedSession(choice: EndgameChoice): boolean {
@@ -365,6 +408,8 @@ function wireDiagnosticsSubmit(doc: Document): void {
 		const downloaded =
 			doc.querySelector<HTMLButtonElement>("#download-ais-btn")?.disabled ??
 			false;
+		submitBtn.disabled = true;
+		summaryInput.disabled = true;
 		const markSubmitted = (): void => {
 			statusEl.textContent = "Diagnostics submitted.";
 		};
