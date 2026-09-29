@@ -30,7 +30,7 @@ function itemEnum(game: GameState, tool: ToolName): string[] {
 }
 
 function decoyAndCarryGame(): GameState {
-	return makeGame([
+	const game = makeGame([
 		makeEntity("decoy-1", "interesting_object", RED_CELL, {
 			name: "tin cup",
 			examineDescription: "A dented tin cup.",
@@ -53,6 +53,26 @@ function decoyAndCarryGame(): GameState {
 			useAvailable: true,
 		}),
 	]);
+	return {
+		...game,
+		objectives: [
+			{
+				id: "carry-0",
+				kind: "carry",
+				description: "Seat the flashlight in the wall mount.",
+				satisfactionState: "pending",
+				objectId: "carry-0-obj",
+				spaceId: "carry-0-space",
+			},
+			{
+				id: "useSpace-0",
+				kind: "use_space",
+				description: "Activate the service panel.",
+				satisfactionState: "pending",
+				spaceId: "useSpace-0-space",
+			},
+		],
+	};
 }
 
 describe("tool targets are the names the Daemon sees", () => {

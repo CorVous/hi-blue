@@ -4,6 +4,7 @@ import type {
 	ActiveComplication,
 	ContentPack,
 	GameState,
+	Objective,
 	WorldEntity,
 } from "../types.js";
 import { inVista } from "../vista-projector.js";
@@ -212,9 +213,35 @@ describe("availableTools — tool_disable filtering", () => {
 	});
 });
 
+function bindSpaceObjective(
+	game: GameState,
+	kind: "use_space" | "convergence" | "carry",
+	spaceId: string,
+): GameState {
+	const objective: Objective =
+		kind === "carry"
+			? {
+					id: `${kind}-${spaceId}`,
+					kind,
+					description: `${kind} objective`,
+					satisfactionState: "pending",
+					objectId: "obj1",
+					spaceId,
+				}
+			: {
+					id: `${kind}-${spaceId}`,
+					kind,
+					description: `${kind} objective`,
+					satisfactionState: "pending",
+					spaceId,
+				};
+	return { ...game, objectives: [...game.objectives, objective] };
+}
+
 function makeGameWithSpace(
 	spacePos: { row: number; col: number },
 	spaceOpts: Partial<WorldEntity> = {},
+	objectiveKind: "use_space" | "convergence" | "carry" = "use_space",
 ): GameState {
 	const space: WorldEntity = {
 		id: "space1",
@@ -235,7 +262,11 @@ function makeGameWithSpace(
 		holder: { row: 0, col: 0 },
 		pairsWithSpaceId: "space1",
 	};
-	return makeCornerGame([obj, space]);
+	return bindSpaceObjective(
+		makeCornerGame([obj, space]),
+		objectiveKind,
+		"space1",
+	);
 }
 
 describe("availableTools — use includes objective_space ids", () => {
@@ -306,6 +337,32 @@ describe("availableTools — use includes objective_space ids", () => {
 		expect(itemEnum).toContain("Test Space");
 		expect(itemEnum).toHaveLength(1);
 	});
+
+	it("use does NOT include a carry-paired space the Daemon stands on", () => {
+		const game = makeGameWithSpace({ row: 2, col: 2 }, {}, "carry");
+		const tools = availableTools(game, "red", []);
+		const useTool = tools.find((t) => t.function.name === "use");
+		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
+		expect(itemEnum).not.toContain("Test Space");
+	});
+
+	it("use does NOT include a Convergence space the Daemon stands on", () => {
+		const game = makeGameWithSpace({ row: 2, col: 2 }, {}, "convergence");
+		const tools = availableTools(game, "red", []);
+		const useTool = tools.find((t) => t.function.name === "use");
+		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
+		expect(itemEnum).not.toContain("Test Space");
+	});
+
+	it("use does NOT include an objective space bound to no objective", () => {
+		const game = makeCornerGame([
+			makeEntity("plinth", "objective_space", { row: 2, col: 2 }),
+		]);
+		const tools = availableTools(game, "red", []);
+		const useTool = tools.find((t) => t.function.name === "use");
+		const itemEnum = useTool?.function.parameters.properties.item?.enum ?? [];
+		expect(itemEnum).not.toContain("plinth");
+	});
 });
 
 describe("availableTools — interaction range", () => {
@@ -338,7 +395,10 @@ describe("availableTools — interaction range", () => {
 				useOutcome: "You activate the space.",
 			});
 		}
-		return makeCornerGame(entities);
+		const game = makeCornerGame(entities);
+		return opts.spaceOffset
+			? bindSpaceObjective(game, "use_space", "space1")
+			: game;
 	}
 
 	function enumOf(game: GameState, tool: string, key: string): string[] {

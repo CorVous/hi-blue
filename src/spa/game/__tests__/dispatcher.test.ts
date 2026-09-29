@@ -1202,6 +1202,93 @@ describe("validateToolCall — use on objective_space", () => {
 	});
 });
 
+describe("use on a space that is not a Use-Space", () => {
+	const carryObjective: CarryObjective = {
+		id: "obj-carry",
+		kind: "carry",
+		description: "Set the relic in the shrine",
+		satisfactionState: "pending",
+		objectId: "relic",
+		spaceId: "shrine",
+	};
+	const convergenceObjective: ConvergenceObjective = {
+		id: "obj-conv",
+		kind: "convergence",
+		description: "Gather at the shrine",
+		satisfactionState: "pending",
+		spaceId: "shrine",
+	};
+
+	function gameWithShrineBoundTo(
+		objective: Objective,
+		spaceOpts: Partial<WorldEntity> = {},
+	): GameState {
+		return {
+			...makeGameWithSpaceObjective(
+				{ row: 2, col: 2 },
+				{ row: 2, col: 2 },
+				spaceOpts,
+			),
+			objectives: [objective],
+		};
+	}
+
+	for (const [label, objective] of [
+		["carry-paired", carryObjective],
+		["Convergence", convergenceObjective],
+	] as const) {
+		it(`rejects use on a ${label} space in the actor's own cell`, () => {
+			const result = validateToolCall(gameWithShrineBoundTo(objective), "red", {
+				name: "use",
+				args: { item: "Shrine" },
+			});
+			expect(result).toEqual({
+				valid: false,
+				reason: '"Shrine" is not something you can use',
+			});
+		});
+
+		it(`leaves a ${label} space and its objective unchanged when use is dispatched`, () => {
+			const game = gameWithShrineBoundTo(objective);
+			const result = dispatchAiTurn(game, {
+				aiId: "red",
+				toolCall: { name: "use", args: { item: "shrine" } },
+			});
+			expect(result.records[0]?.kind).toBe("tool_failure");
+			expect(result.records[0]?.description).toContain(
+				'"Shrine" is not something you can use',
+			);
+			const space = result.game.world.entities.find((e) => e.id === "shrine");
+			expect(space?.useAvailable).toBe(true);
+			expect(space?.satisfactionState).toBeUndefined();
+			expect(result.game.objectives).toEqual([objective]);
+		});
+	}
+
+	it("leaves the space unchanged when executeToolCall is called directly", () => {
+		const game = gameWithShrineBoundTo(convergenceObjective);
+		const updated = executeToolCall(game, "red", {
+			name: "use",
+			args: { item: "shrine" },
+		});
+		const space = updated.world.entities.find((e) => e.id === "shrine");
+		expect(space?.useAvailable).toBe(true);
+		expect(updated.objectives).toEqual([convergenceObjective]);
+	});
+
+	it("treats a carry space spent by an older save like any other non-Use-Space", () => {
+		const game = gameWithShrineBoundTo(carryObjective, { useAvailable: false });
+		const useEnum =
+			availableTools(game, "red", []).find((t) => t.function.name === "use")
+				?.function.parameters.properties.item?.enum ?? [];
+		expect(useEnum).not.toContain("Shrine");
+		expect(
+			validateToolCall(game, "red", { name: "use", args: { item: "Shrine" } })
+				.reason,
+		).toBe('"Shrine" is not something you can use');
+	});
+});
+
 describe("dispatchAiTurn — use on objective_space witnesses satisfactionFlavor", () => {
 	it("emits witnessed event with satisfactionFlavor to a witness whose Vista contains the actor's cell", () => {
 		const space: WorldEntity = {

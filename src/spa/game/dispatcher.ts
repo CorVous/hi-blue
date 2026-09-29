@@ -2,6 +2,7 @@ import {
 	disabledToolsFor,
 	entityHandle,
 	type ItemToolName,
+	isUseSpace,
 	obstaclePositions,
 	pairedSpaceHoldingItem,
 	pickableEntities,
@@ -149,6 +150,8 @@ function validateResolvedToolCall(
 				(e) => e.id === call.args.item && e.kind === "objective_space",
 			);
 			if (spaceTarget) {
+				if (!isUseSpace(game, spaceTarget))
+					return invalid(`"${label}" is not something you can use`);
 				if (spaceTarget.useAvailable === false)
 					return invalid(`"${label}" has already been used`);
 				if (!isGridPosition(spaceTarget.holder))
@@ -262,6 +265,7 @@ function executeResolvedToolCall(
 				(e) => e.id === call.args.item && e.kind === "objective_space",
 			);
 			if (spaceTarget) {
+				if (!isUseSpace(game, spaceTarget)) break;
 				const satisfied = satisfyPendingObjective(
 					game,
 					entities,

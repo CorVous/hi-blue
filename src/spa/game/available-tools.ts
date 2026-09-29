@@ -42,6 +42,16 @@ export function pairedSpaceHoldingItem(
 	);
 }
 
+export function isUseSpace(game: GameState, entity: WorldEntity): boolean {
+	return (
+		entity.kind === "objective_space" &&
+		game.objectives.some(
+			(objective) =>
+				objective.kind === "use_space" && objective.spaceId === entity.id,
+		)
+	);
+}
+
 export function pickableEntities(entities: WorldEntity[]): WorldEntity[] {
 	return entities.filter(
 		(e) => e.kind === "objective_object" || e.kind === "interesting_object",
@@ -191,7 +201,7 @@ function toolTargetCandidates(
 			if (!actorSpatial) return held;
 			const usableSpaces = entities.filter(
 				(e) =>
-					e.kind === "objective_space" &&
+					isUseSpace(game, e) &&
 					e.useAvailable !== false &&
 					isGridPosition(e.holder) &&
 					withinInteractionRange(actorSpatial.position, e.holder),
