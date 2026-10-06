@@ -295,12 +295,12 @@ affordance such as `?winImmediately=1` would change a later test's round.
      deliberately does not use `projectVista` filtered by `isWall`: that is
      the implementation's own loop, so the test would only confirm that the
      code equals itself.
-- **Shared fixtures.** `startGame` keeps the content pack's entity and
-  start-position objects by reference, so moving a Daemon or an entity in a
-  session built from a shared static pack would change the pack for later
-  tests. `vista-focus.test.ts` and `world-map.test.ts` build each session from
-  a `structuredClone` of the pack, and `world-map.test.ts` checks after every
-  test that the shared pack is unchanged. jsdom converts hex colours to `rgb()`, so colour
+- **Shared fixtures.** `startGame` copies the pack's entities and start
+  positions (#586), so moving a Daemon or an entity in a session does not
+  change the static pack it came from. `vista-focus.test.ts` and
+  `world-map.test.ts` still build each session from a `structuredClone` of
+  the pack, and `world-map.test.ts` checks after every test that the shared
+  pack is unchanged. jsdom converts hex colours to `rgb()`, so colour
   assertions normalise both sides.
 
 ## Styles (`styles.css`)

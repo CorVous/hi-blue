@@ -17,7 +17,7 @@ import {
 } from "../pack-selectors";
 import { buildAiContext } from "../prompt-builder";
 import type { ContentPack, GameState, WorldEntity } from "../types";
-import { TEST_PERSONAS } from "./fixtures/make-game-state";
+import { ROW_AI_STARTS, TEST_PERSONAS } from "./fixtures/make-game-state";
 import { makeTestPack } from "./fixtures/make-test-pack";
 import { cardinalClause } from "./fixtures/prompt-sections";
 
@@ -36,6 +36,42 @@ describe("advanceRound", () => {
 });
 
 describe("startGame world.entities", () => {
+	it("copies the pack's entities and start positions, so editing the game leaves the pack unchanged", () => {
+		const pack = makeTestPack(
+			[
+				{
+					id: "carry-0-obj",
+					kind: "objective_object",
+					name: "gem",
+					examineDescription: "A gem.",
+					holder: { row: 1, col: 1 },
+					pairsWithSpaceId: "carry-0-space",
+				},
+				{
+					id: "carry-0-space",
+					kind: "objective_space",
+					name: "altar",
+					examineDescription: "An altar.",
+					holder: { row: 3, col: 3 },
+				},
+			],
+			{ wallName: "wall", aiStarts: ROW_AI_STARTS },
+		);
+		const pristine = structuredClone(pack);
+		const game = startGame(TEST_PERSONAS, pack, { budgetPerAi: 5 });
+
+		for (const entity of game.world.entities) {
+			entity.holder = "red";
+			entity.satisfactionState = "satisfied";
+		}
+		for (const spatial of Object.values(game.personaSpatial)) {
+			spatial.position.row = 4;
+			spatial.position = { row: 2, col: 2 };
+		}
+
+		expect(pack).toStrictEqual(pristine);
+	});
+
 	it("places use_space and convergence bound spaces on the grid", () => {
 		const packWithBoundSpaces = makeTestPack(
 			[
