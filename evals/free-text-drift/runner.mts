@@ -2,6 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+	type DaemonTurnMemory,
+	prepareDaemonTurn,
+	settleDaemonTurn,
+} from "../../src/spa/game/daemon-turn.js";
+import {
 	advanceRound,
 	appendMessage,
 	startGame,
@@ -11,11 +16,6 @@ import {
 	TOOL_DEFINITIONS,
 } from "../../src/spa/game/tool-registry.js";
 import type { AiId, AiPersona, ContentPack } from "../../src/spa/game/types.js";
-import {
-	type DaemonTurnMemory,
-	prepareDaemonTurn,
-	settlePreparedTurn,
-} from "../daemon-turn-memory.js";
 import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 import type { CapturedToolCall, TurnRecord } from "./scoring.js";
 import {
@@ -294,12 +294,10 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 			injectedFrom: incoming.from,
 		});
 
-		const turn = settlePreparedTurn(
-			game,
-			prepared,
-			result.toolCalls,
-			result.costUsd,
-		);
+		const turn = settleDaemonTurn(game, prepared, {
+			toolCalls: result.toolCalls,
+			costUsd: result.costUsd,
+		});
 		game = turn.game;
 		memory = turn.memory;
 

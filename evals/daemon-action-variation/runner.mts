@@ -8,6 +8,7 @@ import {
 	PREFERRED_BIAS_THRESHOLD,
 	toolBiasSum,
 } from "../../src/content/action-preference-bias.js";
+import { prepareDaemonTurn } from "../../src/spa/game/daemon-turn.js";
 import {
 	advanceRound,
 	appendMessage,
@@ -18,10 +19,6 @@ import {
 	TOOL_DEFINITIONS,
 } from "../../src/spa/game/tool-registry.js";
 import type { AiId, AiPersona, GameState } from "../../src/spa/game/types.js";
-import {
-	prepareDaemonTurn,
-	settlePreparedTurn,
-} from "../daemon-turn-memory.js";
 import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 import { getScenarios, type Scenario } from "./scenarios.js";
 import type {
@@ -316,8 +313,6 @@ async function runOneRepetition(
 			error: err instanceof Error ? err.message : String(err),
 		};
 	}
-
-	settlePreparedTurn(game, prepared, result.toolCalls, result.costUsd);
 
 	const record: RepetitionRecord = {
 		repetition,

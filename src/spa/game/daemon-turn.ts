@@ -86,6 +86,7 @@ export interface SettledDaemonTurn {
 	game: GameState;
 	records: RoundActionRecord[];
 	memory: CarriedDaemonMemory;
+	acceptedAction: AiTurnAction["toolCall"];
 	passed: boolean;
 }
 
@@ -124,20 +125,15 @@ export function settleDaemonTurn(
 			tc.name as ToolName,
 			tc.argumentsJson,
 		);
-		const tcTriple: EmittedToolCall = {
-			id: tc.id,
-			name: tc.name,
-			argumentsJson: tc.argumentsJson,
-		};
 
 		if (!parseResult.ok) {
 			rejectToolCall(
-				tcTriple,
+				tc,
 				`${actorName} tried to ${tc.name} but failed: ${parseResult.reason}`,
 			);
 		} else if (tc.name === "message" && messageAssigned) {
 			rejectToolCall(
-				tcTriple,
+				tc,
 				`${actorName} tried to send more than one message in a turn: ${ONE_MESSAGE_PER_TURN_REASON}`,
 			);
 		} else if (tc.name === "message") {
@@ -147,20 +143,20 @@ export function settleDaemonTurn(
 			action.messages.push({
 				to: msgArgs.to as AiId | "blue",
 				content: msgArgs.content,
-				toolCallId: tcTriple.id,
-				toolArgumentsJson: tcTriple.argumentsJson,
+				toolCallId: tc.id,
+				toolArgumentsJson: tc.argumentsJson,
 			});
-			toolCallsInEmissionOrder.push({ kind: "message", tc: tcTriple });
+			toolCallsInEmissionOrder.push({ kind: "message", tc });
 		} else if (!actionAssigned) {
 			action.toolCall = {
 				name: tc.name as ToolName,
 				args: parseResult.args as Record<string, string>,
 			};
 			actionAssigned = true;
-			toolCallsInEmissionOrder.push({ kind: "actionAccepted", tc: tcTriple });
+			toolCallsInEmissionOrder.push({ kind: "actionAccepted", tc });
 		} else {
 			rejectToolCall(
-				tcTriple,
+				tc,
 				`${actorName} tried to take more than one action in a turn: ${ONE_ACTION_PER_TURN_REASON}`,
 			);
 		}
@@ -274,6 +270,7 @@ export function settleDaemonTurn(
 		game: state,
 		records,
 		memory: memoryAfterTurn(prepared, toolRoundtrip),
+		acceptedAction: action.toolCall,
 		passed,
 	};
 }
