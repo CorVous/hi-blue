@@ -1,5 +1,4 @@
 import { isDevHost } from "../dev-host";
-import { availableTools } from "./available-tools";
 import {
 	applyComplicationResult,
 	decrementComplicationCountdown,
@@ -8,7 +7,7 @@ import {
 	resolveExpiredDirectives,
 	tickComplication,
 } from "./complication-engine";
-import { settleDaemonTurn } from "./daemon-turn";
+import { prepareDaemonTurn, settleDaemonTurn } from "./daemon-turn";
 import { isGridPosition, positionsEqual } from "./direction";
 import {
 	advanceRound,
@@ -20,8 +19,7 @@ import {
 	personaName,
 	resolveToolDisables,
 } from "./engine";
-import { buildOpenAiMessages } from "./openai-message-builder";
-import { buildAiContext, type DiskEntityState } from "./prompt-builder";
+import type { DiskEntityState } from "./prompt-builder";
 import type {
 	LifecyclePhase,
 	OpenAiMessage,
@@ -173,17 +171,14 @@ export async function runRound(
 			continue;
 		}
 
-		const ctx = buildAiContext(state, aiId, {
-			prevDiskSnapshot: priorDiskSnapshots?.[aiId],
-			prevDiskEntities: priorDiskEntities?.[aiId],
+		const prepared = prepareDaemonTurn(state, aiId, {
+			diskSnapshot: priorDiskSnapshots?.[aiId],
+			diskEntities: priorDiskEntities?.[aiId],
+			toolRoundtrip: priorToolRoundtrip?.[aiId],
 		});
-		newDiskSnapshots[aiId] = ctx.diskSnapshot();
-		const promptEntities = ctx.diskEntities();
-		newDiskEntities[aiId] = promptEntities;
-		const priorRoundtrip = priorToolRoundtrip?.[aiId];
-		const messages = buildOpenAiMessages(ctx, priorRoundtrip, state.round);
-
-		const tools = availableTools(state, aiId, state.activeComplications);
+		newDiskSnapshots[aiId] = prepared.diskSnapshot;
+		newDiskEntities[aiId] = prepared.promptEntities;
+		const { messages, tools } = prepared;
 
 		const {
 			assistantText,
@@ -200,11 +195,9 @@ export async function runRound(
 				),
 			messages,
 		);
-		const settled = settleDaemonTurn(state, aiId, {
+		const settled = settleDaemonTurn(state, prepared, {
 			toolCalls: providerToolCalls,
 			costUsd,
-			promptMessages: messages,
-			promptEntities,
 		});
 		state = settled.game;
 		roundActions.push(...settled.records);

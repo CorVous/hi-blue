@@ -1,11 +1,14 @@
+import { availableTools } from "./available-tools";
 import { dispatchAiTurn } from "./dispatcher";
 import { appendMessage, FAREWELL_LINE, personaName } from "./engine";
+import { buildOpenAiMessages } from "./openai-message-builder";
 import {
 	buildAiContext,
 	type DiskEntityState,
 	renderPerceptionDelta,
 } from "./prompt-builder";
 import type { OpenAiMessage } from "./round-llm-provider";
+import type { OpenAiTool } from "./tool-registry";
 import { parseToolCallArguments } from "./tool-registry";
 import type {
 	AiId,
@@ -26,11 +29,41 @@ export interface EmittedToolCall {
 	argumentsJson: string;
 }
 
-export interface SettleDaemonTurnInput {
+export interface DaemonTurnMemory {
+	diskSnapshot?: string | undefined;
+	diskEntities?: Record<string, DiskEntityState> | undefined;
+	toolRoundtrip?: ToolRoundtripMessage | undefined;
+}
+
+export interface PreparedDaemonTurn {
+	aiId: AiId;
+	messages: OpenAiMessage[];
+	tools: OpenAiTool[];
+	diskSnapshot: string;
+	promptEntities: Record<string, DiskEntityState>;
+}
+
+export interface DaemonTurnResponse {
 	toolCalls: EmittedToolCall[];
 	costUsd?: number | undefined;
-	promptMessages: OpenAiMessage[];
-	promptEntities: Record<string, DiskEntityState>;
+}
+
+export function prepareDaemonTurn(
+	game: GameState,
+	aiId: AiId,
+	memory: DaemonTurnMemory,
+): PreparedDaemonTurn {
+	const ctx = buildAiContext(game, aiId, {
+		prevDiskSnapshot: memory.diskSnapshot,
+		prevDiskEntities: memory.diskEntities,
+	});
+	return {
+		aiId,
+		messages: buildOpenAiMessages(ctx, memory.toolRoundtrip, game.round),
+		tools: availableTools(game, aiId, game.activeComplications),
+		diskSnapshot: ctx.diskSnapshot(),
+		promptEntities: ctx.diskEntities(),
+	};
 }
 
 export interface SettledDaemonTurn {
@@ -47,12 +80,13 @@ type PendingEntry =
 
 export function settleDaemonTurn(
 	game: GameState,
-	aiId: AiId,
-	input: SettleDaemonTurnInput,
+	prepared: PreparedDaemonTurn,
+	response: DaemonTurnResponse,
 ): SettledDaemonTurn {
+	const { aiId } = prepared;
 	const toolCalls = withUniqueToolCallIds(
-		input.toolCalls,
-		replayedToolCallIds(input.promptMessages),
+		response.toolCalls,
+		replayedToolCallIds(prepared.messages),
 		`${aiId}-r${game.round}`,
 	);
 
@@ -122,7 +156,7 @@ export function settleDaemonTurn(
 	const dispatchResult = dispatchAiTurn(
 		game,
 		action,
-		input.costUsd !== undefined ? { costUsd: input.costUsd } : {},
+		response.costUsd !== undefined ? { costUsd: response.costUsd } : {},
 	);
 	let state = dispatchResult.game;
 
@@ -182,7 +216,7 @@ export function settleDaemonTurn(
 				: []),
 			...renderPerceptionDelta(
 				buildAiContext(state, aiId),
-				input.promptEntities,
+				prepared.promptEntities,
 			),
 		];
 		return lines.length > 0 ? lines.join("\n") : undefined;
@@ -240,7 +274,7 @@ function withUniqueToolCallIds<T extends { id: string }>(
 	const taken = new Set(takenIds);
 	return toolCalls.map((tc, index) => {
 		let id = tc.id;
-		for (let attempt = 0; id === "" || taken.has(id); attempt++) {
+		for (let attempt = 0; !id || taken.has(id); attempt++) {
 			id =
 				attempt === 0
 					? `call-${fallbackPrefix}-${index}`

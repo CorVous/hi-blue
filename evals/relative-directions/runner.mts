@@ -1,10 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { startGame } from "../../src/spa/game/engine.js";
+import { advanceRound, startGame } from "../../src/spa/game/engine.js";
 import {
+	type OpenAiTool,
 	parseToolCallArguments,
-	TOOL_DEFINITIONS,
 } from "../../src/spa/game/tool-registry.js";
 import type {
 	AiPersona,
@@ -15,6 +15,7 @@ import type {
 } from "../../src/spa/game/types.js";
 import {
 	type DaemonTurnMemory,
+	memoryAfterPrompt,
 	type PreparedDaemonTurn,
 	prepareDaemonTurn,
 	settlePreparedTurn,
@@ -92,6 +93,7 @@ async function callModel(
 		tool_calls?: OpenAiToolCall[];
 		tool_call_id?: string;
 	}>,
+	tools: OpenAiTool[],
 ): Promise<ModelTurnResult> {
 	const url = DIRECT_OPENROUTER
 		? OPENROUTER_URL
@@ -113,7 +115,7 @@ async function callModel(
 		body: JSON.stringify({
 			model: MODEL,
 			messages,
-			tools: TOOL_DEFINITIONS,
+			tools,
 			tool_choice: "auto",
 			stream: false,
 			...evalRequestOptions(),
@@ -188,7 +190,7 @@ function dispatchModelResponse(
 	memory: DaemonTurnMemory;
 	toolCallDirection: CardinalDirection | null;
 } {
-	const turn = settlePreparedTurn(game, "red", prepared, toolCalls, costUsd);
+	const turn = settlePreparedTurn(game, prepared, toolCalls, costUsd);
 	return {
 		game: turn.settled.game,
 		memory: turn.memory,
@@ -228,11 +230,12 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 	let memory: DaemonTurnMemory = {};
 
 	for (let t = 1; t <= LOOK_AND_NAVIGATE_TURNS; t++) {
+		game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = prepared.memoryAfterPrompt;
+		memory = memoryAfterPrompt(prepared);
 		const messages = prepared.messages;
 
-		const result = await callModel(messages);
+		const result = await callModel(messages, prepared.tools);
 
 		const cardinals = referencedCardinals(result.prose);
 		const statedDirection = parseStatedCardinal(result.prose);
@@ -275,10 +278,11 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 
 	const NAV_TURNS = 3;
 	for (let t = 1; t <= NAV_TURNS; t++) {
+		game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = prepared.memoryAfterPrompt;
+		memory = memoryAfterPrompt(prepared);
 		const messages = prepared.messages;
-		const result = await callModel(messages);
+		const result = await callModel(messages, prepared.tools);
 
 		const cardinals = referencedCardinals(result.prose);
 		const statedDirection = parseStatedCardinal(result.prose);
@@ -307,8 +311,9 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
+		game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = prepared.memoryAfterPrompt;
+		memory = memoryAfterPrompt(prepared);
 		const baseMessages = prepared.messages;
 		const messages = [
 			...baseMessages,
@@ -319,7 +324,7 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 			},
 		];
 
-		const result = await callModel(messages);
+		const result = await callModel(messages, prepared.tools);
 
 		const cardinals = referencedCardinals(result.prose);
 		const statedDirection = parseStatedCardinal(result.prose);
@@ -364,10 +369,11 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 
 	const NAV_TURNS = 2;
 	for (let t = 1; t <= NAV_TURNS; t++) {
+		game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = prepared.memoryAfterPrompt;
+		memory = memoryAfterPrompt(prepared);
 		const messages = prepared.messages;
-		const result = await callModel(messages);
+		const result = await callModel(messages, prepared.tools);
 
 		const cardinals = referencedCardinals(result.prose);
 		const statedDirection = parseStatedCardinal(result.prose);
@@ -396,8 +402,9 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
+		game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = prepared.memoryAfterPrompt;
+		memory = memoryAfterPrompt(prepared);
 		const baseMessages = prepared.messages;
 		const messages = [
 			...baseMessages,
@@ -408,7 +415,7 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 			},
 		];
 
-		const result = await callModel(messages);
+		const result = await callModel(messages, prepared.tools);
 
 		const cardinals = referencedCardinals(result.prose);
 		const statedDirection = parseStatedCardinal(result.prose);

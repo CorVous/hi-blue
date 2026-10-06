@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { availableTools } from "../../src/spa/game/available-tools.js";
+import type { availableTools } from "../../src/spa/game/available-tools.js";
 import {
 	advanceRound,
 	appendMessage,
@@ -11,6 +11,7 @@ import { TOOL_DEFINITIONS } from "../../src/spa/game/tool-registry.js";
 import type { AiId, AiPersona, ContentPack } from "../../src/spa/game/types.js";
 import {
 	type DaemonTurnMemory,
+	memoryAfterPrompt,
 	prepareDaemonTurn,
 	settlePreparedTurn,
 } from "../daemon-turn-memory.js";
@@ -265,9 +266,9 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 		game = appendMessage(game, incoming.from, REAL_AI, incoming.content);
 
 		const prepared = prepareDaemonTurn(game, REAL_AI, memory);
-		memory = prepared.memoryAfterPrompt;
+		memory = memoryAfterPrompt(prepared);
 		const messages = prepared.messages;
-		const tools = availableTools(game, REAL_AI, game.activeComplications);
+		const tools = prepared.tools;
 
 		let result: ModelTurnResult;
 		try {
@@ -295,7 +296,6 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 
 		const turn = settlePreparedTurn(
 			game,
-			REAL_AI,
 			prepared,
 			result.toolCalls,
 			result.costUsd,

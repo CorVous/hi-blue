@@ -8,7 +8,7 @@ import {
 	PREFERRED_BIAS_THRESHOLD,
 	toolBiasSum,
 } from "../../src/content/action-preference-bias.js";
-import { availableTools } from "../../src/spa/game/available-tools.js";
+import type { availableTools } from "../../src/spa/game/available-tools.js";
 import {
 	advanceRound,
 	appendMessage,
@@ -294,7 +294,7 @@ async function runOneRepetition(
 	const game = initialiseScenarioState(scenario, variant, withActionProfile);
 	const prepared = prepareDaemonTurn(game, scenario.actor, {});
 	const messages = prepared.messages;
-	const tools = availableTools(game, scenario.actor, game.activeComplications);
+	const tools = prepared.tools;
 
 	let result: ModelTurnResult;
 	try {
@@ -315,13 +315,7 @@ async function runOneRepetition(
 		};
 	}
 
-	settlePreparedTurn(
-		game,
-		scenario.actor,
-		prepared,
-		result.toolCalls,
-		result.costUsd,
-	);
+	settlePreparedTurn(game, prepared, result.toolCalls, result.costUsd);
 
 	const record: RepetitionRecord = {
 		repetition,

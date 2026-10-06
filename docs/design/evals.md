@@ -29,22 +29,27 @@ module-level fetch.
   ADR 0017 the drift and action-variation runners left thinking on while the
   game turned it off, and the content-pack runner turned it off while the game
   left it on, so older reports measured a setup players never saw.
-- **Turns settle as in production** (`evals/daemon-turn-memory.ts`). The
-  drift, directions and action-variation runners build each prompt with
-  `prepareDaemonTurn` and settle the response with `settlePreparedTurn`, which
-  calls `settleDaemonTurn` from `src/spa/game/daemon-turn.ts`, the same
-  function the round coordinator uses. So the first message and the first
-  action are accepted (ADR 0018), later ones are rejected, a turn with neither
-  is a pass, and every action and rejection is written to the Daemon's log as a
-  `tool-call` entry that the next prompt replays. The helpers also carry the
-  disk snapshot, disk entities and failed-message roundtrip from one turn to the
-  next, as `GameSession` does. Before 2026-10 each runner turned tool calls into
-  an `AiTurnAction` itself and called `dispatchAiTurn`, which never wrote the
-  tool-call entries. A Daemon in the evals then never saw its own successful
-  actions, which likely explains the pick_up → `use` loop in the 2026-09-29
-  transcripts, and reports from before then measured history players never saw.
-  The directions runner still skips settling a describe turn with no tool
-  calls, so those turns leave the game state untouched.
+- **Turns are prepared and settled as in production.** The drift, directions
+  and action-variation runners build each prompt with `prepareDaemonTurn` and
+  settle the response with `settleDaemonTurn`, both from
+  `src/spa/game/daemon-turn.ts`, the same functions the round coordinator uses.
+  `prepareDaemonTurn` builds the messages and the tools on offer
+  (`availableTools`); `settleDaemonTurn` accepts the first message and the
+  first action (ADR 0018), rejects later ones, dispatches a turn with neither
+  as a pass, and writes every action and rejection to the Daemon's log as a
+  `tool-call` entry that the next prompt replays. `evals/daemon-turn-memory.ts`
+  carries the disk snapshot, disk entities and failed-message roundtrip from
+  one turn to the next, as `GameSession` does. Before 2026-10 each runner
+  built its own prompt and `AiTurnAction` and called `dispatchAiTurn`, which
+  never wrote the tool-call entries. A Daemon in the evals then never saw its
+  own successful actions, which likely explains the pick_up → `use` loop in
+  the 2026-09-29 transcripts, and reports from before then measured history
+  players never saw. The directions runner also offered every tool and never
+  advanced the round, so every logged action carried round 0; it now offers
+  `availableTools` and advances the round before each turn. Two differences
+  remain on purpose: no runner applies the drift-to-silence retry, because the
+  raw first response is what they measure, and the directions runner skips
+  settling a describe turn with no tool calls.
 - **Budgets are set high on purpose** (`BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT`)
   so a run is never cut short by a lockout and the signal stays about the
   behaviour being measured.

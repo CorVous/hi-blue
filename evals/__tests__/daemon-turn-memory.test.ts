@@ -22,9 +22,7 @@ describe("settlePreparedTurn", () => {
 		});
 		const prepared = prepareDaemonTurn(game, "red", {});
 
-		const { settled, memory } = settlePreparedTurn(game, "red", prepared, [
-			goSouth,
-		]);
+		const { settled, memory } = settlePreparedTurn(game, prepared, [goSouth]);
 
 		const toolCallEntries = (settled.game.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "tool-call",
@@ -54,24 +52,39 @@ describe("settlePreparedTurn", () => {
 			pack: { aiStarts: CORNER_AI_STARTS },
 		});
 		const first = prepareDaemonTurn(game, "red", {});
-		const afterFirst = settlePreparedTurn(game, "red", first, [goSouth]);
+		const afterFirst = settlePreparedTurn(game, first, [goSouth]);
 
 		const second = prepareDaemonTurn(
 			afterFirst.settled.game,
 			"red",
 			afterFirst.memory,
 		);
-		const afterSecond = settlePreparedTurn(
-			afterFirst.settled.game,
-			"red",
-			second,
-			[goSouth],
-		);
+		const afterSecond = settlePreparedTurn(afterFirst.settled.game, second, [
+			goSouth,
+		]);
 
 		const ids = (afterSecond.settled.game.conversationLogs.red ?? []).flatMap(
 			(e) => (e.kind === "tool-call" ? [e.toolCallId] : []),
 		);
 		expect(ids).toHaveLength(2);
 		expect(new Set(ids).size).toBe(2);
+	});
+
+	it("gives a call with no id one, since a non-streaming response can omit it", () => {
+		const game = makeTestGame({
+			budgetPerAi: 20,
+			pack: { aiStarts: CORNER_AI_STARTS },
+		});
+		const prepared = prepareDaemonTurn(game, "red", {});
+		const idless = { ...goSouth, id: undefined as unknown as string };
+
+		const { settled } = settlePreparedTurn(game, prepared, [idless]);
+
+		const entry = (settled.game.conversationLogs.red ?? []).find(
+			(e) => e.kind === "tool-call",
+		);
+		expect(entry?.kind === "tool-call" && entry.toolCallId).toMatch(
+			/^call-red-r/,
+		);
 	});
 });
