@@ -2,26 +2,18 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { availableTools } from "../../src/spa/game/available-tools.js";
-import { dispatchAiTurn } from "../../src/spa/game/dispatcher.js";
 import {
 	advanceRound,
 	appendMessage,
 	startGame,
 } from "../../src/spa/game/engine.js";
-import { buildOpenAiMessages } from "../../src/spa/game/openai-message-builder.js";
-import { buildAiContext } from "../../src/spa/game/prompt-builder.js";
+import { TOOL_DEFINITIONS } from "../../src/spa/game/tool-registry.js";
+import type { AiId, AiPersona, ContentPack } from "../../src/spa/game/types.js";
 import {
-	parseToolCallArguments,
-	TOOL_DEFINITIONS,
-} from "../../src/spa/game/tool-registry.js";
-import type {
-	AiId,
-	AiPersona,
-	AiTurnAction,
-	ContentPack,
-	GameState,
-	ToolName,
-} from "../../src/spa/game/types.js";
+	type DaemonTurnMemory,
+	prepareDaemonTurn,
+	settlePreparedTurn,
+} from "../daemon-turn-memory.js";
 import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 import type { CapturedToolCall, TurnRecord } from "./scoring.js";
 import {
@@ -258,57 +250,13 @@ async function callModel(
 	return result;
 }
 
-function dispatchLikeRoundCoordinator(
-	game: GameState,
-	aiId: AiId,
-	toolCalls: CapturedToolCall[],
-	costUsd?: number,
-): GameState {
-	const action: AiTurnAction = { aiId };
-
-	for (const tc of toolCalls) {
-		const parseResult = parseToolCallArguments(
-			tc.name as ToolName,
-			tc.argumentsJson,
-		);
-		if (!parseResult.ok) continue;
-
-		if (tc.name === "message") {
-			const msgArgs = parseResult.args as { to: string; content: string };
-			if (action.messages !== undefined) continue;
-			action.messages = [];
-			action.messages.push({
-				to: msgArgs.to as AiId | "blue",
-				content: msgArgs.content,
-				toolCallId: tc.id,
-				toolArgumentsJson: tc.argumentsJson,
-			});
-		} else if (!action.toolCall) {
-			action.toolCall = {
-				name: tc.name as ToolName,
-				args: parseResult.args as Record<string, string>,
-			};
-		}
-	}
-
-	if (!action.toolCall && action.messages === undefined) {
-		action.pass = true;
-	}
-
-	const result = dispatchAiTurn(
-		game,
-		action,
-		costUsd !== undefined ? { costUsd } : {},
-	);
-	return result.game;
-}
-
 async function runDriftSession(): Promise<TurnRecord[]> {
 	let game = startGame(PERSONAS, makeSubwayStationPack(), {
 		budgetPerAi: BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT,
 	});
 
 	const turns: TurnRecord[] = [];
+	let memory: DaemonTurnMemory = {};
 
 	for (let round = 1; round <= TOTAL_ROUNDS; round++) {
 		game = advanceRound(game);
@@ -316,8 +264,9 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 		const incoming = pickIncoming(round);
 		game = appendMessage(game, incoming.from, REAL_AI, incoming.content);
 
-		const ctx = buildAiContext(game, REAL_AI);
-		const messages = buildOpenAiMessages(ctx);
+		const prepared = prepareDaemonTurn(game, REAL_AI, memory);
+		memory = prepared.memoryAfterPrompt;
+		const messages = prepared.messages;
 		const tools = availableTools(game, REAL_AI, game.activeComplications);
 
 		let result: ModelTurnResult;
@@ -344,12 +293,15 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 			injectedFrom: incoming.from,
 		});
 
-		game = dispatchLikeRoundCoordinator(
+		const turn = settlePreparedTurn(
 			game,
 			REAL_AI,
+			prepared,
 			result.toolCalls,
 			result.costUsd,
 		);
+		game = turn.settled.game;
+		memory = turn.memory;
 
 		const toolNames = result.toolCalls.map((tc) => tc.name).join(", ") || "—";
 		console.log(

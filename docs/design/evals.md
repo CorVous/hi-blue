@@ -29,11 +29,22 @@ module-level fetch.
   ADR 0017 the drift and action-variation runners left thinking on while the
   game turned it off, and the content-pack runner turned it off while the game
   left it on, so older reports measured a setup players never saw.
-- **Dispatch mirrors production.** Each runner turns the model's tool calls
-  into an `AiTurnAction` the same way the round coordinator does before
-  calling `dispatchAiTurn`: the first message is kept (ADR 0018), the first non-message tool
-  call becomes the action, and a turn with neither is dispatched as a pass so
-  budget and round state still advance on silent turns.
+- **Turns settle as in production** (`evals/daemon-turn-memory.ts`). The
+  drift, directions and action-variation runners build each prompt with
+  `prepareDaemonTurn` and settle the response with `settlePreparedTurn`, which
+  calls `settleDaemonTurn` from `src/spa/game/daemon-turn.ts`, the same
+  function the round coordinator uses. So the first message and the first
+  action are accepted (ADR 0018), later ones are rejected, a turn with neither
+  is a pass, and every action and rejection is written to the Daemon's log as a
+  `tool-call` entry that the next prompt replays. The helpers also carry the
+  disk snapshot, disk entities and failed-message roundtrip from one turn to the
+  next, as `GameSession` does. Before 2026-10 each runner turned tool calls into
+  an `AiTurnAction` itself and called `dispatchAiTurn`, which never wrote the
+  tool-call entries. A Daemon in the evals then never saw its own successful
+  actions, which likely explains the pick_up → `use` loop in the 2026-09-29
+  transcripts, and reports from before then measured history players never saw.
+  The directions runner still skips settling a describe turn with no tool
+  calls, so those turns leave the game state untouched.
 - **Budgets are set high on purpose** (`BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT`)
   so a run is never cut short by a lockout and the signal stays about the
   behaviour being measured.
