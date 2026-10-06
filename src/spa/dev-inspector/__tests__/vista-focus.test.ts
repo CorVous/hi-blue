@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STATIC_CONTENT_PACKS } from "../../__tests__/fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas";
 import { inBounds } from "../../game/direction";
@@ -138,6 +138,7 @@ describe("vista-focus", () => {
 	});
 
 	afterEach(() => {
+		vi.restoreAllMocks();
 		for (const snapshot of spatialSnapshot) {
 			snapshot.spatial.position = snapshot.position;
 		}
@@ -580,16 +581,31 @@ describe("vista-focus", () => {
 			expect(getMapFocus()).toBeNull();
 		});
 
-		it("Escape listener attached only once", () => {
+		it("rendering the inspector repeatedly attaches one keydown listener", () => {
+			const addListener = vi.spyOn(document, "addEventListener");
+
+			renderInspector(document.body, { session });
+			renderInspector(document.body, { session });
 			renderInspector(document.body, { session });
 
-			__resetInspectorForTests();
-			renderInspector(document.body, { session });
+			const keydownAttaches = addListener.mock.calls.filter(
+				([type]) => type === "keydown",
+			);
+			expect(keydownAttaches).toHaveLength(1);
 
 			setMapFocus("red");
 			pressKey("Escape");
-
 			expect(getMapFocus()).toBeNull();
+		});
+
+		it("__resetInspectorForTests detaches the Escape listener", () => {
+			renderInspector(document.body, { session });
+
+			__resetInspectorForTests();
+			setMapFocus("red");
+			pressKey("Escape");
+
+			expect(getMapFocus()).toBe("red");
 		});
 
 		it("other keys do not clear focus", () => {

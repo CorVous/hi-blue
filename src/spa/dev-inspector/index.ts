@@ -21,7 +21,10 @@ export interface RenderInspectorOpts {
 	pendingBootstrap?: PendingBootstrap;
 }
 
-let escapeListenerAttached = false;
+let escapeListener: {
+	doc: Document;
+	handler: (e: KeyboardEvent) => void;
+} | null = null;
 
 interface InspectorContainers {
 	doc: Document;
@@ -98,13 +101,14 @@ export function refreshInspectorAfterRound(
 }
 
 function attachEscapeClearsFocusOnce(doc: Document): void {
-	if (escapeListenerAttached) return;
-	escapeListenerAttached = true;
-	doc.addEventListener("keydown", (e) => {
+	if (escapeListener) return;
+	const handler = (e: KeyboardEvent): void => {
 		if (e.key === "Escape" && getMapFocus() !== null) {
 			setMapFocus(null);
 		}
-	});
+	};
+	doc.addEventListener("keydown", handler);
+	escapeListener = { doc, handler };
 }
 
 function renderPendingBootstrapInspector(
@@ -130,6 +134,7 @@ function hideInspector({ strip, map, footers }: InspectorContainers): void {
 }
 
 export function __resetInspectorForTests(): void {
-	escapeListenerAttached = false;
+	escapeListener?.doc.removeEventListener("keydown", escapeListener.handler);
+	escapeListener = null;
 	setMapFocus(null);
 }

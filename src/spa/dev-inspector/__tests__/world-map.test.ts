@@ -1,22 +1,40 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { STATIC_CONTENT_PACKS } from "../../__tests__/fixtures/static-content-packs";
 import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas";
 import { GameSession } from "../../game/game-session";
-import type { GameState, WorldEntity } from "../../game/types";
+import type { ContentPack, GameState, WorldEntity } from "../../game/types";
 import { renderWorldMap, updateWorldMap } from "../world-map";
 
+function sharedContentPack(): ContentPack {
+	const contentPack = STATIC_CONTENT_PACKS[0];
+	if (!contentPack) throw new Error("Content pack missing");
+	return contentPack;
+}
+
+function findEntity(state: GameState, kind: WorldEntity["kind"]): WorldEntity {
+	const entity = state.world.entities.find((e) => e.kind === kind);
+	if (!entity) throw new Error(`No ${kind} in the content pack`);
+	return entity;
+}
+
 describe("world-map", () => {
+	const pristineContentPack = structuredClone(sharedContentPack());
 	let session: GameSession;
 	let state: GameState;
 	let containerEl: HTMLElement;
 
 	beforeEach(() => {
 		document.body.innerHTML = '<div id="dev-world-map"></div>';
-		const contentPack = STATIC_CONTENT_PACKS[0];
-		if (!contentPack) throw new Error("Content pack missing");
-		session = new GameSession(contentPack, STATIC_PERSONAS);
+		session = new GameSession(
+			structuredClone(sharedContentPack()),
+			STATIC_PERSONAS,
+		);
 		state = session.getState();
 		containerEl = document.getElementById("dev-world-map") as HTMLElement;
+	});
+
+	afterEach(() => {
+		expect(sharedContentPack()).toStrictEqual(pristineContentPack);
 	});
 
 	it("renders a room-only 5×5 grid: 25 distinct room cells (r,c) in [0..4]", () => {
@@ -174,12 +192,8 @@ describe("world-map", () => {
 	});
 
 	it("objective_object and objective_space apart render '* ' and '+ ' with their data-kind", () => {
-		const objEntity = state.world.entities.find(
-			(e) => e.kind === "objective_object",
-		);
-		if (objEntity) {
-			objEntity.holder = { row: 2, col: 2 };
-		}
+		const objEntity = findEntity(state, "objective_object");
+		objEntity.holder = { row: 2, col: 2 };
 
 		renderWorldMap(containerEl, session);
 
@@ -197,17 +211,11 @@ describe("world-map", () => {
 	});
 
 	it("objective object on paired space renders '**' with data-kind='objective-object-on-space'", () => {
-		const objEntity = state.world.entities.find(
-			(e) => e.kind === "objective_object",
-		);
-		const spaceEntity = state.world.entities.find(
-			(e) => e.kind === "objective_space",
-		);
+		const objEntity = findEntity(state, "objective_object");
+		const spaceEntity = findEntity(state, "objective_space");
 
-		if (objEntity && spaceEntity) {
-			objEntity.holder = { row: 3, col: 3 };
-			spaceEntity.holder = { row: 3, col: 3 };
-		}
+		objEntity.holder = { row: 3, col: 3 };
+		spaceEntity.holder = { row: 3, col: 3 };
 
 		renderWorldMap(containerEl, session);
 
@@ -276,12 +284,8 @@ describe("world-map", () => {
 	});
 
 	it("obstacle glyph beats objective object on same cell", () => {
-		const objEntity = state.world.entities.find(
-			(e) => e.kind === "objective_object",
-		);
-		if (objEntity) {
-			objEntity.holder = { row: 1, col: 1 };
-		}
+		const objEntity = findEntity(state, "objective_object");
+		objEntity.holder = { row: 1, col: 1 };
 
 		const obstacle: WorldEntity = {
 			id: "test_obstacle",
@@ -304,12 +308,8 @@ describe("world-map", () => {
 	});
 
 	it("objective object held by daemon does not render on floor; appears in daemon tooltip", () => {
-		const objEntity = state.world.entities.find(
-			(e) => e.kind === "objective_object",
-		);
-		if (objEntity) {
-			objEntity.holder = "red";
-		}
+		const objEntity = findEntity(state, "objective_object");
+		objEntity.holder = "red";
 
 		renderWorldMap(containerEl, session);
 
@@ -370,12 +370,8 @@ describe("world-map", () => {
 	});
 
 	it("updateWorldMap reflects satisfaction state change in data-satisfaction and tooltip", () => {
-		const objEntity = state.world.entities.find(
-			(e) => e.kind === "objective_object",
-		);
-		if (objEntity) {
-			objEntity.holder = { row: 1, col: 1 };
-		}
+		const objEntity = findEntity(state, "objective_object");
+		objEntity.holder = { row: 1, col: 1 };
 
 		renderWorldMap(containerEl, session);
 
@@ -384,9 +380,7 @@ describe("world-map", () => {
 		);
 		expect(objCellBefore?.getAttribute("data-kind")).toBe("objective-object");
 
-		if (objEntity) {
-			objEntity.satisfactionState = "satisfied";
-		}
+		objEntity.satisfactionState = "satisfied";
 
 		updateWorldMap(containerEl, session);
 

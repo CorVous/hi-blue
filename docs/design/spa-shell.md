@@ -284,7 +284,9 @@ affordance such as `?winImmediately=1` would change a later test's round.
   `backgroundColor` and the marker colour on `color`, so the tint never hides
   a marker's identity. The focus follows the Daemon when the map updates.
   Clicking the active focus button again, or pressing Escape, clears the
-  focus. The Escape listener is attached once per document.
+  focus. The Escape listener is attached once per document, and
+  `__resetInspectorForTests` removes it, so a leaked listener from one test
+  cannot clear focus in the next.
 - **Test oracles** (`vista-focus.test.ts`) come in two complementary kinds:
   1. `expectedVistaMask` is built from the runtime's `VISTA_OFFSETS`. It
      follows the geometry the game uses, but it cannot catch a wrong table,

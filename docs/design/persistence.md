@@ -234,7 +234,10 @@ security. The key ships in the bundle. The threat is a curious player who
 edits `engine.dat` and breaks the simulation. The pipeline is
 UTF-8 encode → XOR with the cycling key → ISO-8859-1 binary string → base64.
 Decoding uses a fatal UTF-8 decoder, so tampered bytes usually throw
-`SealedBlobCorrupt` and the session loads as `broken`.
+`SealedBlobCorrupt` and the session loads as `broken`. There is no checksum:
+a tamper that still decodes as valid UTF-8 comes back as altered text, and
+only the JSON parse and state validation after it can reject it.
+`sealed-blob-codec.test.ts` pins both outcomes with deterministic inputs.
 
 The daemon `.txt` files are the intentionally editable surface (ADR 0004).
 `devtools-edit.test.ts` checks that an edit made there shows up on the next
