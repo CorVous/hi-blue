@@ -29,11 +29,32 @@ module-level fetch.
   ADR 0017 the drift and action-variation runners left thinking on while the
   game turned it off, and the content-pack runner turned it off while the game
   left it on, so older reports measured a setup players never saw.
-- **Dispatch mirrors production.** Each runner turns the model's tool calls
-  into an `AiTurnAction` the same way the round coordinator does before
-  calling `dispatchAiTurn`: the first message is kept (ADR 0018), the first non-message tool
-  call becomes the action, and a turn with neither is dispatched as a pass so
-  budget and round state still advance on silent turns.
+- **Turns are prepared and settled as in production.** The drift, directions
+  and action-variation runners build each prompt with `prepareDaemonTurn` from
+  `src/spa/game/daemon-turn.ts`, the function the round coordinator uses, which
+  builds the messages and the tools on offer (`availableTools`). The drift and
+  directions runners then settle each response with `settleDaemonTurn` from the
+  same module: it accepts the first message and the first action (ADR 0018),
+  rejects later ones, dispatches a turn with neither as a pass, writes every
+  action and rejection to the Daemon's log as a `tool-call` entry that the next
+  prompt replays, and returns the memory the next turn needs (disk snapshot,
+  disk entities, failed-message roundtrip), which the runner passes back in as
+  `GameSession` does. Before 2026-10 each runner built its own prompt and
+  `AiTurnAction` and called `dispatchAiTurn`, which never wrote the tool-call
+  entries. A Daemon in the evals then never saw its own successful actions,
+  which likely explains the pick_up → `use` loop in the 2026-09-29
+  transcripts, and reports from before then measured history players never
+  saw. The directions runner also offered every tool and never advanced the
+  round; it now offers `availableTools`. The drift and directions runners play
+  their first turn at round 0 and advance the round between turns, as a game
+  does. In the drift runner a failed model call leaves the carried
+  memory as it was; the directions runner still records a scenario whose call
+  fails as crashed. Because the round is now passed to the message builder, a
+  Daemon that received no message this round gets production's "You have
+  received no messages." line, which earlier eval prompts left out (the
+  action-variation `quiet` scenario is the one most likely to shift). No runner
+  applies the drift-to-silence retry, because the raw first response is what
+  they measure.
 - **Budgets are set high on purpose** (`BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT`)
   so a run is never cut short by a lockout and the signal stays about the
   behaviour being measured.
@@ -138,9 +159,15 @@ entities, so the daemon has open space to move through rather than scenery to
 name): `look-and-navigate` (6 free turns); `navigate-then-describe` (3
 navigation turns, then 2 turns where the user asks for a cardinal description);
 `peer-location-reference` (2 navigation turns, then 2 turns describing its own
-location to another player). In the describe turns of `navigate-then-describe`
-the `go` direction is not scored: the question asks for a description, not a
-move. Any tool calls are still dispatched so the game state keeps up.
+location to another player). The questions in the describe turns arrive as
+messages from blue in the Daemon's log, as a player's would. They used to be
+appended as a raw user message after the state message, which, once the prompt
+was built as in production, sat after a "You have received no messages." line
+and contradicted it. In the describe turns of `navigate-then-describe` the
+`go` direction is not scored: the question asks for a description, not a move.
+Every turn is settled, so the game state keeps up. The scored `go` direction is
+read from the action `settleDaemonTurn` accepted, so it cannot disagree with
+what the game did.
 
 **Prose.** `daemonProse` joins the raw assistant text with the `content` of every
 `message` call. GLM-4.7 speaks mostly through the message tool, so scoring only
@@ -206,8 +233,8 @@ this harness freezes one scenario and replays the *same* first turn
 time. The result is the model's probability distribution over the shipped tool
 surface (`go` / `pick_up` / `put_down` / `use` + `message`, after the ADR 0015
 Vista cutover; `examine` and `give` were removed in #466–#472 and `face` was
-retired with facing). The dispatch is only for parity with the live path; the
-resulting state is thrown away. `SKILL.md` in the directory has the operator
+retired with facing). Only the response is scored, so the turn is not
+settled: a single turn's settled state would be thrown away. `SKILL.md` in the directory has the operator
 guide, and `docs/evals/daemon-action-variation/handoff.md` has history.
 
 **Knobs.** `EVAL_ACTION_PROFILES=1` turns on `actionProfiles` (the

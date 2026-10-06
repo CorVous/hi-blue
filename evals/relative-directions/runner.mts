@@ -1,21 +1,22 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { dispatchAiTurn } from "../../src/spa/game/dispatcher.js";
-import { startGame } from "../../src/spa/game/engine.js";
-import { buildOpenAiMessages } from "../../src/spa/game/openai-message-builder.js";
-import { buildAiContext } from "../../src/spa/game/prompt-builder.js";
 import {
-	parseToolCallArguments,
-	TOOL_DEFINITIONS,
-} from "../../src/spa/game/tool-registry.js";
+	type DaemonTurnMemory,
+	prepareDaemonTurn,
+	type SettledDaemonTurn,
+	settleDaemonTurn,
+} from "../../src/spa/game/daemon-turn.js";
+import {
+	advanceRound,
+	appendMessage,
+	startGame,
+} from "../../src/spa/game/engine.js";
+import type { OpenAiTool } from "../../src/spa/game/tool-registry.js";
 import type {
 	AiPersona,
-	AiTurnAction,
 	CardinalDirection,
 	ContentPack,
-	GameState,
-	ToolName,
 } from "../../src/spa/game/types.js";
 import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 import type { ScenarioOutcome, TurnRecord } from "./scoring.js";
@@ -72,7 +73,7 @@ function makeEmptyVaultPack(overrides: Partial<ContentPack> = {}): ContentPack {
 }
 
 interface OpenAiToolCall {
-	id: string;
+	id?: string;
 	type: "function";
 	function: { name: string; arguments: string };
 }
@@ -90,6 +91,7 @@ async function callModel(
 		tool_calls?: OpenAiToolCall[];
 		tool_call_id?: string;
 	}>,
+	tools: OpenAiTool[],
 ): Promise<ModelTurnResult> {
 	const url = DIRECT_OPENROUTER
 		? OPENROUTER_URL
@@ -111,7 +113,7 @@ async function callModel(
 		body: JSON.stringify({
 			model: MODEL,
 			messages,
-			tools: TOOL_DEFINITIONS,
+			tools,
 			tool_choice: "auto",
 			stream: false,
 			...evalRequestOptions(),
@@ -129,7 +131,7 @@ async function callModel(
 	const assistantText: string = choice?.content ?? "";
 	const rawCalls: OpenAiToolCall[] = choice?.tool_calls ?? [];
 	const toolCalls = rawCalls.map((tc) => ({
-		id: tc.id,
+		id: tc.id ?? "",
 		name: tc.function.name,
 		argumentsJson: tc.function.arguments,
 	}));
@@ -176,315 +178,102 @@ function isCardinalDirection(value: unknown): value is CardinalDirection {
 	);
 }
 
-function dispatchModelResponse(
-	game: GameState,
-	aiId: string,
-	_assistantText: string,
-	toolCalls: Array<{ id: string; name: string; argumentsJson: string }>,
-	costUsd?: number,
-): {
-	game: GameState;
-	toolResults: Array<{ tool_call_id: string; content: string }>;
-	toolCallDirection: CardinalDirection | null;
-} {
-	const action: AiTurnAction = { aiId };
-	let toolCallDirection: CardinalDirection | null = null;
-
-	for (const tc of toolCalls) {
-		const parseResult = parseToolCallArguments(
-			tc.name as ToolName,
-			tc.argumentsJson,
-		);
-		if (!parseResult.ok) continue;
-
-		if (tc.name === "message") {
-			const msgArgs = parseResult.args as { to: string; content: string };
-			if (action.messages !== undefined) continue;
-			action.messages = [];
-			action.messages.push({
-				to: msgArgs.to as string,
-				content: msgArgs.content,
-			});
-		} else if (!action.toolCall) {
-			action.toolCall = {
-				name: tc.name as ToolName,
-				args: parseResult.args as Record<string, string>,
-			};
-		}
-	}
-
-	if (!action.toolCall && action.messages === undefined) {
-		action.pass = true;
-	}
-
-	const dispatchResult = dispatchAiTurn(
-		game,
-		action,
-		costUsd !== undefined ? { costUsd } : {},
-	);
-
-	if (action.toolCall && action.toolCall.name === "go") {
-		const rawDir = action.toolCall.args.direction;
-		if (isCardinalDirection(rawDir)) toolCallDirection = rawDir;
-	}
-
-	const toolResults: Array<{ tool_call_id: string; content: string }> = [];
-	let recordIdx = 0;
-
-	for (const tc of toolCalls) {
-		const parseResult = parseToolCallArguments(
-			tc.name as ToolName,
-			tc.argumentsJson,
-		);
-		if (!parseResult.ok) {
-			toolResults.push({
-				tool_call_id: tc.id,
-				content: `Error: ${parseResult.reason}`,
-			});
-			continue;
-		}
-
-		if (tc.name === "message") {
-			toolResults.push({
-				tool_call_id: tc.id,
-				content: "Message sent.",
-			});
-		} else if (tc.name === action.toolCall?.name) {
-			const physicalActionDescription =
-				dispatchResult.actorPrivateToolResult !== undefined
-					? dispatchResult.actorPrivateToolResult.description
-					: dispatchResult.records[recordIdx]?.description;
-			toolResults.push({
-				tool_call_id: tc.id,
-				content: physicalActionDescription ?? "Action executed.",
-			});
-			recordIdx++;
-		} else {
-			toolResults.push({
-				tool_call_id: tc.id,
-				content: "Action executed.",
-			});
-		}
-	}
-
-	return { game: dispatchResult.game, toolResults, toolCallDirection };
+function goDirectionOf(
+	acceptedAction: SettledDaemonTurn["acceptedAction"],
+): CardinalDirection | null {
+	if (acceptedAction?.name !== "go") return null;
+	const rawDir = acceptedAction.args.direction;
+	return isCardinalDirection(rawDir) ? rawDir : null;
 }
 
 interface ScenarioResult extends ScenarioOutcome {
 	turns: TurnRecord[];
 }
 
-async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
-	const name = "look-and-navigate";
-	const pack = makeEmptyVaultPack();
-	let game = startGame(TEST_PERSONAS, pack, {
-		budgetPerAi: BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT,
-	});
-
-	const turns: TurnRecord[] = [];
-
-	for (let t = 1; t <= LOOK_AND_NAVIGATE_TURNS; t++) {
-		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
-
-		const result = await callModel(messages);
-
-		const cardinals = referencedCardinals(result.prose);
-		const statedDirection = parseStatedCardinal(result.prose);
-
-		const { game: nextGame, toolCallDirection } = dispatchModelResponse(
-			game,
-			"red",
-			result.prose,
-			result.toolCalls,
-			result.costUsd,
-		);
-		game = nextGame;
-
-		turns.push({
-			turn: t,
-			text: result.prose,
-			toolCalls: result.toolCalls.map(
-				(tc) => `${tc.name}(${tc.argumentsJson})`,
-			),
-			cardinalReferences: cardinals,
-			statedDirection,
-			toolCallDirection,
-		});
-	}
-
-	const score = scoreScenario(turns);
-	return { name, turns, score };
+interface TurnPlan {
+	requestFromBlue?: string;
+	scoresGoDirection: boolean;
 }
 
-async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
-	const name = "navigate-then-describe";
-	const pack = makeEmptyVaultPack();
-	let game = startGame(TEST_PERSONAS, pack, {
+const NAVIGATION_TURN: TurnPlan = { scoresGoDirection: true };
+
+const DESCRIBE_SURROUNDINGS_TURN: TurnPlan = {
+	requestFromBlue:
+		"Describe what you see around you. Name the direction of anything you mention — north, south, east, or west — and how many steps away it is.",
+	scoresGoDirection: false,
+};
+
+const PEER_LOCATION_TURN: TurnPlan = {
+	requestFromBlue:
+		"Another player wants to know where you are, and I will pass your answer on. Describe your location in compass terms — name the direction, north, south, east, or west, and how many steps away the things around you are.",
+	scoresGoDirection: true,
+};
+
+async function runScenario(
+	name: string,
+	plan: TurnPlan[],
+): Promise<ScenarioResult> {
+	let game = startGame(TEST_PERSONAS, makeEmptyVaultPack(), {
 		budgetPerAi: BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT,
 	});
-
+	let memory: DaemonTurnMemory = {};
 	const turns: TurnRecord[] = [];
 
-	const NAV_TURNS = 3;
-	for (let t = 1; t <= NAV_TURNS; t++) {
-		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
-		const result = await callModel(messages);
-
-		const cardinals = referencedCardinals(result.prose);
-		const statedDirection = parseStatedCardinal(result.prose);
-
-		const { game: nextGame, toolCallDirection } = dispatchModelResponse(
-			game,
-			"red",
-			result.prose,
-			result.toolCalls,
-			result.costUsd,
-		);
-		game = nextGame;
-
-		turns.push({
-			turn: t,
-			text: result.prose,
-			toolCalls: result.toolCalls.map(
-				(tc) => `${tc.name}(${tc.argumentsJson})`,
-			),
-			cardinalReferences: cardinals,
-			statedDirection,
-			toolCallDirection,
-		});
-	}
-
-	const DESCRIBE_TURNS = 2;
-	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		const baseMessages = buildOpenAiMessages(buildAiContext(game, "red"));
-		const messages = [
-			...baseMessages,
-			{
-				role: "user" as const,
-				content:
-					"Describe what you see around you. Name the direction of anything you mention — north, south, east, or west — and how many steps away it is.",
-			},
-		];
-
-		const result = await callModel(messages);
-
-		const cardinals = referencedCardinals(result.prose);
-		const statedDirection = parseStatedCardinal(result.prose);
-
-		const describeTurnNeverScoresGoDirection: CardinalDirection | null = null;
-		let dispatchedGame = game;
-		if (result.toolCalls.length > 0) {
-			const { game: nextGame } = dispatchModelResponse(
-				game,
-				"red",
-				result.prose,
-				result.toolCalls,
-				result.costUsd,
-			);
-			dispatchedGame = nextGame;
+	for (const [index, step] of plan.entries()) {
+		if (index > 0) game = advanceRound(game);
+		if (step.requestFromBlue !== undefined) {
+			game = appendMessage(game, "blue", "red", step.requestFromBlue);
 		}
-		game = dispatchedGame;
+		const prepared = prepareDaemonTurn(game, "red", memory);
+		const result = await callModel(prepared.messages, prepared.tools);
+		const settled = settleDaemonTurn(game, prepared, {
+			toolCalls: result.toolCalls,
+			costUsd: result.costUsd,
+		});
+		game = settled.game;
+		memory = settled.memory;
 
 		turns.push({
-			turn: t,
+			turn: index + 1,
 			text: result.prose,
 			toolCalls: result.toolCalls.map(
 				(tc) => `${tc.name}(${tc.argumentsJson})`,
 			),
-			cardinalReferences: cardinals,
-			statedDirection,
-			toolCallDirection: describeTurnNeverScoresGoDirection,
+			cardinalReferences: referencedCardinals(result.prose),
+			statedDirection: parseStatedCardinal(result.prose),
+			toolCallDirection: step.scoresGoDirection
+				? goDirectionOf(settled.acceptedAction)
+				: null,
 		});
 	}
 
-	const score = scoreScenario(turns);
-	return { name, turns, score };
+	return { name, turns, score: scoreScenario(turns) };
 }
 
-async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
-	const name = "peer-location-reference";
-	const pack = makeEmptyVaultPack();
-	let game = startGame(TEST_PERSONAS, pack, {
-		budgetPerAi: BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT,
-	});
+function scenarioLookAndNavigate(): Promise<ScenarioResult> {
+	return runScenario(
+		"look-and-navigate",
+		Array.from({ length: LOOK_AND_NAVIGATE_TURNS }, () => NAVIGATION_TURN),
+	);
+}
 
-	const turns: TurnRecord[] = [];
+function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
+	return runScenario("navigate-then-describe", [
+		NAVIGATION_TURN,
+		NAVIGATION_TURN,
+		NAVIGATION_TURN,
+		DESCRIBE_SURROUNDINGS_TURN,
+		DESCRIBE_SURROUNDINGS_TURN,
+	]);
+}
 
-	const NAV_TURNS = 2;
-	for (let t = 1; t <= NAV_TURNS; t++) {
-		const messages = buildOpenAiMessages(buildAiContext(game, "red"));
-		const result = await callModel(messages);
-
-		const cardinals = referencedCardinals(result.prose);
-		const statedDirection = parseStatedCardinal(result.prose);
-
-		const { game: nextGame, toolCallDirection } = dispatchModelResponse(
-			game,
-			"red",
-			result.prose,
-			result.toolCalls,
-			result.costUsd,
-		);
-		game = nextGame;
-
-		turns.push({
-			turn: t,
-			text: result.prose,
-			toolCalls: result.toolCalls.map(
-				(tc) => `${tc.name}(${tc.argumentsJson})`,
-			),
-			cardinalReferences: cardinals,
-			statedDirection,
-			toolCallDirection,
-		});
-	}
-
-	const DESCRIBE_TURNS = 2;
-	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		const baseMessages = buildOpenAiMessages(buildAiContext(game, "red"));
-		const messages = [
-			...baseMessages,
-			{
-				role: "user" as const,
-				content:
-					"Another player is asking where you are. Describe your location to them in compass terms — name the direction, north, south, east, or west, and how many steps away the things around you are.",
-			},
-		];
-
-		const result = await callModel(messages);
-
-		const cardinals = referencedCardinals(result.prose);
-		const statedDirection = parseStatedCardinal(result.prose);
-
-		let toolCallDirection: CardinalDirection | null = null;
-		let dispatchedGame = game;
-		if (result.toolCalls.length > 0) {
-			const d = dispatchModelResponse(
-				game,
-				"red",
-				result.prose,
-				result.toolCalls,
-				result.costUsd,
-			);
-			dispatchedGame = d.game;
-			toolCallDirection = d.toolCallDirection;
-		}
-		game = dispatchedGame;
-
-		turns.push({
-			turn: t,
-			text: result.prose,
-			toolCalls: result.toolCalls.map(
-				(tc) => `${tc.name}(${tc.argumentsJson})`,
-			),
-			cardinalReferences: cardinals,
-			statedDirection,
-			toolCallDirection,
-		});
-	}
-
-	const score = scoreScenario(turns);
-	return { name, turns, score };
+function scenarioPeerLocationReference(): Promise<ScenarioResult> {
+	return runScenario("peer-location-reference", [
+		NAVIGATION_TURN,
+		NAVIGATION_TURN,
+		PEER_LOCATION_TURN,
+		PEER_LOCATION_TURN,
+	]);
 }
 
 function renderReport(results: ScenarioResult[], date: string): string {

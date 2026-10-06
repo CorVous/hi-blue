@@ -8,26 +8,17 @@ import {
 	PREFERRED_BIAS_THRESHOLD,
 	toolBiasSum,
 } from "../../src/content/action-preference-bias.js";
-import { availableTools } from "../../src/spa/game/available-tools.js";
-import { dispatchAiTurn } from "../../src/spa/game/dispatcher.js";
+import { prepareDaemonTurn } from "../../src/spa/game/daemon-turn.js";
 import {
 	advanceRound,
 	appendMessage,
 	startGame,
 } from "../../src/spa/game/engine.js";
-import { buildOpenAiMessages } from "../../src/spa/game/openai-message-builder.js";
-import { buildAiContext } from "../../src/spa/game/prompt-builder.js";
 import {
-	parseToolCallArguments,
+	type OpenAiTool,
 	TOOL_DEFINITIONS,
 } from "../../src/spa/game/tool-registry.js";
-import type {
-	AiId,
-	AiPersona,
-	AiTurnAction,
-	GameState,
-	ToolName,
-} from "../../src/spa/game/types.js";
+import type { AiId, AiPersona, GameState } from "../../src/spa/game/types.js";
 import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 import { getScenarios, type Scenario } from "./scenarios.js";
 import type {
@@ -225,7 +216,7 @@ function initialiseScenarioState(
 }
 
 interface OpenAiToolCallWire {
-	id: string;
+	id?: string;
 	type: "function";
 	function: { name: string; arguments: string };
 }
@@ -243,7 +234,7 @@ async function callModel(
 		tool_calls?: OpenAiToolCallWire[];
 		tool_call_id?: string;
 	}>,
-	tools: ReturnType<typeof availableTools>,
+	tools: OpenAiTool[],
 ): Promise<ModelTurnResult> {
 	const url = DIRECT_OPENROUTER
 		? OPENROUTER_URL
@@ -283,7 +274,7 @@ async function callModel(
 	const assistantText: string = choice?.content ?? "";
 	const rawCalls: OpenAiToolCallWire[] = choice?.tool_calls ?? [];
 	const toolCalls: CapturedToolCall[] = rawCalls.map((tc) => ({
-		id: tc.id,
+		id: tc.id ?? "",
 		name: tc.function.name,
 		argumentsJson: tc.function.arguments,
 	}));
@@ -293,45 +284,6 @@ async function callModel(
 	return result;
 }
 
-function dispatchForParityWithLivePath(
-	game: GameState,
-	aiId: AiId,
-	toolCalls: CapturedToolCall[],
-	costUsd?: number,
-): GameState {
-	const action: AiTurnAction = { aiId };
-	for (const tc of toolCalls) {
-		const parseResult = parseToolCallArguments(
-			tc.name as ToolName,
-			tc.argumentsJson,
-		);
-		if (!parseResult.ok) continue;
-		if (tc.name === "message") {
-			const msgArgs = parseResult.args as { to: string; content: string };
-			if (action.messages !== undefined) continue;
-			action.messages = [];
-			action.messages.push({
-				to: msgArgs.to as AiId | "blue",
-				content: msgArgs.content,
-				toolCallId: tc.id,
-				toolArgumentsJson: tc.argumentsJson,
-			});
-		} else if (!action.toolCall) {
-			action.toolCall = {
-				name: tc.name as ToolName,
-				args: parseResult.args as Record<string, string>,
-			};
-		}
-	}
-	if (!action.toolCall && action.messages === undefined) action.pass = true;
-	const result = dispatchAiTurn(
-		game,
-		action,
-		costUsd !== undefined ? { costUsd } : {},
-	);
-	return result.game;
-}
-
 async function runOneRepetition(
 	scenario: Scenario,
 	variant: PersonaVariant,
@@ -339,9 +291,9 @@ async function runOneRepetition(
 	withActionProfile: boolean,
 ): Promise<RepetitionRecord> {
 	const game = initialiseScenarioState(scenario, variant, withActionProfile);
-	const ctx = buildAiContext(game, scenario.actor);
-	const messages = buildOpenAiMessages(ctx);
-	const tools = availableTools(game, scenario.actor, game.activeComplications);
+	const prepared = prepareDaemonTurn(game, scenario.actor, {});
+	const messages = prepared.messages;
+	const tools = prepared.tools;
 
 	let result: ModelTurnResult;
 	try {
@@ -361,13 +313,6 @@ async function runOneRepetition(
 			error: err instanceof Error ? err.message : String(err),
 		};
 	}
-
-	dispatchForParityWithLivePath(
-		game,
-		scenario.actor,
-		result.toolCalls,
-		result.costUsd,
-	);
 
 	const record: RepetitionRecord = {
 		repetition,

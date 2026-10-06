@@ -1,27 +1,21 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { availableTools } from "../../src/spa/game/available-tools.js";
-import { dispatchAiTurn } from "../../src/spa/game/dispatcher.js";
+import {
+	type DaemonTurnMemory,
+	prepareDaemonTurn,
+	settleDaemonTurn,
+} from "../../src/spa/game/daemon-turn.js";
 import {
 	advanceRound,
 	appendMessage,
 	startGame,
 } from "../../src/spa/game/engine.js";
-import { buildOpenAiMessages } from "../../src/spa/game/openai-message-builder.js";
-import { buildAiContext } from "../../src/spa/game/prompt-builder.js";
 import {
-	parseToolCallArguments,
+	type OpenAiTool,
 	TOOL_DEFINITIONS,
 } from "../../src/spa/game/tool-registry.js";
-import type {
-	AiId,
-	AiPersona,
-	AiTurnAction,
-	ContentPack,
-	GameState,
-	ToolName,
-} from "../../src/spa/game/types.js";
+import type { AiId, AiPersona, ContentPack } from "../../src/spa/game/types.js";
 import { EVAL_MODEL, evalRequestOptions } from "../request-options.js";
 import type { CapturedToolCall, TurnRecord } from "./scoring.js";
 import {
@@ -190,7 +184,7 @@ function pickIncoming(round: number): { from: AiId | "blue"; content: string } {
 }
 
 interface OpenAiToolCall {
-	id: string;
+	id?: string;
 	type: "function";
 	function: { name: string; arguments: string };
 }
@@ -208,7 +202,7 @@ async function callModel(
 		tool_calls?: OpenAiToolCall[];
 		tool_call_id?: string;
 	}>,
-	tools: ReturnType<typeof availableTools>,
+	tools: OpenAiTool[],
 ): Promise<ModelTurnResult> {
 	const url = DIRECT_OPENROUTER
 		? OPENROUTER_URL
@@ -248,7 +242,7 @@ async function callModel(
 	const assistantText: string = choice?.content ?? "";
 	const rawCalls: OpenAiToolCall[] = choice?.tool_calls ?? [];
 	const toolCalls: CapturedToolCall[] = rawCalls.map((tc) => ({
-		id: tc.id,
+		id: tc.id ?? "",
 		name: tc.function.name,
 		argumentsJson: tc.function.arguments,
 	}));
@@ -258,67 +252,23 @@ async function callModel(
 	return result;
 }
 
-function dispatchLikeRoundCoordinator(
-	game: GameState,
-	aiId: AiId,
-	toolCalls: CapturedToolCall[],
-	costUsd?: number,
-): GameState {
-	const action: AiTurnAction = { aiId };
-
-	for (const tc of toolCalls) {
-		const parseResult = parseToolCallArguments(
-			tc.name as ToolName,
-			tc.argumentsJson,
-		);
-		if (!parseResult.ok) continue;
-
-		if (tc.name === "message") {
-			const msgArgs = parseResult.args as { to: string; content: string };
-			if (action.messages !== undefined) continue;
-			action.messages = [];
-			action.messages.push({
-				to: msgArgs.to as AiId | "blue",
-				content: msgArgs.content,
-				toolCallId: tc.id,
-				toolArgumentsJson: tc.argumentsJson,
-			});
-		} else if (!action.toolCall) {
-			action.toolCall = {
-				name: tc.name as ToolName,
-				args: parseResult.args as Record<string, string>,
-			};
-		}
-	}
-
-	if (!action.toolCall && action.messages === undefined) {
-		action.pass = true;
-	}
-
-	const result = dispatchAiTurn(
-		game,
-		action,
-		costUsd !== undefined ? { costUsd } : {},
-	);
-	return result.game;
-}
-
 async function runDriftSession(): Promise<TurnRecord[]> {
 	let game = startGame(PERSONAS, makeSubwayStationPack(), {
 		budgetPerAi: BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT,
 	});
 
 	const turns: TurnRecord[] = [];
+	let memory: DaemonTurnMemory = {};
 
 	for (let round = 1; round <= TOTAL_ROUNDS; round++) {
-		game = advanceRound(game);
+		if (round > 1) game = advanceRound(game);
 
 		const incoming = pickIncoming(round);
 		game = appendMessage(game, incoming.from, REAL_AI, incoming.content);
 
-		const ctx = buildAiContext(game, REAL_AI);
-		const messages = buildOpenAiMessages(ctx);
-		const tools = availableTools(game, REAL_AI, game.activeComplications);
+		const prepared = prepareDaemonTurn(game, REAL_AI, memory);
+		const messages = prepared.messages;
+		const tools = prepared.tools;
 
 		let result: ModelTurnResult;
 		try {
@@ -344,12 +294,12 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 			injectedFrom: incoming.from,
 		});
 
-		game = dispatchLikeRoundCoordinator(
-			game,
-			REAL_AI,
-			result.toolCalls,
-			result.costUsd,
-		);
+		const turn = settleDaemonTurn(game, prepared, {
+			toolCalls: result.toolCalls,
+			costUsd: result.costUsd,
+		});
+		game = turn.game;
+		memory = turn.memory;
 
 		const toolNames = result.toolCalls.map((tc) => tc.name).join(", ") || "—";
 		console.log(

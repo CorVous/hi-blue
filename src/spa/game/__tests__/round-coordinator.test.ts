@@ -2220,4 +2220,20 @@ describe("tool call ids", () => {
 		expect(new Set(calls).size).toBe(calls.length);
 		expect([...results].sort()).toEqual([...calls].sort());
 	});
+
+	it("replaces an id the provider left out entirely, not only an empty one", async () => {
+		const idless = {
+			...toolCall("unused", "go", '{"direction":"south"}'),
+			id: undefined as unknown as string,
+		};
+		const { nextState } = await runRound(
+			makeGame(),
+			"red",
+			"hi",
+			firstTurnActs([idless]),
+		);
+
+		const ids = loggedToolCalls(nextState, "red").map((e) => e.toolCallId);
+		expect(ids).toEqual(["call-red-r0-0"]);
+	});
 });
