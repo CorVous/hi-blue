@@ -3,7 +3,7 @@ import { STATIC_CONTENT_PACKS } from "../../__tests__/fixtures/static-content-pa
 import { STATIC_PERSONAS } from "../../__tests__/fixtures/static-personas";
 import { inBounds } from "../../game/direction";
 import { GameSession } from "../../game/game-session";
-import type { GridPosition, PersonaSpatialState } from "../../game/types";
+import type { GridPosition } from "../../game/types";
 import { inVista, VISTA_OFFSETS } from "../../game/vista-projector";
 import { __resetInspectorForTests, renderInspector } from "../index";
 import { vistaMaskForDaemon, vistaMaskForPosition } from "../vista-mask";
@@ -103,10 +103,6 @@ function expectEveryFocusButtonInactive(): void {
 
 describe("vista-focus", () => {
 	let session: GameSession;
-	let spatialSnapshot: Array<{
-		spatial: PersonaSpatialState;
-		position: GridPosition;
-	}> = [];
 	const contentPack = STATIC_CONTENT_PACKS[0];
 
 	beforeEach(() => {
@@ -125,24 +121,13 @@ describe("vista-focus", () => {
     `;
 
 		if (!contentPack) throw new Error("Content pack missing");
-		session = new GameSession(contentPack, STATIC_PERSONAS);
-
-		spatialSnapshot = Object.values(session.getState().personaSpatial).map(
-			(spatial) => ({
-				spatial,
-				position: spatial.position,
-			}),
-		);
+		session = new GameSession(structuredClone(contentPack), STATIC_PERSONAS);
 
 		__resetInspectorForTests();
 	});
 
 	afterEach(() => {
 		vi.restoreAllMocks();
-		for (const snapshot of spatialSnapshot) {
-			snapshot.spatial.position = snapshot.position;
-		}
-		spatialSnapshot = [];
 	});
 
 	describe("mask computation", () => {
