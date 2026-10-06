@@ -1,17 +1,18 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { availableTools } from "../../src/spa/game/available-tools.js";
 import {
 	advanceRound,
 	appendMessage,
 	startGame,
 } from "../../src/spa/game/engine.js";
-import { TOOL_DEFINITIONS } from "../../src/spa/game/tool-registry.js";
+import {
+	type OpenAiTool,
+	TOOL_DEFINITIONS,
+} from "../../src/spa/game/tool-registry.js";
 import type { AiId, AiPersona, ContentPack } from "../../src/spa/game/types.js";
 import {
 	type DaemonTurnMemory,
-	memoryAfterPrompt,
 	prepareDaemonTurn,
 	settlePreparedTurn,
 } from "../daemon-turn-memory.js";
@@ -201,7 +202,7 @@ async function callModel(
 		tool_calls?: OpenAiToolCall[];
 		tool_call_id?: string;
 	}>,
-	tools: ReturnType<typeof availableTools>,
+	tools: OpenAiTool[],
 ): Promise<ModelTurnResult> {
 	const url = DIRECT_OPENROUTER
 		? OPENROUTER_URL
@@ -241,7 +242,7 @@ async function callModel(
 	const assistantText: string = choice?.content ?? "";
 	const rawCalls: OpenAiToolCall[] = choice?.tool_calls ?? [];
 	const toolCalls: CapturedToolCall[] = rawCalls.map((tc) => ({
-		id: tc.id,
+		id: tc.id ?? "",
 		name: tc.function.name,
 		argumentsJson: tc.function.arguments,
 	}));
@@ -260,13 +261,12 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 	let memory: DaemonTurnMemory = {};
 
 	for (let round = 1; round <= TOTAL_ROUNDS; round++) {
-		game = advanceRound(game);
+		if (round > 1) game = advanceRound(game);
 
 		const incoming = pickIncoming(round);
 		game = appendMessage(game, incoming.from, REAL_AI, incoming.content);
 
 		const prepared = prepareDaemonTurn(game, REAL_AI, memory);
-		memory = memoryAfterPrompt(prepared);
 		const messages = prepared.messages;
 		const tools = prepared.tools;
 

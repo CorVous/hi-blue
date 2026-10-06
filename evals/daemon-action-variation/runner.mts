@@ -8,13 +8,15 @@ import {
 	PREFERRED_BIAS_THRESHOLD,
 	toolBiasSum,
 } from "../../src/content/action-preference-bias.js";
-import type { availableTools } from "../../src/spa/game/available-tools.js";
 import {
 	advanceRound,
 	appendMessage,
 	startGame,
 } from "../../src/spa/game/engine.js";
-import { TOOL_DEFINITIONS } from "../../src/spa/game/tool-registry.js";
+import {
+	type OpenAiTool,
+	TOOL_DEFINITIONS,
+} from "../../src/spa/game/tool-registry.js";
 import type { AiId, AiPersona, GameState } from "../../src/spa/game/types.js";
 import {
 	prepareDaemonTurn,
@@ -235,7 +237,7 @@ async function callModel(
 		tool_calls?: OpenAiToolCallWire[];
 		tool_call_id?: string;
 	}>,
-	tools: ReturnType<typeof availableTools>,
+	tools: OpenAiTool[],
 ): Promise<ModelTurnResult> {
 	const url = DIRECT_OPENROUTER
 		? OPENROUTER_URL
@@ -275,7 +277,7 @@ async function callModel(
 	const assistantText: string = choice?.content ?? "";
 	const rawCalls: OpenAiToolCallWire[] = choice?.tool_calls ?? [];
 	const toolCalls: CapturedToolCall[] = rawCalls.map((tc) => ({
-		id: tc.id,
+		id: tc.id ?? "",
 		name: tc.function.name,
 		argumentsJson: tc.function.arguments,
 	}));

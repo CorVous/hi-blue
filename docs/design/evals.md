@@ -46,7 +46,10 @@ module-level fetch.
   the 2026-09-29 transcripts, and reports from before then measured history
   players never saw. The directions runner also offered every tool and never
   advanced the round, so every logged action carried round 0; it now offers
-  `availableTools` and advances the round before each turn. Two differences
+  `availableTools`. Every runner plays its first turn at round 0 and advances
+  the round between turns, as a game does. A failed model call leaves the
+  carried memory as it was, so the next prompt diffs against what the model
+  last saw. Two differences
   remain on purpose: no runner applies the drift-to-silence retry, because the
   raw first response is what they measure, and the directions runner skips
   settling a describe turn with no tool calls.

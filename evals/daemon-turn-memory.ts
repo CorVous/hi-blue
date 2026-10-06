@@ -22,11 +22,11 @@ export function settlePreparedTurn(
 	const settled = settleDaemonTurn(game, prepared, { toolCalls, costUsd });
 	return {
 		settled,
-		memory: memoryAfterPrompt(prepared, settled.toolRoundtrip),
+		memory: memoryAfterTurn(prepared, settled.toolRoundtrip),
 	};
 }
 
-export function memoryAfterPrompt(
+export function memoryAfterTurn(
 	prepared: PreparedDaemonTurn,
 	toolRoundtrip?: DaemonTurnMemory["toolRoundtrip"],
 ): DaemonTurnMemory {

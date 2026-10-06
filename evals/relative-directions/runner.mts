@@ -15,7 +15,7 @@ import type {
 } from "../../src/spa/game/types.js";
 import {
 	type DaemonTurnMemory,
-	memoryAfterPrompt,
+	memoryAfterTurn,
 	type PreparedDaemonTurn,
 	prepareDaemonTurn,
 	settlePreparedTurn,
@@ -133,7 +133,7 @@ async function callModel(
 	const assistantText: string = choice?.content ?? "";
 	const rawCalls: OpenAiToolCall[] = choice?.tool_calls ?? [];
 	const toolCalls = rawCalls.map((tc) => ({
-		id: tc.id,
+		id: tc.id ?? "",
 		name: tc.function.name,
 		argumentsJson: tc.function.arguments,
 	}));
@@ -230,9 +230,8 @@ async function scenarioLookAndNavigate(): Promise<ScenarioResult> {
 	let memory: DaemonTurnMemory = {};
 
 	for (let t = 1; t <= LOOK_AND_NAVIGATE_TURNS; t++) {
-		game = advanceRound(game);
+		if (t > 1) game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = memoryAfterPrompt(prepared);
 		const messages = prepared.messages;
 
 		const result = await callModel(messages, prepared.tools);
@@ -278,9 +277,8 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 
 	const NAV_TURNS = 3;
 	for (let t = 1; t <= NAV_TURNS; t++) {
-		game = advanceRound(game);
+		if (t > 1) game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = memoryAfterPrompt(prepared);
 		const messages = prepared.messages;
 		const result = await callModel(messages, prepared.tools);
 
@@ -311,9 +309,8 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		game = advanceRound(game);
+		if (t > 1) game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = memoryAfterPrompt(prepared);
 		const baseMessages = prepared.messages;
 		const messages = [
 			...baseMessages,
@@ -339,6 +336,8 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 			);
 			game = dispatched.game;
 			memory = dispatched.memory;
+		} else {
+			memory = memoryAfterTurn(prepared);
 		}
 
 		turns.push({
@@ -369,9 +368,8 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 
 	const NAV_TURNS = 2;
 	for (let t = 1; t <= NAV_TURNS; t++) {
-		game = advanceRound(game);
+		if (t > 1) game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = memoryAfterPrompt(prepared);
 		const messages = prepared.messages;
 		const result = await callModel(messages, prepared.tools);
 
@@ -402,9 +400,8 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		game = advanceRound(game);
+		if (t > 1) game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
-		memory = memoryAfterPrompt(prepared);
 		const baseMessages = prepared.messages;
 		const messages = [
 			...baseMessages,
@@ -431,6 +428,8 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 			game = dispatched.game;
 			memory = dispatched.memory;
 			toolCallDirection = dispatched.toolCallDirection;
+		} else {
+			memory = memoryAfterTurn(prepared);
 		}
 
 		turns.push({
