@@ -476,19 +476,25 @@ async function playGame(
 	return { rounds: round };
 }
 
+const FUZZ_TIMEOUT_MS = 30_000;
+
 describe("round fuzz", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 		localStorage.clear();
 	});
 
-	it(`keeps the round invariants over ${GAMES} seeded games`, async () => {
-		let totalRounds = 0;
-		for (let game = 0; game < GAMES; game++) {
-			const { rounds } = await playGame(BASE_SEED + game, game % 2 === 1);
-			totalRounds += rounds;
-			vi.restoreAllMocks();
-		}
-		expect(totalRounds).toBeGreaterThan(GAMES * 5);
-	});
+	it(
+		`keeps the round invariants over ${GAMES} seeded games`,
+		async () => {
+			let totalRounds = 0;
+			for (let game = 0; game < GAMES; game++) {
+				const { rounds } = await playGame(BASE_SEED + game, game % 2 === 1);
+				totalRounds += rounds;
+				vi.restoreAllMocks();
+			}
+			expect(totalRounds).toBeGreaterThan(GAMES * 5);
+		},
+		FUZZ_TIMEOUT_MS,
+	);
 });

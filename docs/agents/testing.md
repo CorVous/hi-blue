@@ -20,7 +20,7 @@ A seeded fuzz test that plays 20 games of up to 40 rounds through `GameSession.s
 
 After every round it checks: positions in bounds, nothing resting on an obstacle, every item held by one valid holder, the open grid connected, exhausted Daemons never prompted and never acting, satisfied Objectives staying satisfied, every tool call id in each request unique and followed by exactly one result, every offered call succeeding, and the composer lockout state rebuilt from `encodeRoundResult` events matching `isPlayerChatLockedOut`. Every fifth round it saves through `saveActiveSession`, loads through `loadSession` and deep-compares the whole state.
 
-It runs in about two seconds and is deterministic. A failure names the seed and round; `BASE_SEED + n` reproduces game `n`. When the game gains a rule that one of these invariants should cover, add it here. If a change legitimately breaks one, fix the invariant, not the seed.
+It runs in about two seconds and is deterministic. It has a 30-second timeout instead of Vitest's default 5 seconds, because under heavy parallel load it has taken over 12. A failure names the seed and round; `BASE_SEED + n` reproduces game `n`. When the game gains a rule that one of these invariants should cover, add it here. If a change legitimately breaks one, fix the invariant, not the seed.
 
 ## Playwright e2e (`e2e/**/*.spec.ts`)
 

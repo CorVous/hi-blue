@@ -1134,7 +1134,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 					kind: "objective_object",
 					name: "orb",
 					examineDescription: "An orb.",
-					holder: { row: 2, col: 2 },
+					holder: "green",
 					pairsWithSpaceId: ORB_SPACE_ID,
 					placementFlavor: "{actor} sets the orb.",
 				},
@@ -1143,7 +1143,7 @@ describe("placement flavor + win condition (issue #126)", () => {
 					kind: "objective_space",
 					name: "orb plinth",
 					examineDescription: "Orb plinth.",
-					holder: { row: 2, col: 2 },
+					holder: { row: 0, col: 1 },
 				},
 			],
 			{
@@ -1153,18 +1153,43 @@ describe("placement flavor + win condition (issue #126)", () => {
 			},
 		);
 
-		const game = startGame(TEST_PERSONAS, packK2, {
+		const started = startGame(TEST_PERSONAS, packK2, {
 			budgetPerAi: 5,
-			rng: () => 0,
 			objectiveTypes: ["carry", "carry"],
 		});
+		const game = {
+			...started,
+			complicationSchedule: { ...started.complicationSchedule, countdown: 10 },
+		};
 
-		const provider = firstTurnActs([
-			toolCall("c1", "put_down", `{"item":"${GEM_OBJ_ID}"}`),
-		]);
-		const { result, nextState } = await runRound(game, "red", "hi", provider);
-		expect(result.gameEnded).toBe(true);
-		expect(nextState.isComplete).toBe(true);
+		const first = await runRound(
+			game,
+			"red",
+			"hi",
+			firstTurnActs([toolCall("c1", "put_down", `{"item":"${GEM_OBJ_ID}"}`)]),
+			{ rng: () => 0 },
+		);
+		expect(
+			first.result.actions.find((a) => a.kind === "tool_success")?.description,
+		).toBe("you sets the gem.");
+		expect(first.result.gameEnded).toBe(false);
+		expect(first.nextState.isComplete).toBe(false);
+		expect(first.nextState.complicationSchedule.countdown).toBe(9);
+
+		const second = await runRound(
+			first.nextState,
+			"green",
+			"hi",
+			firstTurnActs([toolCall("c2", "put_down", `{"item":"${ORB_OBJ_ID}"}`)]),
+			{ initiative: ["green", "red", "cyan"] as AiId[], rng: () => 0 },
+		);
+		expect(
+			second.result.actions.find((a) => a.kind === "tool_success")?.description,
+		).toBe("you sets the orb.");
+		expect(second.result.gameEnded).toBe(true);
+		expect(second.nextState.isComplete).toBe(true);
+		expect(second.nextState.complicationSchedule.countdown).toBe(8);
+		expect(second.nextState.activeComplications).toEqual([]);
 	});
 });
 

@@ -5,6 +5,14 @@ import {
 	SealedBlobCorrupt,
 } from "../sealed-blob-codec.js";
 
+function blobBytes(blob: string): Uint8Array {
+	return Uint8Array.from(atob(blob), (char) => char.charCodeAt(0));
+}
+
+function bytesToBlob(bytes: Uint8Array): string {
+	return btoa(String.fromCharCode(...bytes));
+}
+
 describe("sealed-blob-codec", () => {
 	it("round-trips ASCII JSON", () => {
 		const json = JSON.stringify({ hello: "world", num: 42 });
@@ -45,18 +53,20 @@ describe("sealed-blob-codec", () => {
 		expect(() => deobfuscate(corruptBlob)).toThrow(SealedBlobCorrupt);
 	});
 
-	it("deobfuscate throws SealedBlobCorrupt when bytes are XOR'd with wrong key", () => {
+	it("deobfuscate throws SealedBlobCorrupt on a blob sealed with a different key", () => {
 		const json = JSON.stringify({ secure: true });
-		const blob = obfuscate(json);
-		const arr = blob.split("");
-		const mid = Math.floor(arr.length / 2);
-		arr[mid] = arr[mid] === "A" ? "B" : "A";
-		const tampered = arr.join("");
-		try {
-			const result = deobfuscate(tampered);
-			expect(result).not.toBe(json);
-		} catch (e) {
-			expect(e).toBeInstanceOf(SealedBlobCorrupt);
-		}
+		const bytes = blobBytes(obfuscate(json));
+		const resealedWithOtherKey = bytesToBlob(bytes.map((byte) => byte ^ 0x80));
+		expect(() => deobfuscate(resealedWithOtherKey)).toThrow(SealedBlobCorrupt);
+	});
+
+	it("a tamper that still decodes as UTF-8 comes back as altered text, not an error", () => {
+		const json = JSON.stringify({ secure: true });
+		const flippedIndex = json.indexOf("t");
+		const bytes = blobBytes(obfuscate(json));
+		bytes[flippedIndex] = (bytes[flippedIndex] as number) ^ 0x01;
+		expect(deobfuscate(bytesToBlob(bytes))).toBe(
+			`${json.slice(0, flippedIndex)}u${json.slice(flippedIndex + 1)}`,
+		);
 	});
 });
