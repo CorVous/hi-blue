@@ -62,17 +62,17 @@ export function startGame(
 		conversationLogs[aiId] = [];
 	}
 
-	const worldEntities = [
+	const worldEntities = structuredClone([
 		...carryPairs(contentPack).flatMap((pair) => [pair.object, pair.space]),
 		...boundSpaces(contentPack),
 		...interestingObjects(contentPack),
 		...standaloneObjectives(contentPack),
 		...obstacles(contentPack),
-	];
+	]);
 
 	const personaSpatial: Record<AiId, PersonaSpatialState> =
 		contentPack.aiStarts && Object.keys(contentPack.aiStarts).length > 0
-			? { ...contentPack.aiStarts }
+			? structuredClone(contentPack.aiStarts)
 			: drawSpatialPlacements(rng, aiIds);
 
 	const objectives =
