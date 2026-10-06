@@ -75,7 +75,7 @@ function makeEmptyVaultPack(overrides: Partial<ContentPack> = {}): ContentPack {
 }
 
 interface OpenAiToolCall {
-	id: string;
+	id?: string;
 	type: "function";
 	function: { name: string; arguments: string };
 }
@@ -192,7 +192,7 @@ function dispatchModelResponse(
 } {
 	const turn = settlePreparedTurn(game, prepared, toolCalls, costUsd);
 	return {
-		game: turn.settled.game,
+		game: turn.game,
 		memory: turn.memory,
 		toolCallDirection: goDirectionOf(toolCalls),
 	};
@@ -309,7 +309,7 @@ async function scenarioNavigateThenDescribe(): Promise<ScenarioResult> {
 
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		if (t > 1) game = advanceRound(game);
+		game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
 		const baseMessages = prepared.messages;
 		const messages = [
@@ -400,7 +400,7 @@ async function scenarioPeerLocationReference(): Promise<ScenarioResult> {
 
 	const DESCRIBE_TURNS = 2;
 	for (let t = NAV_TURNS + 1; t <= NAV_TURNS + DESCRIBE_TURNS; t++) {
-		if (t > 1) game = advanceRound(game);
+		game = advanceRound(game);
 		const prepared = prepareDaemonTurn(game, "red", memory);
 		const baseMessages = prepared.messages;
 		const messages = [

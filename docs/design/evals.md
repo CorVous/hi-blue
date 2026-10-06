@@ -46,8 +46,10 @@ module-level fetch.
   the 2026-09-29 transcripts, and reports from before then measured history
   players never saw. The directions runner also offered every tool and never
   advanced the round, so every logged action carried round 0; it now offers
-  `availableTools`. Every runner plays its first turn at round 0 and advances
-  the round between turns, as a game does. A failed model call leaves the
+  `availableTools`. The drift and directions runners play their first turn at
+  round 0 and advance the round between turns, as a game does (the
+  action-variation runner advances to round 1 before seeding a scenario's
+  messages, so its single turn is not a room's opening turn). A failed model call leaves the
   carried memory as it was, so the next prompt diffs against what the model
   last saw. Two differences
   remain on purpose: no runner applies the drift-to-silence retry, because the

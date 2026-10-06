@@ -66,10 +66,26 @@ export function prepareDaemonTurn(
 	};
 }
 
+export interface CarriedDaemonMemory extends DaemonTurnMemory {
+	diskSnapshot: string;
+	diskEntities: Record<string, DiskEntityState>;
+}
+
+export function memoryAfterTurn(
+	prepared: PreparedDaemonTurn,
+	toolRoundtrip?: ToolRoundtripMessage,
+): CarriedDaemonMemory {
+	return {
+		diskSnapshot: prepared.diskSnapshot,
+		diskEntities: prepared.promptEntities,
+		toolRoundtrip,
+	};
+}
+
 export interface SettledDaemonTurn {
 	game: GameState;
 	records: RoundActionRecord[];
-	toolRoundtrip: ToolRoundtripMessage | undefined;
+	memory: CarriedDaemonMemory;
 	passed: boolean;
 }
 
@@ -254,7 +270,12 @@ export function settleDaemonTurn(
 				}
 			: undefined;
 
-	return { game: state, records, toolRoundtrip, passed };
+	return {
+		game: state,
+		records,
+		memory: memoryAfterTurn(prepared, toolRoundtrip),
+		passed,
+	};
 }
 
 function replayedToolCallIds(messages: OpenAiMessage[]): Set<string> {

@@ -22,7 +22,8 @@ describe("settlePreparedTurn", () => {
 		});
 		const prepared = prepareDaemonTurn(game, "red", {});
 
-		const { settled, memory } = settlePreparedTurn(game, prepared, [goSouth]);
+		const settled = settlePreparedTurn(game, prepared, [goSouth]);
+		const { memory } = settled;
 
 		const toolCallEntries = (settled.game.conversationLogs.red ?? []).filter(
 			(e) => e.kind === "tool-call",
@@ -54,17 +55,11 @@ describe("settlePreparedTurn", () => {
 		const first = prepareDaemonTurn(game, "red", {});
 		const afterFirst = settlePreparedTurn(game, first, [goSouth]);
 
-		const second = prepareDaemonTurn(
-			afterFirst.settled.game,
-			"red",
-			afterFirst.memory,
-		);
-		const afterSecond = settlePreparedTurn(afterFirst.settled.game, second, [
-			goSouth,
-		]);
+		const second = prepareDaemonTurn(afterFirst.game, "red", afterFirst.memory);
+		const afterSecond = settlePreparedTurn(afterFirst.game, second, [goSouth]);
 
-		const ids = (afterSecond.settled.game.conversationLogs.red ?? []).flatMap(
-			(e) => (e.kind === "tool-call" ? [e.toolCallId] : []),
+		const ids = (afterSecond.game.conversationLogs.red ?? []).flatMap((e) =>
+			e.kind === "tool-call" ? [e.toolCallId] : [],
 		);
 		expect(ids).toHaveLength(2);
 		expect(new Set(ids).size).toBe(2);
@@ -78,7 +73,7 @@ describe("settlePreparedTurn", () => {
 		const prepared = prepareDaemonTurn(game, "red", {});
 		const idless = { ...goSouth, id: undefined as unknown as string };
 
-		const { settled } = settlePreparedTurn(game, prepared, [idless]);
+		const settled = settlePreparedTurn(game, prepared, [idless]);
 
 		const entry = (settled.game.conversationLogs.red ?? []).find(
 			(e) => e.kind === "tool-call",

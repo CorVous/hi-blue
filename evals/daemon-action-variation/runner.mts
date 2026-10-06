@@ -219,7 +219,7 @@ function initialiseScenarioState(
 }
 
 interface OpenAiToolCallWire {
-	id: string;
+	id?: string;
 	type: "function";
 	function: { name: string; arguments: string };
 }

@@ -1,5 +1,4 @@
 import {
-	type DaemonTurnMemory,
 	type EmittedToolCall,
 	type PreparedDaemonTurn,
 	type SettledDaemonTurn,
@@ -9,6 +8,7 @@ import type { GameState } from "../src/spa/game/types.js";
 
 export {
 	type DaemonTurnMemory,
+	memoryAfterTurn,
 	type PreparedDaemonTurn,
 	prepareDaemonTurn,
 } from "../src/spa/game/daemon-turn.js";
@@ -18,21 +18,6 @@ export function settlePreparedTurn(
 	prepared: PreparedDaemonTurn,
 	toolCalls: EmittedToolCall[],
 	costUsd?: number,
-): { settled: SettledDaemonTurn; memory: DaemonTurnMemory } {
-	const settled = settleDaemonTurn(game, prepared, { toolCalls, costUsd });
-	return {
-		settled,
-		memory: memoryAfterTurn(prepared, settled.toolRoundtrip),
-	};
-}
-
-export function memoryAfterTurn(
-	prepared: PreparedDaemonTurn,
-	toolRoundtrip?: DaemonTurnMemory["toolRoundtrip"],
-): DaemonTurnMemory {
-	return {
-		diskSnapshot: prepared.diskSnapshot,
-		diskEntities: prepared.promptEntities,
-		toolRoundtrip,
-	};
+): SettledDaemonTurn {
+	return settleDaemonTurn(game, prepared, { toolCalls, costUsd });
 }

@@ -184,7 +184,7 @@ function pickIncoming(round: number): { from: AiId | "blue"; content: string } {
 }
 
 interface OpenAiToolCall {
-	id: string;
+	id?: string;
 	type: "function";
 	function: { name: string; arguments: string };
 }
@@ -300,7 +300,7 @@ async function runDriftSession(): Promise<TurnRecord[]> {
 			result.toolCalls,
 			result.costUsd,
 		);
-		game = turn.settled.game;
+		game = turn.game;
 		memory = turn.memory;
 
 		const toolNames = result.toolCalls.map((tc) => tc.name).join(", ") || "—";

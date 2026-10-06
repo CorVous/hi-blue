@@ -176,8 +176,6 @@ export async function runRound(
 			diskEntities: priorDiskEntities?.[aiId],
 			toolRoundtrip: priorToolRoundtrip?.[aiId],
 		});
-		newDiskSnapshots[aiId] = prepared.diskSnapshot;
-		newDiskEntities[aiId] = prepared.promptEntities;
 		const { messages, tools } = prepared;
 
 		const {
@@ -201,8 +199,10 @@ export async function runRound(
 		});
 		state = settled.game;
 		roundActions.push(...settled.records);
-		if (settled.toolRoundtrip !== undefined) {
-			newToolRoundtrip[aiId] = settled.toolRoundtrip;
+		newDiskSnapshots[aiId] = settled.memory.diskSnapshot;
+		newDiskEntities[aiId] = settled.memory.diskEntities;
+		if (settled.memory.toolRoundtrip !== undefined) {
+			newToolRoundtrip[aiId] = settled.memory.toolRoundtrip;
 		}
 
 		if (settled.passed && assistantText && isDevHost()) {
