@@ -1155,7 +1155,6 @@ describe("placement flavor + win condition (issue #126)", () => {
 
 		const started = startGame(TEST_PERSONAS, packK2, {
 			budgetPerAi: 5,
-			rng: () => 0,
 			objectiveTypes: ["carry", "carry"],
 		});
 		const game = {
@@ -1168,19 +1167,21 @@ describe("placement flavor + win condition (issue #126)", () => {
 			"red",
 			"hi",
 			firstTurnActs([toolCall("c1", "put_down", `{"item":"${GEM_OBJ_ID}"}`)]),
+			{ rng: () => 0 },
 		);
 		expect(
 			first.result.actions.find((a) => a.kind === "tool_success")?.description,
 		).toBe("you sets the gem.");
 		expect(first.result.gameEnded).toBe(false);
 		expect(first.nextState.isComplete).toBe(false);
+		expect(first.nextState.complicationSchedule.countdown).toBe(9);
 
 		const second = await runRound(
 			first.nextState,
 			"green",
 			"hi",
 			firstTurnActs([toolCall("c2", "put_down", `{"item":"${ORB_OBJ_ID}"}`)]),
-			{ initiative: ["green", "red", "cyan"] as AiId[] },
+			{ initiative: ["green", "red", "cyan"] as AiId[], rng: () => 0 },
 		);
 		expect(
 			second.result.actions.find((a) => a.kind === "tool_success")?.description,
