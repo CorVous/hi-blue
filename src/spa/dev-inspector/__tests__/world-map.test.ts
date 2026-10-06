@@ -94,11 +94,6 @@ describe("world-map", () => {
 	it("daemon glyph is direction-independent: same '@ ' however the Daemon moved", () => {
 		renderWorldMap(containerEl, session);
 
-		const snapshot = Object.values(state.personaSpatial).map((spatial) => ({
-			spatial,
-			position: spatial.position,
-		}));
-
 		const glyphs = new Set<string>();
 		const routes: Array<[string, { row: number; col: number }]> = [
 			["red", { row: 4, col: 0 }],
@@ -128,10 +123,6 @@ describe("world-map", () => {
 		}
 
 		expect([...glyphs]).toEqual(["@ "]);
-
-		for (const entry of snapshot) {
-			entry.spatial.position = entry.position;
-		}
 	});
 
 	it("daemon markers show identity and position only: no direction arrow, letter, or last-movement marker", () => {
