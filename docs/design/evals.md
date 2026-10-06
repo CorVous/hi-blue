@@ -47,7 +47,12 @@ module-level fetch.
   saw. The directions runner also offered every tool and never advanced the
   round; it now offers `availableTools`. The drift and directions runners play
   their first turn at round 0 and advance the round between turns, as a game
-  does. A failed model call leaves the carried memory as it was. No runner
+  does. In the drift runner a failed model call leaves the carried
+  memory as it was; the directions runner still records a scenario whose call
+  fails as crashed. Because the round is now passed to the message builder, a
+  Daemon that received no message this round gets production's "You have
+  received no messages." line, which earlier eval prompts left out (the
+  action-variation `quiet` scenario is the one most likely to shift). No runner
   applies the drift-to-silence retry, because the raw first response is what
   they measure.
 - **Budgets are set high on purpose** (`BUDGET_LARGE_ENOUGH_TO_NEVER_LOCK_OUT`)

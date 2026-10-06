@@ -205,7 +205,7 @@ const DESCRIBE_SURROUNDINGS_TURN: TurnPlan = {
 
 const PEER_LOCATION_TURN: TurnPlan = {
 	requestFromBlue:
-		"Another player is asking where you are. Describe your location to them in compass terms — name the direction, north, south, east, or west, and how many steps away the things around you are.",
+		"Another player wants to know where you are, and I will pass your answer on. Describe your location in compass terms — name the direction, north, south, east, or west, and how many steps away the things around you are.",
 	scoresGoDirection: true,
 };
 

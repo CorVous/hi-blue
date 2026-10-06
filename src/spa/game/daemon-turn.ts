@@ -71,7 +71,7 @@ export interface CarriedDaemonMemory extends DaemonTurnMemory {
 	diskEntities: Record<string, DiskEntityState>;
 }
 
-export function memoryAfterTurn(
+function memoryAfterTurn(
 	prepared: PreparedDaemonTurn,
 	toolRoundtrip?: ToolRoundtripMessage,
 ): CarriedDaemonMemory {
